@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject } from 'vue';
-import { Focus, GitBranch, Link2, RotateCcw, X } from 'lucide-vue-next';
+import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref } from 'vue';
+import { Check, Download, FileText, Focus, GitBranch, Link2, RotateCcw, X } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
+import { copyTextToClipboard, downloadTextFile, slugifyFilename } from '../../core/downloadHelper';
 import { isVisibleForMode, isVisibleForPlatform } from '../../core/graphEngine';
+import { exportNodeOverviewMarkdown } from '../../core/publicMarkdownExport';
 import type { NodeKind } from '../../data/schema';
 import MediaGallery from './MediaGallery.vue';
 
@@ -70,6 +72,46 @@ const drawerWidthClass = computed(() =>
     ? 'sm:w-[540px] lg:w-[680px] xl:w-[740px]'
     : 'sm:w-[400px] lg:w-[440px]',
 );
+
+const copiedMd = ref(false);
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+const buildCurrentNodeMarkdown = async (): Promise<string> => {
+  const current = node.value;
+  if (!current) return '';
+  if (__ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech') {
+    const { exportNodeTechMarkdown } = await import('../../core/techMarkdownExport');
+    return exportNodeTechMarkdown(current, explorer.dataset, explorer.platformMode.value, {
+      includeSubtree: true,
+    });
+  }
+  return exportNodeOverviewMarkdown(current, explorer.dataset, { includeSubtree: true });
+};
+
+const handleCopyMd = async () => {
+  const md = await buildCurrentNodeMarkdown();
+  if (!md) return;
+  const ok = await copyTextToClipboard(md);
+  if (ok) {
+    copiedMd.value = true;
+    if (copyResetTimer) clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      copiedMd.value = false;
+    }, 2000);
+  }
+};
+
+const handleDownloadMd = async () => {
+  const current = node.value;
+  if (!current) return;
+  const md = await buildCurrentNodeMarkdown();
+  if (!md) return;
+  downloadTextFile(`${slugifyFilename(current.label)}.md`, md);
+};
+
+onBeforeUnmount(() => {
+  if (copyResetTimer) clearTimeout(copyResetTimer);
+});
 </script>
 
 <template>
@@ -111,10 +153,7 @@ const drawerWidthClass = computed(() =>
     </div>
 
     <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-      <div
-        v-if="(hasSubtree && childCount > 0) || node.id !== explorer.dataset.rootNode.id"
-        class="flex flex-wrap gap-2"
-      >
+      <div class="flex flex-wrap gap-2">
         <button
           v-if="hasSubtree && childCount > 0"
           type="button"
@@ -139,6 +178,25 @@ const drawerWidthClass = computed(() =>
           <RotateCcw v-if="isFocusedHere" class="h-3.5 w-3.5" />
           <Focus v-else class="h-3.5 w-3.5" />
           {{ isFocusedHere ? 'Xem toàn bộ app' : 'Tập trung nhánh này' }}
+        </button>
+
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          @click="handleCopyMd"
+        >
+          <Check v-if="copiedMd" class="h-3.5 w-3.5 text-emerald-600" />
+          <FileText v-else class="h-3.5 w-3.5" />
+          {{ copiedMd ? 'Đã copy MD' : 'Copy MD' }}
+        </button>
+
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          @click="handleDownloadMd"
+        >
+          <Download class="h-3.5 w-3.5" />
+          Tải .md
         </button>
       </div>
 

@@ -2,9 +2,11 @@
 import { defineAsyncComponent, inject } from 'vue';
 import { ChevronRight, GitBranch, Image as ImageIcon, Layers, RotateCcw, Search } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
+import ExportMenu from './ExportMenu.vue';
 
 const emit = defineEmits<{
   openSearch: [];
+  openParity: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -134,9 +136,12 @@ const onBreadcrumbClick = (nodeId: string) => {
         <span class="hidden lg:inline">Hiện ảnh trên sơ đồ</span>
       </button>
 
+      <ExportMenu />
+
       <component
         :is="TechPlatformSwitcher"
         v-if="TechPlatformSwitcher && explorer.audienceMode.value === 'tech'"
+        @open-parity="emit('openParity')"
       />
 
       <div

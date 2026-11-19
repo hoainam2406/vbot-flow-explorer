@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
+import { defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import dataset from 'virtual:flow-dataset';
 import FlowCanvas from './components/FlowCanvas.vue';
 import SearchModal from './components/SearchModal.vue';
@@ -7,10 +7,15 @@ import TopBar from './components/TopBar.vue';
 import DetailDrawer from './components/drawer/DetailDrawer.vue';
 import { createFlowExplorerState, FLOW_EXPLORER_KEY } from './composables/useFlowExplorer';
 
+const ParityMatrixModal = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./components/ParityMatrixModal.vue'))
+  : null;
+
 const explorer = createFlowExplorerState(dataset, __ENABLE_TECH_MODE__);
 provide(FLOW_EXPLORER_KEY, explorer);
 
 const searchOpen = ref(false);
+const parityOpen = ref(false);
 
 const parseUrlState = () => {
   const searchParams = new URLSearchParams(window.location.search);
@@ -60,7 +65,13 @@ const onGlobalKeyDown = (event: KeyboardEvent) => {
     searchOpen.value = true;
     return;
   }
-  if (event.key === 'Escape' && !event.defaultPrevented && !searchOpen.value && explorer.selectedNodeId.value) {
+  if (
+    event.key === 'Escape' &&
+    !event.defaultPrevented &&
+    !searchOpen.value &&
+    !parityOpen.value &&
+    explorer.selectedNodeId.value
+  ) {
     explorer.selectedNodeId.value = null;
   }
 };
@@ -89,7 +100,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full flex-col overflow-hidden bg-slate-50">
-    <TopBar @open-search="searchOpen = true" />
+    <TopBar @open-search="searchOpen = true" @open-parity="parityOpen = true" />
 
     <div class="relative flex min-h-0 flex-1 overflow-hidden">
       <FlowCanvas class="min-w-0 flex-1" />
@@ -97,5 +108,6 @@ onBeforeUnmount(() => {
     </div>
 
     <SearchModal v-model:open="searchOpen" />
+    <component :is="ParityMatrixModal" v-if="ParityMatrixModal" v-model:open="parityOpen" />
   </div>
 </template>
