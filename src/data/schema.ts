@@ -98,6 +98,7 @@ export const FlowNodeDataSchema = z
   .object({
     id: z.string().min(1),
     label: z.string().min(1),
+    techLabel: z.string().min(1).optional(),
     kind: NodeKindSchema,
     audience: AudienceScopeSchema,
     platforms: z.array(PlatformSchema).min(1).optional(),
@@ -117,6 +118,7 @@ export const FlowEdgeDataSchema = z
     source: z.string().min(1),
     target: z.string().min(1),
     label: z.string().optional(),
+    techLabel: z.string().min(1).optional(),
     audience: AudienceScopeSchema.optional(),
     platforms: z.array(PlatformSchema).min(1).optional(),
   })
@@ -156,6 +158,7 @@ export const AppManifestSchema = z.object({
     name: z.string().min(1),
     tagline: z.string().min(1),
     version: z.string().optional(),
+    techBranch: z.string().min(1).optional(),
   }),
   rootNode: FlowNodeDataSchema,
   branches: z.array(FlowNodeDataSchema).min(1),
@@ -184,4 +187,5 @@ export interface MergedFlowDataset {
   branches: FlowNodeData[];
   branchEdges: FlowEdgeData[];
   subtreesByParentId: Record<string, SubtreeDefinition>;
+  hasRealMedia?: boolean;
 }

@@ -1,4 +1,5 @@
 // src/core/parityAnalyzer.ts
+import { getNodeDisplayLabel } from './graphEngine';
 import type {
   FlowNodeData,
   MergedFlowDataset,
@@ -112,7 +113,7 @@ function buildParityItem(
 
   return {
     nodeId: node.id,
-    nodeLabel: node.label,
+    nodeLabel: getNodeDisplayLabel(node, 'tech'),
     nodeKind: node.kind,
     branchId,
     branchLabel,
@@ -142,7 +143,7 @@ export function extractParityReport(dataset: MergedFlowDataset): ParitySummary {
     for (const child of subtree.nodes) {
       if (visited.has(child.id)) continue;
       visited.add(child.id);
-      const nextTrail = [...trail, child.label];
+      const nextTrail = [...trail, getNodeDisplayLabel(child, 'tech')];
       const item = buildParityItem(child, branchId, branchLabel, nextTrail);
       if (item) {
         items.push(item);
@@ -153,11 +154,12 @@ export function extractParityReport(dataset: MergedFlowDataset): ParitySummary {
 
   // Root node first (without descending into branches, which are walked in order below)
   visited.add(dataset.rootNode.id);
+  const rootLabel = getNodeDisplayLabel(dataset.rootNode, 'tech');
   const rootItem = buildParityItem(
     dataset.rootNode,
     dataset.rootNode.id,
-    dataset.rootNode.label,
-    [dataset.rootNode.label],
+    rootLabel,
+    [rootLabel],
   );
   if (rootItem) {
     items.push(rootItem);
@@ -166,18 +168,19 @@ export function extractParityReport(dataset: MergedFlowDataset): ParitySummary {
   for (const branch of dataset.branches) {
     if (!visited.has(branch.id)) {
       visited.add(branch.id);
-      const trail = [dataset.rootNode.label, branch.label];
-      const item = buildParityItem(branch, branch.id, branch.label, trail);
+      const bLabel = getNodeDisplayLabel(branch, 'tech');
+      const trail = [rootLabel, bLabel];
+      const item = buildParityItem(branch, branch.id, bLabel, trail);
       if (item) {
         items.push(item);
       }
-      inspectSubtree(branch.id, branch.id, branch.label, trail);
+      inspectSubtree(branch.id, branch.id, bLabel, trail);
     }
   }
 
   const branchOrder: Array<{ id: string; label: string }> = [
-    { id: dataset.rootNode.id, label: dataset.rootNode.label },
-    ...dataset.branches.map((b) => ({ id: b.id, label: b.label })),
+    { id: dataset.rootNode.id, label: rootLabel },
+    ...dataset.branches.map((b) => ({ id: b.id, label: getNodeDisplayLabel(b, 'tech') })),
   ];
   const countsMap = new Map<string, number>();
   for (const item of items) {

@@ -307,14 +307,40 @@ export function toVueFlowEdges(
   highlightedEdgeIds?: Set<string>,
   dimOthers = false,
   edgeRoutes?: Record<string, EdgeRoute>,
+  currentStepEdgeId?: string | null,
+  upcomingEdgeIds?: Set<string>,
 ): Edge[] {
+  const hasStepMode =
+    Boolean(currentStepEdgeId) || Boolean(upcomingEdgeIds && upcomingEdgeIds.size > 0);
+
   return flowEdges.map((edge) => {
+    const isCurrentEdge = Boolean(currentStepEdgeId && edge.id === currentStepEdgeId);
     const isHighlighted = highlightedEdgeIds?.has(edge.id) ?? false;
-    const strokeColor = dimOthers
-      ? isHighlighted
+    const isUpcoming = Boolean(!isCurrentEdge && !isHighlighted && upcomingEdgeIds?.has(edge.id));
+
+    const strokeColor = !dimOthers
+      ? '#94a3b8'
+      : isCurrentEdge || isHighlighted
         ? '#2563eb'
-        : '#cbd5e1'
-      : '#94a3b8';
+        : isUpcoming
+          ? '#93c5fd'
+          : '#cbd5e1';
+
+    const style = !dimOthers
+      ? { stroke: strokeColor, strokeWidth: 1.7 }
+      : hasStepMode
+        ? isCurrentEdge
+          ? { stroke: strokeColor, strokeWidth: 3.2, opacity: 1 }
+          : isHighlighted
+            ? { stroke: strokeColor, strokeWidth: 2.4, opacity: 1 }
+            : isUpcoming
+              ? { stroke: strokeColor, strokeWidth: 2, opacity: 0.78 }
+              : { stroke: strokeColor, strokeWidth: 1.2, opacity: 0.22 }
+        : {
+            stroke: strokeColor,
+            strokeWidth: isHighlighted ? 2.6 : 1.3,
+            opacity: isHighlighted ? 1 : 0.28,
+          };
 
     return {
       id: edge.id,
@@ -322,7 +348,7 @@ export function toVueFlowEdges(
       target: edge.target,
       label: edge.label,
       type: 'routed',
-      animated: isHighlighted,
+      animated: hasStepMode ? isCurrentEdge : isHighlighted,
       data: {
         route: edgeRoutes?.[edge.id],
       },
@@ -330,13 +356,7 @@ export function toVueFlowEdges(
         type: MarkerType.ArrowClosed,
         color: strokeColor,
       },
-      style: dimOthers
-        ? {
-            stroke: strokeColor,
-            strokeWidth: isHighlighted ? 2.6 : 1.3,
-            opacity: isHighlighted ? 1 : 0.28,
-          }
-        : { stroke: strokeColor, strokeWidth: 1.7 },
+      style,
     };
   });
 }

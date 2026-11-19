@@ -6,6 +6,8 @@ import {
   filterAndBridgeSubtree,
   buildVisibleTreeFlow,
   countDescendants,
+  getNodeDisplayLabel,
+  getEdgeDisplayLabel,
 } from '../src/core/graphEngine';
 import type { AppManifest, FlowModuleFile, SubtreeDefinition } from '../src/data/schema';
 
@@ -343,5 +345,89 @@ describe('graphEngine', () => {
     expect(pubJson).not.toContain('platformDiffNote');
     expect(pubJson).not.toContain('Android.kt');
     expect(pubJson).not.toContain('"platforms"');
+  });
+
+  it('resolves techLabel on nodes/edges in tech mode and strips techLabel & app.techBranch in sanitizeForPublic', () => {
+    const manifestWithLabels: AppManifest = {
+      ...manifest,
+      app: {
+        ...manifest.app,
+        techBranch: 'Nam-dev',
+      },
+      rootNode: {
+        ...manifest.rootNode,
+        label: 'Ứng dụng VBot',
+        techLabel: 'Ứng dụng VBot (PushKit / PJSIP)',
+      },
+    };
+
+    const subWithTechLabels: SubtreeDefinition = {
+      title: 'Tech Labels Test',
+      layoutHint: 'flow',
+      entryNodeIds: ['n1'],
+      nodes: [
+        {
+          id: 'n1',
+          label: 'Cuộc gọi đến',
+          techLabel: 'Cuộc gọi đến (PushKit & CallKit / FSI)',
+          kind: 'action',
+          audience: 'all',
+          summary: { overview: 'Gọi đến' },
+        },
+        {
+          id: 'n2',
+          label: 'Kết nối tổng đài',
+          techLabel: 'Thiết lập SIP / DTMF',
+          kind: 'external',
+          audience: 'all',
+          summary: { overview: 'Kết nối' },
+        },
+      ],
+      edges: [
+        {
+          id: 'e1',
+          source: 'n1',
+          target: 'n2',
+          label: 'Chuyển ngay',
+          techLabel: 'Chuyển ngay (Blind - DTMF #1)',
+        },
+      ],
+    };
+
+    expect(getNodeDisplayLabel(manifestWithLabels.rootNode, 'overview')).toBe('Ứng dụng VBot');
+    expect(getNodeDisplayLabel(manifestWithLabels.rootNode, 'tech')).toBe(
+      'Ứng dụng VBot (PushKit / PJSIP)',
+    );
+    expect(getEdgeDisplayLabel(subWithTechLabels.edges[0], 'overview')).toBe('Chuyển ngay');
+    expect(getEdgeDisplayLabel(subWithTechLabels.edges[0], 'tech')).toBe(
+      'Chuyển ngay (Blind - DTMF #1)',
+    );
+
+    const overviewSub = filterAndBridgeSubtree(subWithTechLabels, 'overview');
+    expect(overviewSub.edges[0].label).toBe('Chuyển ngay');
+    expect(overviewSub.edges[0].techLabel).toBeUndefined();
+
+    const compareSub = filterAndBridgeSubtree(subWithTechLabels, 'tech', 'compare');
+    expect(compareSub.edges[0].label).toBe('Chuyển ngay (Blind - DTMF #1)');
+    expect(compareSub.edges[0].techLabel).toBeUndefined();
+
+    const iosSub = filterAndBridgeSubtree(subWithTechLabels, 'tech', 'ios');
+    expect(iosSub.edges[0].label).toBe('Chuyển ngay (Blind - DTMF #1)');
+
+    const modLabels: FlowModuleFile = {
+      schemaVersion: '1.0',
+      moduleId: 'mod-call',
+      subtrees: { 'mod-call': subWithTechLabels },
+    };
+    const merged = mergeDataset(manifestWithLabels, [modLabels]);
+    const sanitized = sanitizeForPublic(merged);
+    expect(sanitized.app.techBranch).toBeUndefined();
+
+    const pubStr = JSON.stringify(sanitized);
+    expect(pubStr).not.toContain('techLabel');
+    expect(pubStr).not.toContain('techBranch');
+    expect(pubStr).not.toContain('PushKit');
+    expect(pubStr).not.toContain('DTMF');
+    expect(pubStr).not.toContain('Nam-dev');
   });
 });

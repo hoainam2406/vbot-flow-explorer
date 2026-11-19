@@ -1,12 +1,22 @@
 <script setup lang="ts">
-import { defineAsyncComponent, inject } from 'vue';
-import { ChevronRight, GitBranch, Image as ImageIcon, Layers, RotateCcw, Search } from 'lucide-vue-next';
+import { computed, defineAsyncComponent, inject } from 'vue';
+import {
+  ChevronRight,
+  GitBranch,
+  HelpCircle,
+  Image as ImageIcon,
+  Layers,
+  RotateCcw,
+  Search,
+} from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
+import { getNodeDisplayLabel } from '../core/graphEngine';
 import ExportMenu from './ExportMenu.vue';
 
 const emit = defineEmits<{
   openSearch: [];
   openParity: [];
+  openGuide: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -15,6 +25,11 @@ if (!explorer) {
 }
 
 const enableTechMode = __ENABLE_TECH_MODE__;
+const techBranchLabel = computed(() =>
+  __ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech'
+    ? (explorer.dataset.app.techBranch ?? null)
+    : null,
+);
 const TechPlatformSwitcher = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./TechPlatformSwitcher.vue'))
   : null;
@@ -52,6 +67,14 @@ const onBreadcrumbClick = (nodeId: string) => {
             >
               {{ explorer.dataset.app.version }}
             </span>
+            <span
+              v-if="enableTechMode && techBranchLabel"
+              class="inline-flex items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200"
+              :title="`Dữ liệu kỹ thuật đối soát theo nhánh ${techBranchLabel} của VBot-iOS & VBot-Android`"
+            >
+              <GitBranch class="h-2.5 w-2.5" />
+              {{ techBranchLabel }}
+            </span>
           </div>
           <p class="hidden text-[11px] text-slate-500 xl:block">
             {{ explorer.dataset.app.tagline }}
@@ -75,7 +98,7 @@ const onBreadcrumbClick = (nodeId: string) => {
             "
             @click="onBreadcrumbClick(node.id)"
           >
-            {{ node.label }}
+            {{ getNodeDisplayLabel(node, explorer.audienceMode.value) }}
           </button>
         </template>
 
@@ -117,10 +140,11 @@ const onBreadcrumbClick = (nodeId: string) => {
         @click="explorer.accordionMode.value = !explorer.accordionMode.value"
       >
         <Layers class="h-3.5 w-3.5" />
-        <span class="hidden lg:inline">Accordion</span>
+        <span class="hidden lg:inline">Chỉ mở 1 nhánh</span>
       </button>
 
       <button
+        v-if="explorer.dataset.hasRealMedia !== false"
         type="button"
         :aria-pressed="explorer.showCanvasMedia.value"
         class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition"
@@ -134,6 +158,16 @@ const onBreadcrumbClick = (nodeId: string) => {
       >
         <ImageIcon class="h-3.5 w-3.5" />
         <span class="hidden lg:inline">Hiện ảnh trên sơ đồ</span>
+      </button>
+
+      <button
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+        title="Hướng dẫn thao tác & giải thích thuật ngữ"
+        @click="emit('openGuide')"
+      >
+        <HelpCircle class="h-3.5 w-3.5 text-indigo-600" />
+        <span class="hidden sm:inline">Hướng dẫn</span>
       </button>
 
       <ExportMenu />

@@ -281,4 +281,211 @@ describe('createFlowExplorerState', () => {
     expect(searchFn(platformDataset, 'AndroidSpecificFn', 'tech', 'ios')).toEqual([]);
     expect(searchFn(platformDataset, 'AndroidSpecificFn', 'overview', 'android')).toEqual([]);
   });
+
+  it('tracks navigation history across selectNode/jumpToNode, filters hidden targets in goBack, and indexes techLabel only in tech search', () => {
+    const navDataset: MergedFlowDataset = {
+      ...sampleDataset,
+      subtreesByParentId: {
+        ...sampleDataset.subtreesByParentId,
+        b1: {
+          title: 'Sub 1',
+          layoutHint: 'flow',
+          entryNodeIds: ['b1-all', 'b1-ios-tech'],
+          nodes: [
+            {
+              id: 'b1-all',
+              label: 'Bước thân thiện',
+              techLabel: 'Bước Kỹ Thuật (PushKit / bgapi)',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'Chung' },
+            },
+            {
+              id: 'b1-ios-tech',
+              label: 'Nội bộ iOS',
+              kind: 'process',
+              audience: 'tech',
+              platforms: ['ios'],
+              summary: { overview: 'iOS tech' },
+            },
+          ],
+          edges: [],
+        },
+      },
+    };
+
+    const state = createFlowExplorerState(navDataset, true);
+    state.setAudienceMode('tech');
+
+    state.selectNode('b1');
+    expect(state.previousNode.value).toBeNull();
+
+    state.jumpToNode('b1-ios-tech');
+    expect(state.previousNode.value?.id).toBe('b1');
+
+    state.jumpToNode('b2-1');
+    expect(state.previousNode.value?.id).toBe('b1-ios-tech');
+
+    // Chuyển sang Android làm 'b1-ios-tech' bị ẩn -> goBack phải bỏ qua 'b1-ios-tech' và quay về 'b1'
+    state.setPlatformMode('android');
+    expect(state.previousNode.value?.id).toBe('b1');
+    expect(state.goBack()).toBe(true);
+    expect(state.selectedNodeId.value).toBe('b1');
+    expect(state.previousNode.value).toBeNull();
+    expect(state.goBack()).toBe(false);
+
+    // Search techLabel chỉ khớp ở chế độ 'tech'
+    expect(searchFlowNodes(navDataset, 'bgapi', 'overview')).toEqual([]);
+    expect(searchFlowNodes(navDataset, 'bgapi', 'tech').map((h) => h.node.id)).toEqual(['b1-all']);
+  });
+
+  it('manages scenario stepper navigation, camera target, dialog state, and resets on mode/expand changes', () => {
+    const scenarioDataset: MergedFlowDataset = {
+      ...sampleDataset,
+      subtreesByParentId: {
+        ...sampleDataset.subtreesByParentId,
+        b1: {
+          title: 'Sub 1',
+          layoutHint: 'flow',
+          entryNodeIds: ['s1'],
+          nodes: [
+            { id: 's1', label: 'Bước 1', kind: 'action', audience: 'all', summary: { overview: '1' } },
+            { id: 's2', label: 'Bước 2', kind: 'process', audience: 'all', summary: { overview: '2' } },
+            { id: 's3', label: 'Bước 3', kind: 'action', audience: 'all', summary: { overview: '3' } },
+          ],
+          edges: [
+            { id: 'e-s12', source: 's1', target: 's2' },
+            { id: 'e-s23', source: 's2', target: 's3' },
+          ],
+          scenarios: [
+            {
+              id: 'sc-demo',
+              name: 'Kịch bản Demo',
+              nodeIds: ['s1', 's2', 's3'],
+              edgeIds: ['e-s12', 'e-s23'],
+            },
+          ],
+        },
+      },
+    };
+
+    const state = createFlowExplorerState(scenarioDataset, true);
+    state.toggleExpand('b1');
+
+    state.selectScenario('sc-demo');
+    expect(state.activeScenarioId.value).toBe('sc-demo');
+    expect(state.activeScenarioStepIndex.value).toBe(0);
+    expect(state.activeScenarioStepNodeId.value).toBe('s1');
+    expect(state.cameraTarget.value.kind).toBe('scenario_step');
+    expect(getCameraTargetNodeIds(state.visibleFlow.value, state.cameraTarget.value)).toEqual(['s1', 's2']);
+
+    state.stepScenario(1);
+    expect(state.activeScenarioStepIndex.value).toBe(1);
+    expect(state.activeScenarioStepNodeId.value).toBe('s2');
+    expect(getCameraTargetNodeIds(state.visibleFlow.value, state.cameraTarget.value)).toEqual(['s1', 's2', 's3']);
+
+    state.stepScenario(1);
+    expect(state.activeScenarioStepIndex.value).toBe(2);
+    state.stepScenario(1);
+    expect(state.activeScenarioStepIndex.value).toBe(2);
+
+    state.stepScenario(-1);
+    expect(state.activeScenarioStepIndex.value).toBe(1);
+
+    state.openScenarioDialog();
+    expect(state.scenarioDialogOpen.value).toBe(true);
+
+    // Đổi mode phải reset toàn bộ trạng thái scenario & đóng dialog
+    state.setAudienceMode('tech');
+    expect(state.activeScenarioId.value).toBeNull();
+    expect(state.activeScenarioStepIndex.value).toBeNull();
+    expect(state.scenarioDialogOpen.value).toBe(false);
+
+    // Mở dialog trực tiếp theo ID phải tự chọn kịch bản & bước 0
+    state.openScenarioDialog('sc-demo');
+    expect(state.activeScenarioId.value).toBe('sc-demo');
+    expect(state.activeScenarioStepIndex.value).toBe(0);
+    expect(state.scenarioDialogOpen.value).toBe(true);
+
+    state.closeScenarioDialog();
+    expect(state.scenarioDialogOpen.value).toBe(false);
+    expect(state.activeScenarioId.value).toBe('sc-demo');
+  });
+
+  it('preserves shared scenario dialog across setPlatformMode changes and clears platform-specific scenarios', () => {
+    const platformScenarioDataset: MergedFlowDataset = {
+      ...sampleDataset,
+      subtreesByParentId: {
+        ...sampleDataset.subtreesByParentId,
+        b1: {
+          title: 'Sub 1',
+          layoutHint: 'flow',
+          entryNodeIds: ['s1'],
+          nodes: [
+            { id: 's1', label: 'Bước 1', kind: 'action', audience: 'all', summary: { overview: '1' } },
+            {
+              id: 's2-ios',
+              label: 'Bước iOS',
+              kind: 'process',
+              audience: 'tech',
+              platforms: ['ios'],
+              summary: { overview: '2 ios' },
+            },
+            {
+              id: 's2-and',
+              label: 'Bước Android',
+              kind: 'process',
+              audience: 'tech',
+              platforms: ['android'],
+              summary: { overview: '2 android' },
+            },
+            { id: 's3', label: 'Bước 3', kind: 'action', audience: 'all', summary: { overview: '3' } },
+          ] as MergedFlowDataset['subtreesByParentId']['b1']['nodes'],
+          edges: [
+            { id: 'e-1ios', source: 's1', target: 's2-ios' },
+            { id: 'e-1and', source: 's1', target: 's2-and' },
+            { id: 'e-ios3', source: 's2-ios', target: 's3' },
+            { id: 'e-and3', source: 's2-and', target: 's3' },
+          ],
+          scenarios: [
+            {
+              id: 'sc-shared',
+              name: 'Kịch bản dùng chung',
+              nodeIds: ['s1', 's2-ios', 's2-and', 's3'],
+              edgeIds: ['e-1ios', 'e-ios3'],
+            },
+            {
+              id: 'sc-ios-only',
+              name: 'Chỉ dành cho iOS',
+              nodeIds: ['s1', 's2-ios'],
+              edgeIds: ['e-1ios'],
+              platforms: ['ios'],
+            },
+          ],
+        },
+      },
+    };
+
+    const state = createFlowExplorerState(platformScenarioDataset, true);
+    state.setAudienceMode('tech');
+    state.toggleExpand('b1');
+
+    // Khi đổi giữa các nền tảng mà kịch bản chung vẫn hợp lệ: giữ dialog mở và kẹp lại step index
+    state.openScenarioDialog('sc-shared');
+    state.setScenarioStep(3); // Step 3 (last step) trong compare mode (4 node)
+    expect(state.scenarioDialogOpen.value).toBe(true);
+
+    state.setPlatformMode('ios');
+    expect(state.scenarioDialogOpen.value).toBe(true);
+    expect(state.activeScenarioId.value).toBe('sc-shared');
+    expect(state.activeScenarioStepIndex.value).toBe(2); // Kẹp còn 3 node ở iOS
+
+    // Khi đang mở kịch bản chỉ thuộc iOS mà chuyển sang Android: phải tự đóng dialog và clear state
+    state.openScenarioDialog('sc-ios-only');
+    expect(state.scenarioDialogOpen.value).toBe(true);
+    state.setPlatformMode('android');
+    expect(state.activeScenarioId.value).toBeNull();
+    expect(state.activeScenarioStepIndex.value).toBeNull();
+    expect(state.scenarioDialogOpen.value).toBe(false);
+  });
 });

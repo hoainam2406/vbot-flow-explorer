@@ -12,6 +12,29 @@ import type {
 
 export type ViewMode = 'overview' | 'tech';
 
+const ALLOW_TECH_RUNTIME =
+  typeof __ENABLE_TECH_MODE__ === 'boolean' ? __ENABLE_TECH_MODE__ : true;
+
+export function getNodeDisplayLabel(node: FlowNodeData, mode: ViewMode): string {
+  return ALLOW_TECH_RUNTIME && mode === 'tech' && node.techLabel ? node.techLabel : node.label;
+}
+
+export function getEdgeDisplayLabel(edge: FlowEdgeData, mode: ViewMode): string | undefined {
+  return ALLOW_TECH_RUNTIME && mode === 'tech' ? (edge.techLabel ?? edge.label) : edge.label;
+}
+
+function resolveEdgeForMode(edge: FlowEdgeData, mode: ViewMode): FlowEdgeData {
+  if (!ALLOW_TECH_RUNTIME) {
+    return edge;
+  }
+  const { techLabel: _techLabel, label: _label, ...rest } = edge;
+  const resolvedLabel = getEdgeDisplayLabel(edge, mode);
+  return {
+    ...rest,
+    ...(resolvedLabel ? { label: resolvedLabel } : {}),
+  };
+}
+
 export function mergeDataset(
   manifest: AppManifest,
   modules: FlowModuleFile[],
@@ -49,7 +72,12 @@ export function filterAndBridgeSubtree(
   mode: ViewMode,
   platformMode: PlatformViewMode = 'compare',
 ): SubtreeDefinition {
-  if (mode === 'tech' && platformMode === 'compare') return subtree;
+  if (mode === 'tech' && platformMode === 'compare') {
+    return {
+      ...subtree,
+      edges: subtree.edges.map((edge) => resolveEdgeForMode(edge, mode)),
+    };
+  }
 
   const isNodeVisible = (n: FlowNodeData) =>
     isVisibleForMode(n.audience, mode) && isVisibleForPlatform(n.platforms, mode, platformMode);
@@ -80,7 +108,8 @@ export function filterAndBridgeSubtree(
     while (queue.length > 0) {
       const current = queue.shift()!;
       for (const edge of outgoing.get(current.id) ?? []) {
-        const nextLabels = edge.label ? [...current.labels, edge.label] : current.labels;
+        const edgeLabel = getEdgeDisplayLabel(edge, mode);
+        const nextLabels = edgeLabel ? [...current.labels, edgeLabel] : current.labels;
         const nextViaEdgeIds = [...current.viaEdgeIds, edge.id];
         if (visibleIds.has(edge.target)) {
           results.push({ target: edge.target, labels: nextLabels, viaEdgeIds: nextViaEdgeIds });
@@ -216,11 +245,14 @@ export function sanitizeForPublic(dataset: MergedFlowDataset): MergedFlowDataset
     filteredSubtrees[key] = {
       ...filteredSubtrees[key],
       nodes: filteredSubtrees[key].nodes.map((n) => stripNodeForPublic(n, allowedIds)),
+      edges: filteredSubtrees[key].edges.map(({ techLabel: _techLabel, ...edge }) => edge),
     };
   }
 
+  const { techBranch: _techBranch, ...publicApp } = dataset.app;
+
   return {
-    app: dataset.app,
+    app: publicApp,
     rootNode: stripNodeForPublic(dataset.rootNode, allowedIds),
     branches: visibleBranches.map((b) => stripNodeForPublic(b, allowedIds)),
     branchEdges: dataset.branchEdges
@@ -230,7 +262,7 @@ export function sanitizeForPublic(dataset: MergedFlowDataset): MergedFlowDataset
           allowedIds.has(e.source) &&
           allowedIds.has(e.target),
       )
-      .map(({ platforms: _platforms, ...edge }) => edge),
+      .map(({ platforms: _platforms, techLabel: _techLabel, ...edge }) => edge),
     subtreesByParentId: filteredSubtrees,
   };
 }
@@ -337,7 +369,7 @@ export function buildVisibleTreeFlow(
       isVisibleForMode(edge.audience, mode) &&
       isVisibleForPlatform(edge.platforms, mode, platformMode)
     ) {
-      edges.push(edge);
+      edges.push(resolveEdgeForMode(edge, mode));
     }
   }
 

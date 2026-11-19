@@ -2,10 +2,18 @@
 import { defineAsyncComponent, onBeforeUnmount, onMounted, provide, ref, watch } from 'vue';
 import dataset from 'virtual:flow-dataset';
 import FlowCanvas from './components/FlowCanvas.vue';
+import GuideGlossaryModal from './components/GuideGlossaryModal.vue';
+import ScenarioFlowDialog from './components/ScenarioFlowDialog.vue';
 import SearchModal from './components/SearchModal.vue';
 import TopBar from './components/TopBar.vue';
 import DetailDrawer from './components/drawer/DetailDrawer.vue';
 import { createFlowExplorerState, FLOW_EXPLORER_KEY } from './composables/useFlowExplorer';
+import {
+  loadSavedExplorerPrefs,
+  resolveInitialExplorerState,
+  saveExplorerPrefs,
+} from './core/explorerPreferences';
+import { isVisibleForMode, isVisibleForPlatform } from './core/graphEngine';
 
 const ParityMatrixModal = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./components/ParityMatrixModal.vue'))
@@ -16,28 +24,53 @@ provide(FLOW_EXPLORER_KEY, explorer);
 
 const searchOpen = ref(false);
 const parityOpen = ref(false);
+const guideOpen = ref(false);
+const hydrated = ref(false);
 
-const parseUrlState = () => {
-  const searchParams = new URLSearchParams(window.location.search);
-  const rawHash = window.location.hash.replace(/^#/, '');
-  const hashQuery = rawHash.includes('?') ? rawHash.split('?')[1] : rawHash.replace(/^\/+/, '');
-  const hashParams = new URLSearchParams(hashQuery);
-
-  const focus = hashParams.get('focus') ?? searchParams.get('focus');
-  if (focus && explorer.findNode(focus)) {
-    explorer.setFocusRoot(focus);
-  }
+const applyInitialState = () => {
+  const initial = resolveInitialExplorerState({
+    allowTechMode: __ENABLE_TECH_MODE__,
+    search: window.location.search,
+    hash: window.location.hash,
+    savedPrefs: __ENABLE_TECH_MODE__ ? loadSavedExplorerPrefs() : null,
+  });
 
   if (__ENABLE_TECH_MODE__) {
-    const mode = hashParams.get('mode') ?? searchParams.get('mode');
-    if (mode === 'tech' || mode === 'overview') {
-      explorer.setAudienceMode(mode);
-    }
-    const platform = hashParams.get('platform') ?? searchParams.get('platform');
-    if (platform === 'ios' || platform === 'android' || platform === 'compare') {
-      explorer.setPlatformMode(platform);
+    explorer.setAudienceMode(initial.audienceMode);
+    explorer.setPlatformMode(initial.platformMode);
+  }
+
+  if (initial.focusNodeId) {
+    const focusNode = explorer.findNode(initial.focusNodeId);
+    if (
+      focusNode &&
+      isVisibleForMode(focusNode.audience, explorer.audienceMode.value) &&
+      isVisibleForPlatform(
+        focusNode.platforms,
+        explorer.audienceMode.value,
+        explorer.platformMode.value,
+      )
+    ) {
+      explorer.setFocusRoot(initial.focusNodeId);
     }
   }
+
+  if (initial.selectedNodeId) {
+    const targetNode = explorer.findNode(initial.selectedNodeId);
+    if (
+      targetNode &&
+      isVisibleForMode(targetNode.audience, explorer.audienceMode.value) &&
+      isVisibleForPlatform(
+        targetNode.platforms,
+        explorer.audienceMode.value,
+        explorer.platformMode.value,
+      )
+    ) {
+      explorer.jumpToNode(initial.selectedNodeId, { recordHistory: false });
+    }
+  }
+
+  hydrated.value = true;
 };
 
 const syncToUrl = () => {
@@ -45,9 +78,14 @@ const syncToUrl = () => {
   if (explorer.focusRootId.value) {
     params.set('focus', explorer.focusRootId.value);
   }
-  if (__ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech') {
-    params.set('mode', 'tech');
-    params.set('platform', explorer.platformMode.value);
+  if (explorer.selectedNodeId.value) {
+    params.set('node', explorer.selectedNodeId.value);
+  }
+  if (__ENABLE_TECH_MODE__) {
+    params.set('mode', explorer.audienceMode.value);
+    if (explorer.audienceMode.value === 'tech') {
+      params.set('platform', explorer.platformMode.value);
+    }
   }
   const qs = params.toString();
   const base = window.location.pathname + window.location.search;
@@ -70,6 +108,8 @@ const onGlobalKeyDown = (event: KeyboardEvent) => {
     !event.defaultPrevented &&
     !searchOpen.value &&
     !parityOpen.value &&
+    !guideOpen.value &&
+    !explorer.scenarioDialogOpen.value &&
     explorer.selectedNodeId.value
   ) {
     explorer.selectedNodeId.value = null;
@@ -77,7 +117,7 @@ const onGlobalKeyDown = (event: KeyboardEvent) => {
 };
 
 onMounted(() => {
-  parseUrlState();
+  applyInitialState();
   syncToUrl();
   window.addEventListener('keydown', onGlobalKeyDown);
 });
@@ -85,11 +125,19 @@ onMounted(() => {
 watch(
   [
     () => explorer.focusRootId.value,
+    () => explorer.selectedNodeId.value,
     () => explorer.audienceMode.value,
     () => explorer.platformMode.value,
   ],
   () => {
+    if (!hydrated.value) return;
     syncToUrl();
+    if (__ENABLE_TECH_MODE__) {
+      saveExplorerPrefs({
+        audienceMode: explorer.audienceMode.value,
+        platformMode: explorer.platformMode.value,
+      });
+    }
   },
 );
 
@@ -100,14 +148,20 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full flex-col overflow-hidden bg-slate-50">
-    <TopBar @open-search="searchOpen = true" @open-parity="parityOpen = true" />
+    <TopBar
+      @open-search="searchOpen = true"
+      @open-parity="parityOpen = true"
+      @open-guide="guideOpen = true"
+    />
 
     <div class="relative flex min-h-0 flex-1 overflow-hidden">
-      <FlowCanvas class="min-w-0 flex-1" />
+      <FlowCanvas class="min-w-0 flex-1" @open-guide="guideOpen = true" />
       <DetailDrawer />
     </div>
 
     <SearchModal v-model:open="searchOpen" />
+    <GuideGlossaryModal v-model:open="guideOpen" />
+    <ScenarioFlowDialog />
     <component :is="ParityMatrixModal" v-if="ParityMatrixModal" v-model:open="parityOpen" />
   </div>
 </template>

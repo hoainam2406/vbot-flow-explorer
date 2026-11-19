@@ -14,11 +14,13 @@ import type {
   MediaItem,
   MergedFlowDataset,
   PlatformViewMode,
+  Scenario,
 } from '../data/schema';
 
 export interface CameraTarget {
-  kind: 'all' | 'subtree' | 'node';
+  kind: 'all' | 'subtree' | 'node' | 'scenario_step';
   nodeId?: string;
+  nodeIds?: string[];
   seq: number;
 }
 
@@ -26,10 +28,16 @@ export function getCameraTargetNodeIds(
   visibleFlow: VisibleFlowResult,
   target: CameraTarget,
 ): string[] | null {
-  if (target.kind === 'all' || !target.nodeId) return null;
+  if (target.kind === 'all') return null;
 
   const visibleIds = new Set(visibleFlow.nodes.map((n) => n.id));
-  if (!visibleIds.has(target.nodeId)) return null;
+  if (target.kind === 'scenario_step') {
+    const candidates = (target.nodeIds ?? (target.nodeId ? [target.nodeId] : []))
+      .filter((id) => visibleIds.has(id));
+    return candidates.length > 0 ? candidates : null;
+  }
+
+  if (!target.nodeId || !visibleIds.has(target.nodeId)) return null;
 
   if (target.kind === 'subtree') {
     const result: string[] = [target.nodeId];
@@ -97,30 +105,85 @@ export function createFlowExplorerState(
   dataset: MergedFlowDataset,
   allowTechMode: boolean,
 ) {
+  const MAX_NAV_HISTORY = 25;
   const audienceMode = ref<ViewMode>('overview');
   const platformMode = ref<PlatformViewMode>('compare');
   const expandedIds = ref<Set<string>>(new Set());
   const accordionMode = ref(true);
   const focusRootId = ref<string | null>(null);
   const selectedNodeId = ref<string | null>(null);
+  const navigationHistory = ref<string[]>([]);
   const activeScenarioId = ref<string | null>(null);
+  const activeScenarioStepIndex = ref<number | null>(null);
+  const scenarioDialogOpen = ref(false);
   const showCanvasMedia = ref(false);
   let cameraSeq = 0;
   const cameraTarget = ref<CameraTarget>({ kind: 'all', seq: 0 });
 
-  const setCameraTarget = (kind: CameraTarget['kind'], nodeId?: string) => {
+  const isNodeCurrentlyVisible = (nodeId: string): boolean => {
+    const found = findNodeById(dataset, nodeId);
+    if (!found) return false;
+    return (
+      isVisibleForMode(found.audience, audienceMode.value) &&
+      isVisibleForPlatform(found.platforms, audienceMode.value, platformMode.value)
+    );
+  };
+
+  const pushHistory = (prevId: string | null, nextId: string | null) => {
+    if (!prevId || !nextId || prevId === nextId) return;
+    const current = navigationHistory.value;
+    if (current[current.length - 1] === prevId) return;
+    const next = [...current, prevId];
+    navigationHistory.value =
+      next.length > MAX_NAV_HISTORY ? next.slice(next.length - MAX_NAV_HISTORY) : next;
+  };
+
+  const selectNode = (nodeId: string | null, options?: { recordHistory?: boolean }) => {
+    if (options?.recordHistory !== false) {
+      pushHistory(selectedNodeId.value, nodeId);
+    }
+    selectedNodeId.value = nodeId;
+  };
+
+  const setCameraTarget = (
+    kind: CameraTarget['kind'],
+    nodeId?: string,
+    nodeIds?: string[],
+  ) => {
     cameraTarget.value = {
       kind,
       ...(nodeId ? { nodeId } : {}),
+      ...(nodeIds ? { nodeIds } : {}),
       seq: ++cameraSeq,
     };
   };
 
+  const clearScenarioState = () => {
+    activeScenarioId.value = null;
+    activeScenarioStepIndex.value = null;
+    scenarioDialogOpen.value = false;
+  };
+
   const parentIndex = buildParentIndex(dataset);
+
+  const visibleFlow = computed(() =>
+    buildVisibleTreeFlow(
+      dataset,
+      expandedIds.value,
+      audienceMode.value,
+      focusRootId.value,
+      platformMode.value,
+    ),
+  );
+
+  const getVisibleScenarioStepIds = (scenario: Scenario): string[] => {
+    const visibleIds = new Set(visibleFlow.value.nodes.map((n) => n.id));
+    return scenario.nodeIds.filter((id) => visibleIds.has(id));
+  };
 
   const setAudienceMode = (next: ViewMode) => {
     audienceMode.value = allowTechMode ? next : 'overview';
-    activeScenarioId.value = null;
+    clearScenarioState();
     if (selectedNodeId.value) {
       const sel = findNodeById(dataset, selectedNodeId.value);
       if (
@@ -141,7 +204,6 @@ export function createFlowExplorerState(
   const setPlatformMode = (next: PlatformViewMode) => {
     if (!allowTechMode) return;
     platformMode.value = next;
-    activeScenarioId.value = null;
     if (selectedNodeId.value) {
       const sel = findNodeById(dataset, selectedNodeId.value);
       if (sel && !isVisibleForPlatform(sel.platforms, audienceMode.value, next)) {
@@ -152,6 +214,32 @@ export function createFlowExplorerState(
       const focusNode = findNodeById(dataset, focusRootId.value);
       if (focusNode && !isVisibleForPlatform(focusNode.platforms, audienceMode.value, next)) {
         focusRootId.value = null;
+      }
+    }
+    if (activeScenarioId.value) {
+      const matchingScenario = visibleFlow.value.activeScenarios.find(
+        (s) => s.id === activeScenarioId.value,
+      );
+      if (!matchingScenario) {
+        clearScenarioState();
+      } else {
+        const stepIds = getVisibleScenarioStepIds(matchingScenario);
+        if (stepIds.length === 0) {
+          activeScenarioStepIndex.value = null;
+        } else {
+          const clamped = Math.max(
+            0,
+            Math.min(activeScenarioStepIndex.value ?? 0, stepIds.length - 1),
+          );
+          activeScenarioStepIndex.value = clamped;
+          const focusIds = [
+            stepIds[clamped - 1],
+            stepIds[clamped],
+            stepIds[clamped + 1],
+          ].filter((id): id is string => Boolean(id));
+          setCameraTarget('scenario_step', stepIds[clamped], focusIds);
+          return;
+        }
       }
     }
     if (cameraTarget.value.kind === 'subtree' && cameraTarget.value.nodeId) {
@@ -207,7 +295,7 @@ export function createFlowExplorerState(
       next.add(nodeId);
     }
     expandedIds.value = next;
-    activeScenarioId.value = null;
+    clearScenarioState();
 
     if (!wasExpanded) {
       setCameraTarget('subtree', nodeId);
@@ -220,7 +308,7 @@ export function createFlowExplorerState(
     }
   };
 
-  const jumpToNode = (nodeId: string) => {
+  const jumpToNode = (nodeId: string, options?: { recordHistory?: boolean }) => {
     const ancestors = getAncestorChain(nodeId);
     const next = new Set(accordionMode.value ? [] : expandedIds.value);
     for (const ancId of ancestors.slice(0, -1)) {
@@ -229,11 +317,38 @@ export function createFlowExplorerState(
       }
     }
     expandedIds.value = next;
-    selectedNodeId.value = nodeId;
+    selectNode(nodeId, options);
     if (focusRootId.value && !ancestors.includes(focusRootId.value)) {
       focusRootId.value = null;
     }
     setCameraTarget('node', nodeId);
+  };
+
+  const previousNode = computed<FlowNodeData | null>(() => {
+    const curId = selectedNodeId.value;
+    for (let i = navigationHistory.value.length - 1; i >= 0; i -= 1) {
+      const candidateId = navigationHistory.value[i];
+      if (candidateId === curId) continue;
+      if (isNodeCurrentlyVisible(candidateId)) {
+        return findNodeById(dataset, candidateId) ?? null;
+      }
+    }
+    return null;
+  });
+
+  const goBack = (): boolean => {
+    const curId = selectedNodeId.value;
+    const remaining = [...navigationHistory.value];
+    while (remaining.length > 0) {
+      const candidateId = remaining.pop()!;
+      if (candidateId !== curId && isNodeCurrentlyVisible(candidateId)) {
+        navigationHistory.value = remaining;
+        jumpToNode(candidateId, { recordHistory: false });
+        return true;
+      }
+    }
+    navigationHistory.value = [];
+    return false;
   };
 
   const setFocusRoot = (nodeId: string | null) => {
@@ -244,19 +359,108 @@ export function createFlowExplorerState(
       next.add(nextFocus);
       expandedIds.value = next;
     }
-    activeScenarioId.value = null;
+    clearScenarioState();
     setCameraTarget('all');
   };
 
-  const visibleFlow = computed(() =>
-    buildVisibleTreeFlow(
-      dataset,
-      expandedIds.value,
-      audienceMode.value,
-      focusRootId.value,
-      platformMode.value,
-    ),
-  );
+  const activeScenario = computed<Scenario | null>(() => {
+    const scId = activeScenarioId.value;
+    if (!scId) return null;
+    return visibleFlow.value.activeScenarios.find((s) => s.id === scId) ?? null;
+  });
+
+  const activeScenarioStepNodeId = computed<string | null>(() => {
+    const sc = activeScenario.value;
+    const idx = activeScenarioStepIndex.value;
+    if (!sc || idx === null) return null;
+    const stepIds = getVisibleScenarioStepIds(sc);
+    return stepIds[idx] ?? null;
+  });
+
+  const setScenarioStep = (
+    index: number | null,
+    options?: { focusCamera?: boolean },
+  ) => {
+    const sc = activeScenario.value;
+    if (!sc || index === null) {
+      activeScenarioStepIndex.value = null;
+      return;
+    }
+    const stepIds = getVisibleScenarioStepIds(sc);
+    if (stepIds.length === 0) {
+      activeScenarioStepIndex.value = null;
+      return;
+    }
+    const clamped = Math.max(0, Math.min(index, stepIds.length - 1));
+    activeScenarioStepIndex.value = clamped;
+    if (options?.focusCamera !== false) {
+      const focusIds = [
+        stepIds[clamped - 1],
+        stepIds[clamped],
+        stepIds[clamped + 1],
+      ].filter((id): id is string => Boolean(id));
+      setCameraTarget('scenario_step', stepIds[clamped], focusIds);
+    }
+  };
+
+  const selectScenario = (scenarioId: string | null) => {
+    if (!scenarioId || activeScenarioId.value === scenarioId) {
+      clearScenarioState();
+      return;
+    }
+    const target = visibleFlow.value.activeScenarios.find((s) => s.id === scenarioId);
+    if (!target) {
+      clearScenarioState();
+      return;
+    }
+    activeScenarioId.value = target.id;
+    const stepIds = getVisibleScenarioStepIds(target);
+    if (stepIds.length > 0) {
+      activeScenarioStepIndex.value = 0;
+      const focusIds = [stepIds[0], stepIds[1]].filter((id): id is string => Boolean(id));
+      setCameraTarget('scenario_step', stepIds[0], focusIds);
+    } else {
+      activeScenarioStepIndex.value = null;
+    }
+  };
+
+  const stepScenario = (delta: 1 | -1) => {
+    const sc = activeScenario.value;
+    if (!sc) return;
+    const stepIds = getVisibleScenarioStepIds(sc);
+    if (stepIds.length === 0) return;
+    const cur = activeScenarioStepIndex.value;
+    const next =
+      cur === null
+        ? delta > 0
+          ? 0
+          : stepIds.length - 1
+        : Math.max(0, Math.min(cur + delta, stepIds.length - 1));
+    setScenarioStep(next);
+  };
+
+  const openScenarioDialog = (scenarioId?: string) => {
+    if (scenarioId && activeScenarioId.value !== scenarioId) {
+      selectScenario(scenarioId);
+    }
+    if (!activeScenario.value) {
+      const first = visibleFlow.value.activeScenarios[0];
+      if (!first) return;
+      selectScenario(first.id);
+    }
+    if (
+      activeScenario.value &&
+      activeScenarioStepIndex.value === null &&
+      getVisibleScenarioStepIds(activeScenario.value).length > 0
+    ) {
+      setScenarioStep(0, { focusCamera: false });
+    }
+    scenarioDialogOpen.value = true;
+  };
+
+  const closeScenarioDialog = () => {
+    scenarioDialogOpen.value = false;
+  };
 
   const selectedNode = computed<FlowNodeData | null>(() =>
     selectedNodeId.value ? findNodeById(dataset, selectedNodeId.value) ?? null : null,
@@ -285,7 +489,13 @@ export function createFlowExplorerState(
     accordionMode,
     focusRootId,
     selectedNodeId,
+    navigationHistory,
+    previousNode,
     activeScenarioId,
+    activeScenario,
+    activeScenarioStepIndex,
+    activeScenarioStepNodeId,
+    scenarioDialogOpen,
     showCanvasMedia,
     cameraTarget,
     visibleFlow,
@@ -294,8 +504,15 @@ export function createFlowExplorerState(
     setAudienceMode,
     setPlatformMode,
     toggleExpand,
+    selectNode,
     jumpToNode,
+    goBack,
     setFocusRoot,
+    selectScenario,
+    setScenarioStep,
+    stepScenario,
+    openScenarioDialog,
+    closeScenarioDialog,
     getChildCount,
     hasSubtree,
     findNode,

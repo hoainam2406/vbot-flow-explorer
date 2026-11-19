@@ -3,6 +3,7 @@ import { computed, inject, nextTick, ref, watch } from 'vue';
 import { CornerDownRight, Search, X } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { searchFlowNodes, type SearchHit } from '../composables/useSearch';
+import { getNodeDisplayLabel } from '../core/graphEngine';
 
 const props = defineProps<{
   open: boolean;
@@ -139,7 +140,7 @@ const onKeyDown = (event: KeyboardEvent) => {
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
                     <span class="truncate text-sm font-semibold text-slate-900">
-                      {{ hit.node.label }}
+                      {{ getNodeDisplayLabel(hit.node, explorer.audienceMode.value) }}
                     </span>
                     <span
                       v-if="enableTechMode && hit.node.audience === 'tech'"

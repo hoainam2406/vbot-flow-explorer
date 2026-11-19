@@ -274,7 +274,12 @@ export function renderFlowDiagramSvg(options: DiagramExportOptions): string {
       badgeCursorX += bw + 5;
     }
 
-    const titleLines = wrapText(node.data.label, 28, 3);
+    const isTechExport =
+      (typeof __ENABLE_TECH_MODE__ === 'boolean' ? __ENABLE_TECH_MODE__ : true) &&
+      options.includeTechBadges;
+    const nodeDisplayLabel =
+      isTechExport && node.data.techLabel ? node.data.techLabel : node.data.label;
+    const titleLines = wrapText(nodeDisplayLabel, 28, 3);
     const titleStartY = ny + 44;
     const titleTspans = titleLines
       .map((line, i) => {

@@ -1,0 +1,956 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "mod-account-system",
+  "subtrees": {
+    "mod-account-system": {
+      "title": "Các nhóm luồng Tài khoản, Dự án, QR & Hệ thống",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": [
+        "project-management",
+        "qr-code-hub",
+        "account-settings",
+        "permissions-diagnostics",
+        "notifications-push",
+        "updater-telemetry"
+      ],
+      "nodes": [
+        {
+          "id": "project-management",
+          "label": "Quản lý Dự án, Lời mời & Hotline mặc định",
+          "techLabel": "Dự án, Lời mời, Hotline mặc định & Kiểu gọi",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Tạo dự án mới, chuyển đổi giữa các dự án làm việc, sửa/xóa hoặc rời nhóm, xử lý lời mời tham gia và cài đặt đầu số Hotline mặc định.",
+            "tech": "Điều phối qua qListProjectVC/ProjectActivity, qCreateProjectVC/AddProjectActivity, qEditProjectVC/EditProjectActivity/InformationProjectActivity, qListInviteVC/InvitationProjectActivity và qSelectDefaultHotlineVC/ChooseHotlineDefaultBottomsheet."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android kiểm tra GET api/project/getStatusProject ở MenuActivity (mã 2/3/4 ép về ProjectActivity), tách riêng EditProjectActivity (Admin) & InformationProjectActivity (Member), nhưng KHÔNG có màn hình chọn kiểu gọi mặc định tương đương SetTypeCallViewController của iOS.",
+            "codeRefs": [
+              "VBot/Controller/NewController/ProjectAccount/AccountProjectViewController.swift",
+              "VBot/Controller/NewController/ProjectAccount/qListProjectViewController.swift",
+              "VBot/Controller/NewController/ProjectAccount/SetTypeCallViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "MenuActivity -> ProjectActivity (selectProject chạy MiniAppHelper.invalidateSession + xóa Realm + finishAffinity MainActivity), AddProjectActivity, EditProjectActivity, InvitationProjectActivity & ChooseHotlineDefaultBottomsheet.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/MenuActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/ProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/hotline/ChooseHotlineDefaultBottomsheet.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": ["hotline-project"]
+        },
+        {
+          "id": "qr-code-hub",
+          "label": "Tạo & Quét mã QR",
+          "techLabel": "Tạo QR (VBot ID / Project) & Quét QR Camera / Thư viện",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Tạo mã QR cá nhân hoặc mã QR nhóm để chia sẻ, đồng thời quét QR bằng camera hoặc từ ảnh trong máy để gọi nhanh và xin tham gia dự án.",
+            "tech": "iOS dùng AppQRCodeViewController + SPQRCode + AppQRCodeHandleViewController; Android dùng GenerateQRCodeActivity + ScanQRCodeProjectActivity (DecoratedBarcodeView/ZXing) + JoinProjectActivity. Cả 2 tạo payload 'VBot ID: <id>' và 'VBot Project: <code>'."
+          },
+          "techDetail": {
+            "platformDiffNote": "iOS SPQRCode tự cắt prefix bằng dropFirst(9)/dropFirst(14) và gọi song song cả getUserInfo lẫn getByProjectCode ở AppQRCodeHandleVC; Android ScanQRCodeProjectActivity parse bằng split(':'), có bật Flash torch nhưng KHÔNG tự xin quyền CAMERA (phụ thuộc màn hình gọi xin trước).",
+            "codeRefs": [
+              "VBot/Controller/NewController/QRCode/AppQRCodeViewController.swift",
+              "VBot/Controller/NewController/QRCode/AppQRCodeHandleViewController.swift",
+              "VBot/Service/SPQRCode/SPQRCode.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "GenerateQRCodeActivity (2 tab + lưu MediaStore/Pictures) & ScanQRCodeProjectActivity (camera Flash + ZXing từ thư viện ảnh) điều hướng tới JoinProjectActivity (POST api/project/AddMember) hoặc VBotInformationActivity.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/GenerateQRCodeActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/JoinProjectActivity.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": ["global-search"]
+        },
+        {
+          "id": "account-settings",
+          "label": "Hồ sơ cá nhân, Bảo mật, Ngôn ngữ & Giao diện",
+          "techLabel": "Cài đặt tài khoản (Hồ sơ, Đổi MK, 3 Ngôn ngữ, NightMode, Xóa TK)",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Chỉnh sửa thông tin cá nhân và ảnh đại diện, đổi mật khẩu, thay đổi ngôn ngữ (Việt / Anh / Myanmar), chỉnh giao diện Sáng/Tối, xem hướng dẫn hoặc đăng xuất.",
+            "tech": "Cả iOS & Android hỗ trợ đủ 3 ngôn ngữ (vi, en, my) qua POST /api/User/ChangeLanguage; Android có thêm NightModeBottomSheet (phát theme_changed xuống Mini App) và AutoExtend gói cước, còn iOS có thêm màn hình DeleteAccountViewController."
+          },
+          "techDetail": {
+            "platformDiffNote": "1) Cả 2 HĐH đều hỗ trợ 3 ngôn ngữ (vi-VN, en-US, my-MM). 2) iOS ép cứng UIUserInterfaceStyle=Light trong Info.plist, còn Android hỗ trợ Sáng/Tối/Hệ thống (NightModeBottomSheet). 3) iOS có DeleteAccountViewController (android không có UI xóa tài khoản server). 4) Cả 2 đang tạm comment nút mở Cài đặt 2FA.",
+            "codeRefs": [
+              "VBot/Controller/NewController/Account/qAppSettingViewController.swift",
+              "VBot/Controller/NewController/Account/LanguageViewController.swift",
+              "VBot/Controller/NewController/Account/Sercurity/qAccountSecurityViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "AccountInformationActivity (gói cước AutoExtend) + UpdateEditInformationActivity (UCrop) + SettingActivity (ChangePasswordActivity, NightModeBottomSheet, shareAllLogFiles; 2FA đang comment) + LanguageActivity (vi/en/my).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/AccountInformationActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/SettingActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/LanguageActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/select/NightModeBottomSheet.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "permissions-diagnostics",
+          "label": "Quyền thiết bị & Kiểm tra kết nối",
+          "techLabel": "Trung tâm quyền OS (FSI / Overlay / AutoStart) & Trạng thái hệ thống",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Hướng dẫn cấp đầy đủ quyền Micro, Thông báo, Danh bạ và quyền hiển thị màn hình khóa để nhận cuộc gọi đến ổn định trên điện thoại.",
+            "tech": "iOS xin 3 quyền lúc mở app lần đầu (AskPermissionViewController) và báo cáo qua POST /api/User/AddInfoDevice; Android phân tầng PermissionActivity (FSI Android 14+, Overlay, AutoStart) và AllPermissionActivity (Cài đặt)."
+          },
+          "techDetail": {
+            "platformDiffNote": "iOS chỉ xin 3 quyền cơ bản (Noti, Contacts, Mic) qua PermissionsKit; Android phải xin thêm BLUETOOTH_CONNECT (API 31+), Overlay (MIUI fallback), AutoStart (Realme), POST_NOTIFICATIONS (API 33+) & FullScreenIntent (API 34+). Màn hình StatusApp / AppStatus trên cả 2 HĐH hiện đều bị comment / ẩn điểm mở.",
+            "codeRefs": [
+              "VBot/Controller/NewController/Auth/AskPermissionViewController.swift",
+              "VBot/Controller/NewController/AppStatus/AppStatusViewController.swift",
+              "VBot/Service/VPMAppStatusService.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "PermissionActivity (onboarding + auto-skip khi đủ audio/store/overlay) & AllPermissionActivity (bổ sung Contacts/Camera + báo cáo AddInfoDevice; Battery Optimization đã comment); StatusAppActivity đã comment out hoàn toàn.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/permission/PermissionActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/AllPermissionActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "notifications-push",
+          "label": "Thông báo đẩy & Hộp thư",
+          "techLabel": "Thông báo đẩy (APNs/FCM) & Định tuyến Deep-link",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Nhận thông báo sự kiện hệ thống, lời mời vào dự án, cuộc gọi nhỡ; tra cứu danh sách thông báo theo nhóm và mở thẳng đúng màn hình khi chạm vào thông báo.",
+            "tech": "Đồng bộ push token, tải/đọc/xóa thông báo qua getAllNotification / readNotifications / readAllNotifications và định tuyến deep-link khi người dùng bấm vào push."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android xử lý đủ Warm Start (ShowNotificationActivity) và Cold Start (SplashActivity -> MainActivity.checkNotificationType) cho nhiều loại type (1,2,3,5,6,8,9), có xóa thông báo và search debounce 500ms; iOS hiện chỉ điều hướng type 1, 3, 5 (lời mời dự án).",
+            "codeRefs": [
+              "VBot/Controller/NewController/Notification/ListNotificationViewController.swift",
+              "VBot/Controller/NewController/Notification/ByIdNotificationViewController.swift",
+              "VBot/AppDelegate/Noti+AppDelegate.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "FirebaseService (onNewToken/onMessageReceived) + NotificationActivity (ALL/PROMOTION/OTHER, debounce 500ms, deleteNotifications) + InfoNotificationFragment + ShowNotificationActivity / MainActivity.checkNotificationType.",
+                "apisOrEvents": [
+                  "POST api/User/UpdateNotifyToken",
+                  "GET api/User/getAllNotification",
+                  "POST api/User/readNotifications & POST api/User/readAllNotifications",
+                  "POST api/User/deleteNotifications"
+                ],
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/NotificationActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/ShowNotificationActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "updater-telemetry",
+          "label": "Kiểm tra cập nhật App & Telemetry",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Tự động kiểm tra phiên bản mới trên App Store và ghi nhận các chỉ số vận hành để đảm bảo độ ổn định ứng dụng.",
+            "tech": "VPMAppUpdater kiểm tra iTunes Lookup (cooldown 24h) rồi gọi GET /api/config/versionStateNew?platform=VersionIOS kiểm tra force-update; TelemetryManager dùng OpenTelemetry SDK + Firebase Remote Config trên cả 2 HĐH."
+          },
+          "techDetail": {
+            "platformDiffNote": "1) Updater: iOS VPMAppUpdater chạy iTunes Lookup (cooldown 24h) sau đó gọi GET /api/config/versionStateNew?platform=VersionIOS lấy cờ required (force-update); Android MainActivity gọi api/config/versionStateNew?platform=VersionAndroid (CheckForUpdateActivity đã comment out 100%). 2) Telemetry: CẢ iOS (TelemetryManager.swift, gRPC OTLP -> logs-sandbox.vbot.vn:443) và Android (TelemetryManager.kt) đều chạy OpenTelemetry SDK + Firebase Remote Config; điểm riêng Android là TelemetryTimberTree và MainActivity.checkLog() upload CSV qua POST api/Extend/AddLogs.",
+            "codeRefs": [
+              "VBot/Service/VPMAppUpdater.swift",
+              "VBot/Service/API/Endpoints/APIService+System.swift",
+              "VBot/Service/TelemetryManager.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "VPMAppUpdater (iTunes Lookup cooldown 24h -> GET /api/config/versionStateNew?platform=VersionIOS trong APIService+System cho cờ required) + TelemetryManager (OpenTelemetry SDK gRPC OTLP + Firebase Remote Config khởi chạy từ AppDelegate).",
+                "apisOrEvents": [
+                  "iTunes Lookup (cooldown 24h)",
+                  "GET /api/config/versionStateNew?platform=VersionIOS"
+                ],
+                "codeRefs": [
+                  "VBot/Service/VPMAppUpdater.swift",
+                  "VBot/Service/API/Endpoints/APIService+System.swift",
+                  "VBot/Service/TelemetryManager.swift"
+                ]
+              },
+              "android": {
+                "summary": "MainActivity (bản release delay 2.5s gọi GET api/config/versionStateNew?platform=VersionAndroid, mở Play Store; CheckForUpdateActivity đã comment out 100%); TelemetryManager dùng OpenTelemetry SDK + TelemetryTimberTree + Firebase Remote Config + MainActivity.checkLog() upload CSV.",
+                "apisOrEvents": [
+                  "GET api/config/versionStateNew?platform=VersionAndroid",
+                  "POST api/Extend/AddLogs"
+                ],
+                "codeRefs": [
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/telemetry/TelemetryManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "edges": []
+    },
+    "project-management": {
+      "title": "Luồng Quản lý Dự án, Lời mời & Hotline mặc định",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": [
+        "prj-list-switch",
+        "prj-create",
+        "prj-edit-leave",
+        "prj-invitations",
+        "prj-default-hotline",
+        "prj-call-type-ios"
+      ],
+      "nodes": [
+        {
+          "id": "prj-list-switch",
+          "label": "Xem danh sách & Chuyển đổi Dự án",
+          "techLabel": "Chuyển Dự án (GET /api/project/Select + Reset Mini App & Cache)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Chuyển qua lại giữa các Dự án doanh nghiệp đang tham gia; nếu dự án hoặc thành viên hết hạn sẽ chặn truy cập và yêu cầu chọn dự án khác.",
+            "tech": "Gọi GET /api/project/Select; iOS giải phóng VbMa.shared.logout() + phát Notifications.projectDidChange + reload RootVC; Android gọi MiniAppHelper.invalidateSession() + xóa sạch Realm cache + finishAffinity() khởi chạy lại MainActivity."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android có bước MenuActivity kiểm tra GET api/project/getStatusProject (2/3/4 ép quay về ProjectActivity); khi chọn project khác nhau 2 HĐH đều dọn session Mini App và cache local.",
+            "apisOrEvents": [
+              "GET /api/project/getAll",
+              "GET /api/project/Select",
+              "GET api/project/getStatusProject (Android MenuActivity)"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/ProjectAccount/qListProjectViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "ProjectActivity kiểm tra project.status == 1 -> GET api/project/Select -> MiniAppHelper.invalidateSession() + xóa Realm (History/Permission/Hotline/Project/Member) + khởi chạy MainActivity.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/ProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/MenuActivity.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": ["hotline-project"]
+        },
+        {
+          "id": "prj-create",
+          "label": "Tạo Dự án mới",
+          "techLabel": "Tạo Dự án (CheckExistName → CountProject → POST /api/project/Create)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Đặt tên và mô tả để khởi tạo dự án mới; hệ thống kiểm tra trùng tên và nhắc nếu tài khoản đã vượt số dự án miễn phí.",
+            "tech": "Kiểm tra hạn mức CountProject (nếu Total >= MaxTotal hiện dialog xác nhận), kiểm tra CheckExistName rồi gọi POST /api/project/Create."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/project/CountProject",
+              "GET /api/project/CheckExistName",
+              "POST /api/project/Create"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/SideMenu/Project/AddProject/qCreateProjectViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "AddProjectActivity (count=1) kiểm tra CountProject -> CheckExistName -> POST api/project/Create.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/AddProjectActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "prj-edit-leave",
+          "label": "Quản trị sửa / xóa nhóm hoặc Thành viên rời nhóm",
+          "techLabel": "Phân quyền Dự án: Admin (Update / Delete) vs Member (DeleteMember)",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Quản trị viên được phép sửa tên, mô tả hoặc giải tán dự án (trừ nhóm mặc định); thành viên thông thường chỉ xem thông tin hoặc rời khỏi dự án.",
+            "tech": "Admin gọi POST /api/project/Update hoặc DELETE /api/project/Delete; Thành viên gọi POST /api/project/DeleteMember tự rời dự án và chọn lại nhóm khác."
+          },
+          "techDetail": {
+            "platformDiffNote": "iOS gộp cả Admin và Member vào 1 màn qEditProjectViewController; Android tách EditProjectActivity (cho Admin, chặn xóa khi isDefault == 1) và InformationProjectActivity (cho Member rời nhóm).",
+            "apisOrEvents": [
+              "POST /api/project/Update",
+              "DELETE /api/project/Delete",
+              "POST /api/project/DeleteMember"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/SideMenu/Project/qEditProjectViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "EditProjectActivity xử lý sửa/xóa cho Admin; InformationProjectActivity xử lý xem & DeleteMember (Rời nhóm) cho thành viên.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/EditProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/InformationProjectActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "prj-invitations",
+          "label": "Xem lời mời vào Dự án & Chấp nhận / Từ chối",
+          "techLabel": "Lời mời Dự án (getAllInvite → ConfirmInvitation 1/0)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Xem danh sách lời mời tham gia các dự án khác kèm huy hiệu đếm số lời mời chưa xử lý, cho phép Đồng ý hoặc Từ chối trực tiếp.",
+            "tech": "Tải qua GET /api/project/getAllInvite và xác nhận qua POST /api/project/ConfirmInvitation (Confirm = 1 chấp nhận / 0 từ chối)."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/project/getAllInvite",
+              "POST /api/project/ConfirmInvitation"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/SideMenu/Project/AddProject/qListInviteViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "InvitationProjectActivity & NotificationProjectFragment (khi bấm push lời mời) gọi getAllInvite -> ConfirmInvitation (xử lý thêm lỗi NotEnoughMoney nếu quản trị viên thiếu tiền).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/InvitationProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/NotificationProjectFragment.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "prj-default-hotline",
+          "label": "Chọn đầu số Hotline mặc định khi gọi ra",
+          "techLabel": "Hotline mặc định (GET /api/Hotline/getAllForCallByProject — Lưu local)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Thiết lập sẵn một đầu số Hotline cố định khi thực hiện cuộc gọi đi, hoặc chọn 'Hỏi mỗi lần gọi' nếu dự án có nhiều đầu số.",
+            "tech": "Tải danh sách từ GET /api/Hotline/getAllForCallByProject: nếu chỉ có 1 hotline tự động chọn làm mặc định; nếu >= 2 cho phép chọn 'Hỏi mỗi lần' (lưu local trên máy)."
+          },
+          "techDetail": {
+            "apisOrEvents": ["GET /api/Hotline/getAllForCallByProject"],
+            "codeRefs": [
+              "VBot/Controller/NewController/Hotline/SelectHotline/qSelectDefaultHotlineViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "ChooseHotlineDefaultBottomsheet nạp danh sách từ Realm + Hotline/getAllForCallByProject và lưu SharePrefs (auto-select nếu size == 1, ẩn checkbox Hỏi mỗi lần).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/hotline/ChooseHotlineDefaultBottomsheet.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": ["call-out-hotline"]
+        },
+        {
+          "id": "prj-call-type-ios",
+          "label": "Cài đặt kiểu gọi mặc định (Hỏi / Thủ công / Tự động — SetTypeCallVC)",
+          "kind": "action",
+          "audience": "tech",
+          "platforms": ["ios"],
+          "summary": {
+            "overview": "Cho phép chọn trước cách thức gọi ra mặc định trên iOS: Hỏi mỗi lần gọi, Gọi thủ công hoặc Gọi với kịch bản tự động.",
+            "tech": "SetTypeCallViewController lưu enum VPMMakeCallType (.ask, .normal, .auto) vào Defaults[.vpmMakeCallType]; Android không có màn hình cấu hình kiểu gọi mặc định này trên Nam-dev."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/ProjectAccount/SetTypeCallViewController.swift"
+            ]
+          }
+        }
+      ],
+      "edges": []
+    },
+    "qr-code-hub": {
+      "title": "Luồng Tạo & Quét mã QR",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["qr-generate"],
+      "nodes": [
+        {
+          "id": "qr-generate",
+          "label": "Tạo & Lưu mã QR cá nhân hoặc Dự án",
+          "techLabel": "Tạo QR 2 tab (VBot ID / VBot Project) & Lưu ảnh vào Thư viện",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Hiển thị mã QR gồm 2 thẻ Cá nhân và Nhóm dự án để đồng nghiệp quét gọi nhanh hoặc gia nhập dự án; hỗ trợ sao chép mã và lưu ảnh QR về máy.",
+            "tech": "Tạo QR chứa chuỗi 'VBot ID: <userId>' hoặc 'VBot Project: <projectCode>'; lưu PNG về Photos (iOS) / MediaStore (Android)."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/QRCode/AppQRCodeViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "GenerateQRCodeActivity dựng QrCodeDrawable có logo app, copy mã ID/tên nhóm, kiểm tra cameraStorePermission trước khi lưu MediaStore Pictures/<app>.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/GenerateQRCodeActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "qr-scan-source",
+          "label": "Quét mã QR bằng Camera hoặc Chọn ảnh từ thư viện",
+          "techLabel": "Quét QR Camera / Thư viện (SPQRCode vs DecoratedBarcodeView + ZXing)",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Mở máy ảnh soi trực tiếp mã QR (hỗ trợ đèn pin khi thiếu sáng trên Android) hoặc chọn ảnh chứa mã QR sẵn có trong thư viện ảnh.",
+            "tech": "iOS dùng SPQRCode + CIDetectorTypeQRCode cho ảnh thư viện; Android dùng DecoratedBarcodeView + MultiFormatReader (ZXing)."
+          },
+          "techDetail": {
+            "platformDiffNote": "iOS SPQRCode cắt tiền tố bằng dropFirst(9)/dropFirst(14) (phụ thuộc độ dài tên brand 'VBot'); Android dùng split(':') và yêu cầu màn hình gọi tự xin quyền CAMERA trước khi mở ScanQRCodeProjectActivity.",
+            "codeRefs": [
+              "VBot/Service/SPQRCode/SPQRCode.swift",
+              "VBot/Controller/NewController/QRCode/AppQRCodeViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "ScanQRCodeProjectActivity (tab Camera hỗ trợ Flash torch + tab Thư viện dùng ZXing MultiFormatReader); phụ thuộc MenuActivity/GenerateQRCodeActivity/Search xin cameraStorePermission() trước.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeProjectActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "qr-route-type",
+          "label": "Nhận diện mã QR: Người dùng, Dự án hay Đường dẫn?",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Ứng dụng tự phân biệt nội dung mã QR vừa quét là mã định danh nhân viên, mã Dự án VBot hay liên kết bên ngoài.",
+            "tech": "Phân tách tiền tố 'VBot ID', 'VBot Project', URL scheme hoặc text thuần để mở màn hình tương ứng."
+          }
+        },
+        {
+          "id": "qr-action-user",
+          "label": "Xem hồ sơ người dùng VBot & Gọi ngay",
+          "techLabel": "Tra cứu User (GET /api/User/getUserInfo) & Gọi nhanh",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Hiển thị tên, ảnh đại diện của thành viên vừa quét và cho phép bấm gọi VBot ngay lập tức.",
+            "tech": "Gọi GET /api/User/getUserInfo theo vbotId và kích hoạt cuộc gọi nếu khác tài khoản bản thân."
+          },
+          "techDetail": {
+            "apisOrEvents": ["GET /api/User/getUserInfo"],
+            "codeRefs": [
+              "VBot/Controller/NewController/QRCode/AppQRCodeHandleViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "ScanQRCodeProjectActivity (hoặc trả isBack=true về caller) gọi GetUserInfoViewModel tra cứu vbotId rồi mở VBotInformationActivity.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeProjectActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "qr-action-project",
+          "label": "Xem thông tin Dự án & Gửi yêu cầu tham gia",
+          "techLabel": "Tra cứu Dự án (getByProjectCode) & Tham gia (POST /api/project/AddMember)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Xem tên dự án, thông tin trưởng nhóm (hỗ trợ gọi/nhắn hỏi trưởng nhóm) và bấm 'Tham gia nhóm' để gia nhập dự án.",
+            "tech": "Gọi GET /api/project/getByProjectCode -> hiển thị thông tin nhóm & trưởng nhóm -> POST /api/project/AddMember (báo lỗi nếu đã là thành viên)."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/project/getByProjectCode",
+              "POST /api/project/AddMember"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/QRCode/AppQRCodeHandleViewController.swift",
+              "VBot/Controller/NewController/SideMenu/Project/AddProject/qJoinNewProjectViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "JoinProjectActivity nạp nhóm qua GetByProjectCodeViewModel + thông tin trưởng nhóm và gửi AddMember (xử lý EnumErCode.AlreadyExist).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/JoinProjectActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "qr-action-url-ios",
+          "label": "Mở đường dẫn Web bằng Safari (AppQRCodeHandleVC)",
+          "kind": "action",
+          "audience": "tech",
+          "platforms": ["ios"],
+          "summary": {
+            "overview": "Khi mã QR là đường dẫn web có scheme hợp lệ, iOS cung cấp nút mở bằng Safari.",
+            "tech": "SPQRCodeData.url(URL) -> AppQRCodeHandleViewController gọi UIApplication.shared.open(url); Android với mã không khớp prefix chỉ hiện dialog cho phép sao chép."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/QRCode/AppQRCodeHandleViewController.swift"
+            ]
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-qr-1", "source": "qr-generate", "target": "qr-scan-source" },
+        { "id": "e-qr-2", "source": "qr-scan-source", "target": "qr-route-type" },
+        { "id": "e-qr-3", "source": "qr-route-type", "target": "qr-action-user", "label": "Mã VBot ID" },
+        { "id": "e-qr-4", "source": "qr-route-type", "target": "qr-action-project", "label": "Mã Dự án" },
+        { "id": "e-qr-5", "source": "qr-route-type", "target": "qr-action-url-ios", "label": "URL Web", "audience": "tech", "platforms": ["ios"] }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-qr-join-project",
+          "name": "Quét mã QR để tham gia Dự án mới",
+          "description": "Quét QR bằng camera hoặc ảnh thư viện -> nhận diện mã Dự án -> xem thông tin & bấm Tham gia.",
+          "audience": "all",
+          "nodeIds": ["qr-generate", "qr-scan-source", "qr-route-type", "qr-action-project"],
+          "edgeIds": ["e-qr-1", "e-qr-2", "e-qr-4"]
+        }
+      ]
+    },
+    "account-settings": {
+      "title": "Hồ sơ, Bảo mật, Ngôn ngữ & Giao diện",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": [
+        "acc-profile-edit",
+        "acc-change-password",
+        "acc-language-theme",
+        "acc-delete-ios",
+        "acc-support-logout"
+      ],
+      "nodes": [
+        {
+          "id": "acc-profile-edit",
+          "label": "Xem & Chỉnh sửa hồ sơ cá nhân, Ảnh đại diện",
+          "techLabel": "Hồ sơ & Avatar (UpdateProfile + UploadAvatar + CheckExist)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Cập nhật họ tên, VBot ID, số điện thoại, email và cắt/đổi ảnh đại diện; trên Android hỗ trợ xem thông tin gói cước và bật/tắt tự động gia hạn.",
+            "tech": "Kiểm tra trùng VBot ID/Email/SĐT trước khi POST /api/User/UpdateProfile -> UploadAvatar (iOS nén JPEG <= 4MB, Android crop 1:1 UCrop); Android AccountInformationActivity có thêm Package/AutoExtend."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android có thêm xem chi tiết gói cước (GET api/Package/getPackageOfUser) và bật/tắt tự gia hạn (POST api/Package/AutoExtend) tại AccountInformationActivity.",
+            "apisOrEvents": [
+              "GET /api/User/CheckExistVbotId & CheckExistEmail & CheckExistPhone",
+              "POST /api/User/UpdateProfile & POST /api/User/UploadAvatar",
+              "POST api/Package/AutoExtend (Android)"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/Account/EditInfo/qVPMUserInfoViewController.swift",
+              "VBot/Controller/NewController/Account/EditInfo/EditUserInfoViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "AccountInformationActivity (thông tin user + gói cước AutoExtend) & UpdateEditInformationActivity (CheckExist*, UpdateProfile, UCrop 1:1 + UploadAvatar).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/AccountInformationActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/UpdateEditInformationActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "acc-change-password",
+          "label": "Đổi mật khẩu hoặc Tạo mật khẩu lần đầu",
+          "techLabel": "Đổi / Tạo mật khẩu (ChangePassword vs ChangePasswordByPassword)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Thay đổi mật khẩu đăng nhập hiện tại hoặc tạo mật khẩu VBot lần đầu cho tài khoản đăng nhập bằng Google / Facebook / Zalo / Apple.",
+            "tech": "Kiểm tra isSetPassword == 0 để ẩn ô mật khẩu cũ và gọi POST /api/User/ChangePassword; ngược lại gọi ChangePasswordByPassword kèm mật khẩu cũ, rồi cập nhật lại credential đã lưu."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "POST /api/User/ChangePassword",
+              "POST /api/User/ChangePasswordByPassword"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/Account/Sercurity/qChangePasswordViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "ChangePasswordActivity + ChangePasswordFeedback (xử lý riêng lỗi 403 sai mật khẩu cũ, cập nhật SharePrefs & Realm Account nếu trùng user hiện tại).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/ChangePasswordActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/ChangePasswordFeedback.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "acc-language-theme",
+          "label": "Đổi ngôn ngữ (Việt / Anh / Myanmar) & Giao diện Sáng / Tối",
+          "techLabel": "3 Ngôn ngữ (POST /api/User/ChangeLanguage) & NightMode → theme_changed",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Chuyển đổi ngôn ngữ hiển thị toàn ứng dụng (Tiếng Việt, Tiếng Anh, Tiếng Myanmar); trên Android hỗ trợ thêm giao diện Sáng / Tối / Theo hệ thống.",
+            "tech": "Cả iOS (AppLocale) và Android đều có 3 ngôn ngữ & đồng bộ POST /api/User/ChangeLanguage; Android có NightModeBottomSheet phát theme_changed xuống Mini App, còn iOS khóa UIUserInterfaceStyle=Light."
+          },
+          "techDetail": {
+            "platformDiffNote": "iOS ép cứng UIUserInterfaceStyle=Light trong Info.plist nên không có Dark Mode; Android có NightModeBottomSheet (System/Sáng/Tối) đồng bộ theme_changed xuống ContactForwardFragment và UserContactsFragment.",
+            "apisOrEvents": ["POST /api/User/ChangeLanguage"],
+            "codeRefs": [
+              "VBot/Controller/NewController/Account/LanguageViewController.swift",
+              "VBot/Controller/NewController/Account/qNormalSettingViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "LanguageActivity (vi-VN / en-US / my-MM) & NightModeBottomSheet (AppCompatDelegate.setDefaultNightMode) kích hoạt đồng bộ theme_changed.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/LanguageActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/select/NightModeBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/SettingActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "acc-delete-ios",
+          "label": "Xóa tài khoản vĩnh viễn (POST /api/User/deleteAccount)",
+          "kind": "error",
+          "audience": "tech",
+          "platforms": ["ios"],
+          "summary": {
+            "overview": "Cho phép người dùng iOS xác nhận xóa vĩnh viễn tài khoản VBot khỏi hệ thống.",
+            "tech": "DeleteAccountViewController hiển thị ActionSheet xác nhận và gọi POST /api/User/deleteAccount rồi signOutApp_2(). Edge case: ô nhập mật khẩu đang comment out khỏi UI nên hiện gửi hash rỗng; Android chưa có màn hình này trên Nam-dev."
+          },
+          "techDetail": {
+            "apisOrEvents": ["POST /api/User/deleteAccount"],
+            "edgeCases": [
+              "passwdTF bị comment khỏi layout trên Nam-dev nên password gửi đi là chuỗi rỗng",
+              "Android không có UI hay endpoint xóa tài khoản server (chỉ có xóa tài khoản đã lưu khỏi Realm)"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/Account/Sercurity/DeleteAccountViewController.swift",
+              "VBot/Controller/NewController/Account/Sercurity/qAccountSecurityViewController.swift"
+            ]
+          }
+        },
+        {
+          "id": "acc-support-logout",
+          "label": "Hướng dẫn sử dụng, Điều khoản & Đăng xuất an toàn",
+          "techLabel": "Hỗ trợ (Manual/Rules) & Đăng xuất (POST /api/User/logout2 + Dọn phiên)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Xem tài liệu hướng dẫn, điều khoản sử dụng, gửi tệp nhật ký lỗi hỗ trợ kỹ thuật và đăng xuất an toàn (tự ngắt mọi cuộc gọi đang diễn ra).",
+            "tech": "Mở hướng dẫn/chính sách qua GET /api/config/manual & /api/config/rules; đăng xuất ngắt toàn bộ cuộc gọi/PiP, dọn Mini App SDK, upload log, gọi POST /api/User/logout2 và ngắt WebSocket."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/config/manual & GET /api/config/rules",
+              "POST /api/User/logout2"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/Account/qSupportViewController.swift",
+              "VBot/Controller/NewController/Account/qAppSettingViewController.swift",
+              "VBot/Controller/NewController/Account/VPMWebViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "SettingActivity (TermsOfServiceActivity, ChooseIntroduceBottomSheet -> ManualActivity / Hotline / shareAllLogFiles) & LogoutViewModel + UtilsKotlin.logout() (giữ 1 Account đã lưu nếu có).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/SettingActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/TermsOfServiceActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/ManualActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/viewmodel/post/LogoutViewModel.kt"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "edges": []
+    },
+    "permissions-diagnostics": {
+      "title": "Quyền hệ thống & Trạng thái kết nối",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": [
+        "perm-onboarding",
+        "perm-settings-android",
+        "perm-device-report",
+        "diag-app-status"
+      ],
+      "nodes": [
+        {
+          "id": "perm-onboarding",
+          "label": "Cấp quyền cần thiết khi mới cài ứng dụng",
+          "techLabel": "Xin quyền Onboarding (AskPermissionVC [3 quyền] vs PermissionActivity [Mic/Noti/Overlay/AutoStart/FSI])",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Khi mở ứng dụng lần đầu sau khi cài đặt, hệ thống hướng dẫn cấp các quyền cần thiết như Micro, Thông báo, Danh bạ (và quyền hiển thị màn hình khóa trên Android).",
+            "tech": "iOS mở AskPermissionViewController khi justInstall == true (xin đúng 3 quyền: Notifications, Contacts, Microphone); Android mở PermissionActivity xin Audio, Storage, Bluetooth (API 31+), Notifications (API 33+), Overlay (kèm fallback MIUI), AutoStart (Realme) và FullScreenIntent (Android 14+)."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android PermissionActivity tự bỏ qua vào MainActivity ngay khi đủ storePhoneAudioPermission + canDrawOverlays (không chặn theo FullScreenIntent hay AutoStart).",
+            "codeRefs": [
+              "VBot/Controller/NewController/Auth/AskPermissionViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "PermissionActivity xin đồng bộ quyền thoại/nền + Overlay + AutoStart + Api34 canUseFullScreenIntent; hỗ trợ hướng dẫn riêng dòng Realme qua TutorialEnableAutoStartActivity.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/permission/PermissionActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/permission/TutorialEnableAutoStartActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "perm-settings-android",
+          "label": "Trung tâm quản lý quyền trong Cài đặt (AllPermissionActivity)",
+          "kind": "action",
+          "audience": "tech",
+          "platforms": ["android"],
+          "summary": {
+            "overview": "Màn hình kiểm tra và bật lại từng quyền riêng lẻ trong mục Cài đặt trên Android.",
+            "tech": "AllPermissionActivity kiểm tra Micro, Danh bạ (tự kích hoạt fetchDeviceContacts khi mới cấp), Camera, Bộ nhớ, Bluetooth (API 31+), Thông báo (API 33+), Overlay và AutoStart. Lưu ý: yêu cầu Battery Optimization hiện đang comment out."
+          },
+          "techDetail": {
+            "edgeCases": [
+              "Không kiểm tra FullScreenIntent ở AllPermissionActivity (chỉ kiểm ở PermissionActivity)",
+              "Tối ưu pin (ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS) đã bị comment out"
+            ],
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/AllPermissionActivity.kt"
+            ]
+          }
+        },
+        {
+          "id": "perm-device-report",
+          "label": "Gửi báo cáo quyền thiết bị lên hệ thống (POST /api/User/AddInfoDevice)",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Tự động đồng bộ trạng thái các quyền trên thiết bị về máy chủ để đội ngũ hỗ trợ dễ chẩn đoán sự cố cuộc gọi.",
+            "tech": "iOS gọi sau khi đóng AskPermissionViewController trong NewMainTabBarVC; Android gọi AddInfoDeviceViewModel trong AllPermissionActivity.onStop()."
+          },
+          "techDetail": {
+            "apisOrEvents": ["POST /api/User/AddInfoDevice"],
+            "codeRefs": [
+              "VBot/Controller/NewController/Main/NewMainTabBarViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "AllPermissionActivity.onStop() tổng hợp trạng thái quyền và gửi AddInfoDeviceViewModel.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/AllPermissionActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "diag-app-status",
+          "label": "Màn hình Trạng thái ứng dụng (Legacy — Đang tạm ẩn trên Nam-dev)",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Ghi nhận hiện trạng các màn hình chẩn đoán kết nối cũ trên nhánh Nam-dev.",
+            "tech": "iOS AppStatusViewController + VPMAppStatusService vẫn tồn tại (chỉ có 2 mục .call [đã comment khỏi LinphoneAPI] & .server [Reachability]), nhưng hiện không có điểm mở UI; Android StatusAppActivity đã comment out 100%, còn StatusAppBS là bảng chọn trạng thái trực Agent."
+          },
+          "techDetail": {
+            "platformDiffNote": "Cả 2 nền tảng đều không còn mở màn hình chẩn đoán kỹ thuật cũ trong UI chính (đã chuyển sang FeatureConsoleCapsule / UserStatusAndDevice cho trạng thái Agent).",
+            "codeRefs": [
+              "VBot/Controller/NewController/AppStatus/AppStatusViewController.swift",
+              "VBot/Service/VPMAppStatusService.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "StatusAppActivity đã comment out toàn bộ mã nguồn; StatusAppBS là BottomSheet chọn Agent state (1=Online, 5=Absent, 6=DND).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/status_app/StatusAppBS.kt"
+                ]
+              }
+            }
+          }
+        }
+      ],
+      "edges": []
+    },
+    "notifications-push": {
+      "title": "Luồng Thông báo đẩy & Hộp thư",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["noti-token-sync", "noti-inbox"],
+      "nodes": [
+        {
+          "id": "noti-token-sync",
+          "label": "Đăng ký Push Token thiết bị (APNs / PushKit vs FCM)",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Đồng bộ mã định danh thiết bị nhận thông báo lên máy chủ ngay sau khi vào màn hình chính.",
+            "tech": "iOS đồng bộ APNs deviceToken + PushKit pushKitToken từ AppDelegate; Android FirebaseService.onNewToken gắn tiền tố 'android-' và MainActivity gọi POST api/User/UpdateNotifyToken."
+          },
+          "techDetail": {
+            "apisOrEvents": ["POST /api/User/UpdateNotifyToken"],
+            "codeRefs": [
+              "VBot/AppDelegate/Noti+AppDelegate.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "FirebaseService.onNewToken + MainActivity.updateNotifyToken() gửi token tiền tố 'android-' lên server.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "noti-inbox",
+          "label": "Hộp thư thông báo (Tất cả / Khuyến mãi / Khác)",
+          "techLabel": "Danh sách thông báo 3 nhóm (getAllNotification / readAllNotifications / Tìm kiếm)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Xem toàn bộ thông báo phân nhóm theo Tất cả, Khuyến mãi, Khác; tìm kiếm theo tiêu đề và bấm Đánh dấu đã đọc tất cả (Android hỗ trợ xóa từng mục).",
+            "tech": "Tải phân trang từ GET /api/User/getAllNotification theo 3 loại ALL / PROMOTION / OTHER; POST /api/User/readAllNotifications."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android NotificationActivity có debounce tìm kiếm 500ms và hỗ trợ xóa từng thông báo (POST api/User/deleteNotifications); iOS ListNotificationViewController tìm trực tiếp không debounce và không có nút xóa.",
+            "apisOrEvents": [
+              "GET /api/User/getAllNotification",
+              "POST /api/User/readAllNotifications",
+              "POST api/User/deleteNotifications (Android)"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/Notification/ListNotificationViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "NotificationActivity với 3 tab ALL/PROMOTION/OTHER, tìm kiếm debounce 500ms, xóa từng thông báo và đánh dấu đọc tất cả.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/NotificationActivity.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "noti-detail-read",
+          "label": "Xem chi tiết thông báo & Đánh dấu đã đọc",
+          "techLabel": "Chi tiết HTML/Text (POST /api/User/readNotifications + countNotify)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Mở nội dung chi tiết thông báo (văn bản hoặc trang định dạng đẹp) và tự động trừ số đếm thông báo chưa đọc.",
+            "tech": "Gọi POST /api/User/readNotifications kèm cập nhật lại số lượng chưa đọc qua countNotify / countNotifys."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "POST /api/User/readNotifications",
+              "GET /api/User/countNotify"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/Notification/ByIdNotificationViewController.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "InfoNotificationFragment render Html.fromHtml nếu isHTML == 1; NotificationActivity gọi readNotifications khi item chưa đọc.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/InfoNotificationFragment.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "noti-push-routing",
+          "label": "Mở đúng màn hình khi chạm vào thông báo đẩy",
+          "techLabel": "Định tuyến Push Deep-link theo type (1,2,3,5,6,8,9,10,11,12)",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Khi bấm vào thông báo trên màn hình khóa/khay thông báo, ứng dụng tự mở đúng tab Lịch sử cuộc gọi, Lời mời dự án hoặc Hộp thư thông báo.",
+            "tech": "Phân luồng theo mã type: type 1 (App), 3 (Cuộc gọi nhỡ), 5 (Lời mời dự án MoiThamGia), 10/11 (Call transfer / Group), 12 (Force logout). Android hỗ trợ thêm type 2, 6, 8, 9 cho cả Warm & Cold Start."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android xử lý đủ Warm Start (ShowNotificationActivity) & Cold Start (SplashActivity -> MainActivity.checkNotificationType) cho type 1,2,3,5,6,8,9; iOS chỉ điều hướng type 1 (Tab 0), 3 (Tab 1), 5 (MoiThamGia -> qListInviteVC) còn type 2 (Chat) để #warning chưa làm.",
+            "codeRefs": [
+              "VBot/AppDelegate/Noti+AppDelegate.swift"
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "FirebaseService điều phối type 2,3,5,10,11,12; ShowNotificationActivity (warm) & SplashActivity -> MainActivity.checkNotificationType (cold) mở NotificationActivity, Chat, CallHistory, AddProjectMenuLeftActivity, Ticket, Hotline.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/ShowNotificationActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/splash/SplashActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": ["prj-invitations"]
+        }
+      ],
+      "edges": [
+        { "id": "e-nt-1", "source": "noti-inbox", "target": "noti-detail-read" },
+        { "id": "e-nt-2", "source": "noti-detail-read", "target": "noti-push-routing" },
+        { "id": "e-nt-3", "source": "noti-token-sync", "target": "noti-push-routing", "audience": "tech" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-noti-invite",
+          "name": "Nhận & Xử lý thông báo lời mời Dự án",
+          "description": "Mở hộp thư hoặc chạm thẳng vào thông báo lời mời để duyệt danh sách dự án mới.",
+          "audience": "all",
+          "nodeIds": ["noti-inbox", "noti-detail-read", "noti-push-routing"],
+          "edgeIds": ["e-nt-1", "e-nt-2"]
+        }
+      ]
+    }
+  }
+}

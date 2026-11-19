@@ -18,9 +18,15 @@ import {
   computeNodesBounds,
   toVueFlowEdges,
 } from '../composables/useGraphLayout';
+import { buildScenarioTimeline } from '../core/scenarioFlowEngine';
 import RoutedFlowEdge from './edges/RoutedFlowEdge.vue';
 import AppFlowNode from './nodes/AppFlowNode.vue';
+import CanvasGuideOverlay from './CanvasGuideOverlay.vue';
 import ScenarioBar from './ScenarioBar.vue';
+
+const emit = defineEmits<{
+  openGuide: [];
+}>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
 if (!explorer) {
@@ -37,15 +43,59 @@ const edgeTypes: EdgeTypesObject = {
   routed: markRaw(RoutedFlowEdge) as EdgeComponent,
 };
 
-const activeScenario = computed(() => {
-  const scId = explorer.activeScenarioId.value;
-  if (!scId) return null;
-  return explorer.visibleFlow.value.activeScenarios.find((s) => s.id === scId) ?? null;
-});
+const activeScenario = computed(() => explorer.activeScenario.value);
 
-const activeEdgeIds = computed(() =>
-  activeScenario.value ? new Set(activeScenario.value.edgeIds) : undefined,
+const activeScenarioTimeline = computed(() =>
+  activeScenario.value
+    ? buildScenarioTimeline(
+        activeScenario.value,
+        explorer.visibleFlow.value,
+        explorer.audienceMode.value,
+      )
+    : null,
 );
+
+const edgeHighlightState = computed(() => {
+  const sc = activeScenario.value;
+  if (!sc) {
+    return {
+      visitedIds: undefined,
+      currentStepEdgeId: null,
+      upcomingIds: undefined,
+    };
+  }
+
+  const timeline = activeScenarioTimeline.value;
+  const stepIdx = explorer.activeScenarioStepIndex.value;
+  if (!timeline || stepIdx === null || timeline.steps.length === 0) {
+    return {
+      visitedIds: new Set(sc.edgeIds),
+      currentStepEdgeId: null,
+      upcomingIds: undefined,
+    };
+  }
+
+  const visitedIds = new Set<string>();
+  const upcomingIds = new Set<string>();
+  const currentStepEdgeId = timeline.steps[stepIdx]?.incomingEdgeId ?? null;
+
+  timeline.steps.forEach((step, idx) => {
+    if (!step.incomingEdgeId) return;
+    if (idx <= stepIdx) {
+      visitedIds.add(step.incomingEdgeId);
+    } else {
+      upcomingIds.add(step.incomingEdgeId);
+    }
+  });
+
+  for (const edgeId of sc.edgeIds) {
+    if (edgeId !== currentStepEdgeId && !visitedIds.has(edgeId)) {
+      upcomingIds.add(edgeId);
+    }
+  }
+
+  return { visitedIds, currentStepEdgeId, upcomingIds };
+});
 
 const graphLayout = computed(() =>
   computeDagreGraphLayout(explorer.visibleFlow.value.nodes, explorer.visibleFlow.value.edges, {
@@ -59,9 +109,11 @@ const layoutNodes = computed(() => graphLayout.value.nodes);
 const layoutEdges = computed(() =>
   toVueFlowEdges(
     explorer.visibleFlow.value.edges,
-    activeEdgeIds.value,
+    edgeHighlightState.value.visitedIds,
     Boolean(activeScenario.value),
     graphLayout.value.edgeRoutes,
+    edgeHighlightState.value.currentStepEdgeId,
+    edgeHighlightState.value.upcomingIds,
   ),
 );
 
@@ -143,6 +195,7 @@ const onPaneReady = () => {
       />
     </VueFlow>
 
+    <CanvasGuideOverlay @open-guide="emit('openGuide')" />
     <ScenarioBar />
   </div>
 </template>

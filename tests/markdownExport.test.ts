@@ -7,6 +7,7 @@ import type { FlowNodeData, MergedFlowDataset } from '../src/data/schema';
 const parentNode: FlowNodeData = {
   id: 'mod-sample',
   label: 'Xử lý cuộc gọi',
+  techLabel: 'Xử lý cuộc gọi (PushKit & Linphone / PJSIP)',
   kind: 'module',
   audience: 'all',
   summary: {
@@ -121,7 +122,14 @@ const dataset: MergedFlowDataset = {
         },
       ],
       edges: [
-        { id: 'e1', source: 'step-1', target: 'step-tech-ios', platforms: ['ios'] },
+        {
+          id: 'e1',
+          source: 'step-1',
+          target: 'step-tech-ios',
+          label: 'Chuyển tiếp',
+          techLabel: 'Chuyển DTMF iOS',
+          platforms: ['ios'],
+        },
         { id: 'e2', source: 'step-tech-ios', target: 'step-2', platforms: ['ios'] },
         { id: 'e3', source: 'step-1', target: 'step-tech-and', platforms: ['android'] },
         { id: 'e4', source: 'step-tech-and', target: 'step-2', platforms: ['android'] },
@@ -153,6 +161,8 @@ describe('markdownExport', () => {
     const md = exportNodeOverviewMarkdown(parentNode, dataset, { includeSubtree: true });
 
     expect(md).toContain('# Xử lý cuộc gọi');
+    expect(md).not.toContain('PushKit & Linphone / PJSIP');
+    expect(md).not.toContain('Chuyển DTMF iOS');
     expect(md).toContain('Nhân viên nghe và chuyển tiếp cuộc gọi khách hàng.');
     expect(md).toContain('Bấm nút gọi');
     expect(md).toContain('Mở màn hình đàm thoại');
@@ -180,6 +190,8 @@ describe('markdownExport', () => {
 
   it('exportNodeTechMarkdown renders both platforms in compare mode and filters properly per single OS', () => {
     const compareMd = exportNodeTechMarkdown(parentNode, dataset, 'compare', { includeSubtree: true });
+    expect(compareMd).toContain('# Xử lý cuộc gọi (PushKit & Linphone / PJSIP)');
+    expect(compareMd).toContain('Chuyển DTMF iOS');
     expect(compareMd).toContain('## Điểm khác biệt iOS ↔ Android');
     expect(compareMd).toContain('### iOS (Swift)');
     expect(compareMd).toContain('### Android (Kotlin / Java)');

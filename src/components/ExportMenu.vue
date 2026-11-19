@@ -5,6 +5,7 @@ import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { computeDagreGraphLayout } from '../composables/useGraphLayout';
 import { exportFlowToPng, exportFlowToSvg, type DiagramExportOptions } from '../core/diagramExport';
 import { downloadTextFile, slugifyFilename } from '../core/downloadHelper';
+import { getNodeDisplayLabel } from '../core/graphEngine';
 import { exportNodeOverviewMarkdown } from '../core/publicMarkdownExport';
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -34,7 +35,10 @@ const buildDiagramOptions = (): { options: DiagramExportOptions; filenameBase: s
   const focusNode = explorer.focusRootId.value
     ? explorer.findNode(explorer.focusRootId.value)
     : undefined;
-  const title = focusNode ? focusNode.label : explorer.dataset.app.name;
+  const focusLabel = focusNode
+    ? getNodeDisplayLabel(focusNode, explorer.audienceMode.value)
+    : undefined;
+  const title = focusLabel ?? explorer.dataset.app.name;
 
   let subtitle = focusNode ? explorer.dataset.app.name : explorer.dataset.app.tagline;
   const includeTechBadges = __ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech';
@@ -61,7 +65,7 @@ const buildDiagramOptions = (): { options: DiagramExportOptions; filenameBase: s
     : undefined;
 
   return {
-    filenameBase: focusNode ? `vbot-${focusNode.label}` : 'vbot-app-flow',
+    filenameBase: focusLabel ? `vbot-${focusLabel}` : 'vbot-app-flow',
     options: {
       nodes: layout.nodes,
       edges: flow.edges,
@@ -107,6 +111,10 @@ const handleExportSvg = () => {
   menuOpen.value = false;
 };
 
+const isTechExport = computed(
+  () => __ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech',
+);
+
 const handleExportMarkdown = async () => {
   const targetNode =
     explorer.selectedNode.value ??
@@ -123,7 +131,8 @@ const handleExportMarkdown = async () => {
     md = exportNodeOverviewMarkdown(targetNode, explorer.dataset, { includeSubtree: true });
   }
 
-  downloadTextFile(`${slugifyFilename(targetNode.label)}.md`, md);
+  const exportTitle = getNodeDisplayLabel(targetNode, explorer.audienceMode.value);
+  downloadTextFile(`${slugifyFilename(exportTitle)}.md`, md);
   menuOpen.value = false;
 };
 
@@ -213,8 +222,12 @@ onBeforeUnmount(() => {
       >
         <FileText class="h-4 w-4 shrink-0 text-amber-600" />
         <div>
-          <div class="font-semibold text-slate-900">Tải tài liệu Markdown (.md)</div>
-          <div class="text-[10px] text-slate-500">Xuất node đang chọn hoặc nhánh đang xem</div>
+          <div class="font-semibold text-slate-900">
+            {{ isTechExport ? 'Tải tài liệu Markdown (.md)' : 'Tải tài liệu hướng dẫn (.md)' }}
+          </div>
+          <div class="text-[10px] text-slate-500">
+            {{ isTechExport ? 'Xuất node đang chọn hoặc nhánh đang xem' : 'Xuất mục đang chọn hoặc nhánh đang xem' }}
+          </div>
         </div>
       </button>
 

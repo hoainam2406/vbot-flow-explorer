@@ -2,6 +2,8 @@
 import {
   filterAndBridgeSubtree,
   findNodeById,
+  getEdgeDisplayLabel,
+  getNodeDisplayLabel,
   isVisibleForPlatform,
 } from './graphEngine';
 import type {
@@ -139,7 +141,7 @@ export function exportNodeTechMarkdown(
       : 'Cả iOS & Android';
 
   const lines: string[] = [
-    `# ${node.label}`,
+    `# ${getNodeDisplayLabel(node, 'tech')}`,
     '',
     `- **ID:** \`${node.id}\``,
     `- **Loại:** ${KIND_LABELS[node.kind]}`,
@@ -273,7 +275,9 @@ export function exportNodeTechMarkdown(
             ? ` [${child.platforms[0] === 'ios' ? 'Chỉ iOS' : 'Chỉ Android'}]`
             : '';
         const text = child.summary.tech ?? child.summary.overview;
-        lines.push(`${idx + 1}. **${child.label}**${platTag} (\`${child.id}\`) — ${text}`);
+        lines.push(
+          `${idx + 1}. **${getNodeDisplayLabel(child, 'tech')}**${platTag} (\`${child.id}\`) — ${text}`,
+        );
         if (child.techDetail?.platformDiffNote) {
           lines.push(`   - *Khác biệt:* ${child.techDetail.platformDiffNote}`);
         }
@@ -282,12 +286,15 @@ export function exportNodeTechMarkdown(
     }
 
     if (visibleSubtree.edges.length > 0) {
-      const labelMap = new Map(visibleSubtree.nodes.map((n) => [n.id, n.label]));
+      const labelMap = new Map(
+        visibleSubtree.nodes.map((n) => [n.id, getNodeDisplayLabel(n, 'tech')]),
+      );
       lines.push('## Luồng chuyển bước', '');
       for (const edge of visibleSubtree.edges) {
         const src = labelMap.get(edge.source) ?? edge.source;
         const tgt = labelMap.get(edge.target) ?? edge.target;
-        const edgeTag = edge.label ? ` *(${edge.label})*` : '';
+        const resolvedEdgeLabel = getEdgeDisplayLabel(edge, 'tech');
+        const edgeTag = resolvedEdgeLabel ? ` *(${resolvedEdgeLabel})*` : '';
         const platTag =
           edge.platforms?.length === 1
             ? ` [${edge.platforms[0] === 'ios' ? 'iOS' : 'Android'}]`
@@ -318,7 +325,7 @@ export function exportNodeTechMarkdown(
   if (related.length > 0) {
     lines.push('## Liên kết chéo', '');
     for (const target of related) {
-      lines.push(`- **${target.label}** (\`${target.id}\`)`);
+      lines.push(`- **${getNodeDisplayLabel(target, 'tech')}** (\`${target.id}\`)`);
     }
     lines.push('');
   }

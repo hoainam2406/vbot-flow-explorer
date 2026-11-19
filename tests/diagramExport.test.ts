@@ -8,6 +8,7 @@ const nodes: FlowNodeData[] = [
   {
     id: 'n-root',
     label: 'Gọi đến & Xác thực <2FA>',
+    techLabel: 'Gọi đến <PushKit> & Xác thực',
     kind: 'module',
     audience: 'all',
     summary: { overview: 'Gốc' },
@@ -59,6 +60,7 @@ describe('diagramExport', () => {
     expect(svg).toContain('<svg xmlns="http://www.w3.org/2000/svg"');
     expect(svg).toContain('VBot Flow &lt;Public &amp; Clean&gt;');
     expect(svg).toContain('Gọi đến &amp; Xác thực &lt;2FA&gt;');
+    expect(svg).not.toContain('Gọi đến &lt;PushKit&gt; &amp; Xác thực');
     expect(svg).toContain('PushKit &quot;VoIP&quot; &amp; CallKit');
     expect(svg).toContain('APNs &amp; VoIP');
     expect(svg).toContain('<path d="M ');
@@ -83,6 +85,7 @@ describe('diagramExport', () => {
       dimInactive: true,
     });
 
+    expect(svg).toContain('Gọi đến &lt;PushKit&gt; &amp; Xác thực');
     expect(svg).toContain('>Kỹ thuật<');
     expect(svg).toContain('>iOS<');
     expect(svg).toContain('>Android<');

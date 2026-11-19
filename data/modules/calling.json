@@ -15,28 +15,29 @@
       "nodes": [
         {
           "id": "call-incoming",
-          "label": "Cuộc gọi đến (PushKit & CallKit / FSI & CallStyle)",
+          "label": "Cuộc gọi đến (Đổ chuông màn hình khóa)",
+          "techLabel": "Cuộc gọi đến (PushKit & CallKit / FSI & CallStyle)",
           "kind": "module",
           "audience": "all",
           "summary": {
             "overview": "Đổ chuông màn hình khóa như cuộc gọi thông thường ngay cả khi đã tắt ứng dụng, đồng thời tự động hiển thị tên khách hàng hoặc người quen trong danh bạ.",
-            "tech": "iOS xử lý PushKit VoIP + CallKit (Linphone); Android nhận FCM data push -> CallService foreground + Notification.CallStyle + fullScreenIntent mở NewCallActivity trên nền PJSIP (org.pjsip.pjsua2)."
+            "tech": "iOS xử lý PushKit VoIP (PKPushRegistryDelegate trong AppDelegate) + CallKit qua TelephoneSDK (bọc VBotPhoneSDK.xcframework chạy lõi PJSIP); Android nhận FCM data push -> CallService foreground + Notification.CallStyle + fullScreenIntent mở NewCallActivity trên nền PJSIP (org.pjsip.pjsua2)."
           },
           "media": [
             {
               "src": "/media/calling/incoming-callkit.webp",
-              "caption": "Màn hình đổ chuông CallKit hiển thị tên khách hàng ưu tiên",
+              "caption": "Màn hình đổ chuông hiển thị tên khách hàng ưu tiên",
               "type": "image",
               "frame": "phone",
               "audience": "all"
             }
           ],
           "techDetail": {
-            "platformDiffNote": "iOS bắt buộc report CallKit ngay trong chu kỳ PushKit (Linphone SDK) và ưu tiên tên PushKit > SQLite; Android dùng FCM data-only (type=3) + fullScreenIntent/CallStyle trên engine PJSIP (LinphoneManager.kt đã tắt) và ưu tiên SQLite > Push Name.",
+            "platformDiffNote": "iOS bắt buộc report CallKit ngay trong chu kỳ PushKit (chạy lõi TelephoneSDK / PJSIP, không dùng Linphone) và ưu tiên tên CRM > PushKit > SQLite > SĐT; Android dùng FCM data-only (type=3) + fullScreenIntent/CallStyle trên engine PJSIP (LinphoneManager.kt đã tắt) và ưu tiên CRM > SQLite > Phone (CallPipHelper.resolveCallerNameWithPriority).",
             "codeRefs": [
-              "VBot/AppDelegate/CallKIt+Appdelegate.swift",
+              "VBot/AppDelegate/AppDelegate.swift",
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift",
-              "VBot/Linphone+CallKit/CallKitProviderDelegate.swift"
+              "3rdLib/TelephoneSDK/Sources/TelephoneSDK.swift"
             ],
             "byPlatform": {
               "android": {
@@ -62,15 +63,16 @@
         },
         {
           "id": "call-outgoing",
-          "label": "Cuộc gọi đi (Dialpad / Danh bạ / MiniApp)",
+          "label": "Cuộc gọi đi (Bàn phím / Danh bạ / Mini App)",
+          "techLabel": "Cuộc gọi đi (Dialpad / Danh bạ / MiniApp)",
           "kind": "module",
           "audience": "all",
           "summary": {
             "overview": "Gọi ra từ bàn phím số, danh bạ hoặc từ Mini App khách hàng; cho phép chọn đầu số Hotline hiển thị với người nghe.",
-            "tech": "iOS qua VPMAppService+CallOut / PrepareCallViewController; Android qua UtilsKotlin.createCall -> CreateCallActivity -> ChooseHotlineCallBottomSheet -> VBotPhone.startOutgoingCall (PJSIP)."
+            "tech": "iOS qua VPMAppService+CallOut / PrepareCallViewController / TelephoneSDK (PJSIP); Android qua UtilsKotlin.createCall -> CreateCallActivity -> ChooseHotlineCallBottomSheet -> VBotPhone.startOutgoingCall (PJSIP)."
           },
           "techDetail": {
-            "platformDiffNote": "iOS lưu suppliedCallerName cho mọi nguồn (Mini App, Danh bạ, Autodial); Android chỉ gán CallModel.miniAppDisplayName cho Mini App & Autodial — gọi từ Danh bạ / Dialpad vẫn tra lại tên theo CRM/SQLite.",
+            "platformDiffNote": "Cả iOS (PrepareCallViewController) và Android đều ghép chuỗi SIP dạng \"$hotline*$idProject*$phone\" hoặc \"$idProject*$phone\". Khác biệt ở tên hiển thị: iOS lưu suppliedCallerName cho mọi nguồn (Mini App, Danh bạ, Autodial); Android chỉ gán CallModel.miniAppDisplayName cho Mini App & Autodial — gọi từ Danh bạ / Dialpad vẫn tra lại tên theo CRM > SQLite > Phone.",
             "codeRefs": [
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift",
               "VBot/Controller/NewController/CallVC/PrepareCallViewController.swift"
@@ -94,12 +96,13 @@
         },
         {
           "id": "call-transfer",
-          "label": "Chuyển tiếp cuộc gọi (Blind & Attended)",
+          "label": "Chuyển tiếp cuộc gọi (Chuyển ngay & Hỏi trước)",
+          "techLabel": "Chuyển tiếp cuộc gọi (Blind & Attended)",
           "kind": "module",
           "audience": "all",
           "summary": {
             "overview": "Khi đang đàm thoại, nhân viên có thể chuyển ngay cuộc gọi sang đồng nghiệp/số ngoài hoặc giữ máy khách để hỏi trước người nhận rồi mới bàn giao.",
-            "tech": "iOS Blind Transfer ưu tiên HTTP FreeSWITCH bgapi và fallback DTMF #1; Android chạy Blind Transfer (#1) & Attended (*2/*9/*1) thuần qua DTMF (vBotPhone.sendDTMF) + trạng thái WebSocket/FCM."
+            "tech": "Cả iOS (VPMAppService.blindTransfer / phoneTransfer / attendedTransfer qua sendDTMFSequence delay 0.3s) và Android (CallForwardDTMFHelper qua vBotPhone.sendDTMF delay 300ms) đều chạy Blind (#1) & Attended (*2/*9/*1) thuần qua DTMF."
           },
           "media": [
             {
@@ -111,14 +114,16 @@
             }
           ],
           "techDetail": {
-            "platformDiffNote": "iOS ưu tiên gọi HTTP /webapi/bgapi tới FreeSWITCH Lua trước khi fallback DTMF #1; Android KHÔNG dùng HTTP bgapi mà phát DTMF #1 trực tiếp sau delay 300ms (CallForwardDTMFHelper).",
+            "platformDiffNote": "Cả 2 nền tảng đều dùng thuần DTMF (delay 300ms) cho Blind (#1) và Attended (*2/*9/*1) — đồng bộ với vbot-console. Điểm khác biệt nằm ở UI & đồng bộ trạng thái: iOS dùng ConfirmAskForwardVC / ChildCallSelectMemberVC trên TelephoneSDK (PJSIP, gọi qua file tên legacy VPMAppService+Linphone; file FreeSwitchTransferHelper.swift không được gọi); Android dùng CallForwardBottomSheet (mở TransferCallBottomSheet khi chọn Thành viên) + WebSocket CALL_TRANSFER / FCM type=10 + poll 1000ms (tự gửi *2 khi polling gặp ANSWER) trên PJSIP.",
             "codeRefs": [
-              "VBot/Service/API/FreeSwitchTransferHelper.swift",
-              "VBot/Controller/NewController/CallVC/ChildCallForwardViewController.swift"
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+Linphone.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift",
+              "VBot/Controller/NewController/CallVC/ChildCallSelectMemberViewController.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/CCallOutDialForwardViewController.swift"
             ],
             "byPlatform": {
               "android": {
-                "summary": "CallForwardBottomSheet / TransferCallBottomSheet điều phối chuyển tiếp: Blind gửi DTMF #1 + delay 300ms -> #1<dest>; Attended dùng *2, *9, *1 và nhận trạng thái CALL_TRANSFER qua WebSocket / FCM type=10 (poll 1000ms).",
+                "summary": "CallForwardBottomSheet điều phối chuyển tiếp (mở TransferCallBottomSheet cho 2 nút Chuyển ngay/Hỏi trước khi chọn Thành viên): Blind gửi DTMF #1 + delay 300ms -> <projectId>*<ext> / <hotline>*<phone> / <phone> (không lặp #1); Attended dùng *2, *9 (tự gửi *2 khi polling gặp ANSWER), *1 (chỉ khi bấm Hủy) và nhận CALL_TRANSFER qua WebSocket / FCM type=10 (poll 1000ms).",
                 "apisOrEvents": [
                   "vBotPhone.sendDTMF (#1, *2, *9, *1)",
                   "WebSocket CALL_TRANSFER & FCM type == \"10\""
@@ -138,11 +143,11 @@
           "kind": "module",
           "audience": "all",
           "summary": {
-            "overview": "Các thao tác khi đang nghe máy: tắt tiếng, bật loa ngoài, giữ máy (iOS), bàn phím số, thu nhỏ cửa sổ gọi (PiP) và tự động khóa mờ nút tính năng trước khi cuộc gọi kết nối.",
-            "tech": "iOS dùng VPMAppService+CallFeatures, PipCallViewController, CallSurveyHelper.canTriggerCallFunc (alpha 0.45); Android dùng NewCallActivity.enterPipMode(), AudioManager, CallPipHelper.resolveCallFeatureVisibility (DISABLED_FEATURE_ALPHA = 0.45f) và SipCodeRepository khi ngắt máy (cả 2 HĐH chưa gắn nút Khảo sát #3 trên nhánh Nam-dev)."
+            "overview": "Các thao tác khi đang nghe máy: tắt tiếng, bật loa ngoài, bàn phím số, thu nhỏ cửa sổ gọi và tự động khóa mờ nút tính năng trước khi cuộc gọi kết nối.",
+            "tech": "iOS dùng NewCallViewController (Telephone.sharedInstance), WindowsManager + PipCallViewController, CallSurveyHelper.canTriggerCallFunc (alpha 0.45); Android dùng NewCallActivity.enterPipMode(), AudioManager, CallPipHelper.resolveCallFeatureVisibility (DISABLED_FEATURE_ALPHA = 0.45f) và SipCodeRepository khi ngắt máy (cả 2 HĐH đều không có nút Hold và chưa gắn nút Khảo sát #3 trên nhánh Nam-dev)."
           },
           "techDetail": {
-            "platformDiffNote": "1) Cả iOS và Android làm mờ/khóa nút tính năng ở alpha 0.45 khi chưa kết nối và đều CHƯA gắn nút Khảo sát DTMF #3 lên UI trên nhánh Nam-dev (iOS chỉ mới có CallSurveyHelper). 2) Android dùng native in-call actions (ngắt bridge Mini App trong cuộc gọi), chưa có Hold (VBotCall.toggleHold() đã comment out), PiP dùng native Android Picture-in-Picture và có thêm hiển thị mã SIP khi ngắt máy.",
+            "platformDiffNote": "1) Cả iOS (NewCallViewController, enum VPMCallFunc) và Android (VBotCall.toggleHold() đã comment out) đều KHÔNG có nút Hold trên UI live; cả 2 HĐH đều khóa mờ nút tính năng ở alpha 0.45 khi chưa kết nối và đều CHƯA gắn nút Khảo sát DTMF #3 lên UI trên nhánh Nam-dev. 2) Android dùng native in-call actions thay Mini App, PiP dùng Android Picture-in-Picture (tắt CallBubbleService) và có SipCodeRepository + notification nền khi ngắt máy (iOS chỉ có banner foreground AppDelegate.showEndCallIndicator).",
             "byPlatform": {
               "android": {
                 "summary": "NewCallActivity xử lý PiP tỷ lệ 2:3 (enterPipMode), Mute qua AudioManager.isMicrophoneMute, khóa nút native khi chưa kết nối (DISABLED_FEATURE_ALPHA = 0.45f) và SipCodeRepository + InAppTopIndicatorHelper báo lỗi SIP khi ngắt máy (chưa gắn nút Khảo sát #3 trên Nam-dev).",
@@ -173,7 +178,8 @@
       "nodes": [
         {
           "id": "call-in-pushkit",
-          "label": "Nhận thông báo cuộc gọi đến (PushKit / FCM)",
+          "label": "Nhận tín hiệu cuộc gọi đến từ hệ thống",
+          "techLabel": "Nhận thông báo cuộc gọi đến (PushKit / FCM)",
           "kind": "external",
           "audience": "all",
           "summary": {
@@ -186,7 +192,7 @@
             "edgeCases": ["Bắt buộc report CallKit ngay trong chu kỳ PushKit của iOS để không bị hệ thống thu hồi quyền VoIP"],
             "codeRefs": [
               "VBot/AppDelegate/AppDelegate.swift",
-              "VBot/AppDelegate/CallKIt+Appdelegate.swift"
+              "3rdLib/TelephoneSDK/Sources/TelephoneSDK.swift"
             ],
             "byPlatform": {
               "android": {
@@ -205,7 +211,7 @@
                   "FCM type == \"11\" (Group JOIN/leave) & type == \"12\" (SecurityManager)"
                 ],
                 "edgeCases": [
-                  "Tra SQLite UserContactManager ngay trong FirebaseService nên SQLite ghi đè Push Name từ đầu",
+                  "Tra SQLite UserContactManager ngay trong FirebaseService; với cuộc gọi ngoài (!rawCallerIsInternal) không phải attended transfer và SĐT không chứa '*', CallPipHelper.resolveCallerNameWithPriority lấy tên SQLite hoặc SĐT ghi đè Push Name từ đầu",
                   "Prefetch token TICKET, TODO, CRM song song trước khi người dùng bắt máy",
                   "Nếu transferKind != NONE, hẹn 350ms gọi GET api/User/getInfoCall2 làm giàu thông tin chuyển tiếp"
                 ],
@@ -233,7 +239,7 @@
             "outputs": ["oneCallModel.pushKitCallerName", "ResolvedPushPayload"],
             "edgeCases": [
               "Loại bỏ các nhãn mặc định như 'Call incoming', 'Cuộc gọi đến', 'null' hoặc chuỗi chỉ chứa SĐT",
-              "Che số dạng 09xx***xxx nếu là khách hàng và tài khoản không có quyền HIEN_SO_DIEN_THOAI"
+              "resolvePushKitCallerDisplay và resolveCallerAfterCRMLookup trả SĐT không che; việc che số (PhoneMaskingHelper.formatDisplayPhoneNumber, dạng 098***4567) chỉ thực hiện ở tầng UI (NewCallViewController & PipCallViewController)"
             ],
             "codeRefs": [
               "VBot/Service/Database/UserContactDatabaseHelper.swift",
@@ -253,7 +259,7 @@
             "tech": "VBotRepository.makeInbound bật CallService (foregroundServiceType phoneCall|microphone), kết nối Call WebSocket + SIP PJSIP (org.pjsip.pjsua2) gửi SK OK và giữ wake lock 30 giây nếu màn hình đang tắt."
           },
           "techDetail": {
-            "platformDiffNote": "Android dùng PJSIP + WebSocket SK OK và CallService foreground thay cho Linphone + CallKit của iOS; trên Android 14+ cần kiểm tra Api34.canUseFullScreenIntent.",
+            "platformDiffNote": "Android dùng PJSIP + WebSocket SK OK và CallService foreground thay cho TelephoneSDK (PJSIP) + CallKit của iOS; trên Android 14+ cần kiểm tra Api34.canUseFullScreenIntent.",
             "inputs": [
               "HashMap từ FirebaseService",
               "Api34.canUseFullScreenIntent",
@@ -283,7 +289,8 @@
         },
         {
           "id": "call-in-callkit",
-          "label": "Hiển thị màn hình đổ chuông (CallKit / CallStyle FSI)",
+          "label": "Hiển thị màn hình đổ chuông trên điện thoại",
+          "techLabel": "Hiển thị màn hình đổ chuông (CallKit / CallStyle FSI)",
           "kind": "action",
           "audience": "all",
           "summary": {
@@ -293,7 +300,7 @@
           "media": [
             {
               "src": "/media/calling/incoming-callkit.webp",
-              "caption": "Giao diện đổ chuông CallKit trên màn hình khóa",
+              "caption": "Giao diện đổ chuông trên màn hình khóa",
               "type": "image",
               "frame": "phone",
               "audience": "all"
@@ -302,7 +309,8 @@
           "techDetail": {
             "platformDiffNote": "iOS dùng CallKit hệ thống (bị iOS quản lý chung lịch sử Recents); Android từ API 31+ dùng Notification.CallStyle.forIncomingCall trên mọi hãng kể cả Samsung và mở NewCallActivity tách task (showWhenLocked, turnScreenOn).",
             "codeRefs": [
-              "VBot/Linphone+CallKit/CallKitProviderDelegate.swift"
+              "3rdLib/TelephoneSDK/Sources/TelephoneSDK.swift",
+              "VBot/AppDelegate/AppDelegate.swift"
             ],
             "byPlatform": {
               "android": {
@@ -328,11 +336,14 @@
           "audience": "tech",
           "summary": {
             "overview": "Hệ thống tự đối chiếu số điện thoại với hồ sơ khách hàng CRM để hiển thị đúng tên khách trước khi bạn kịp nhấc máy.",
-            "tech": "iOS bọc UIApplication.beginBackgroundTask('PushKitCRMLookup') gọi CRM; Android gọi CustomerApiService.getCrmCustomersByPhone ngay sau GET api/User/getInfoCall2 (và gọi lại khi chuyển RINGING/ACTIVE nếu chưa xong)."
+            "tech": "iOS bọc UIApplication.beginBackgroundTask('PushKitCRMLookup') trong triggerBackgroundPushKitCRMLookupIfNeeded gọi APIService.getInfoCall2 trước, chỉ fallback GET /api/module-crm/Customer/getAllByPhone nếu lỗi hoặc < 2 participants; Android gọi GET api/User/getInfoCall2 rồi CustomerApiService.getCrmCustomersByPhone."
           },
           "techDetail": {
-            "platformDiffNote": "iOS có timer retry 0.4s riêng cho lỗi mạng thức dậy -1005/POSIX 53 và ưu tiên tên CRM > PushKit > SQLite > SĐT; Android không có timer 0.4s — khi lỗi chỉ xóa lastCrmLookupKey = \"\" để getInfoCall2 retry (5×1000ms) hoặc đổi trạng thái gọi lại, và ưu tiên SQLite > Push Name dưới CRM.",
-            "apisOrEvents": ["GET /api/module-crm/Customer/getAllByPhone"],
+            "platformDiffNote": "iOS có timer retry 0.4s riêng cho lỗi mạng thức dậy (-1005/-1001/-1004/-1006, POSIX 53/54/57/60) và ưu tiên tên CRM > PushKit > SQLite > SĐT; Android không có timer 0.4s — khi lỗi chỉ xóa lastCrmLookupKey = \"\" để getInfoCall2 retry (5×1000ms) hoặc đổi trạng thái gọi lại, và chỉ dùng 3 tầng CRM > SQLite > Phone (CallPipHelper không có tầng Push Name).",
+            "apisOrEvents": [
+              "GET /api/User/getInfoCall2 (iOS & Android)",
+              "GET /api/module-crm/Customer/getAllByPhone (iOS fallback / Android sau getInfoCall2)"
+            ],
             "outputs": ["oneCallModel.persionInCall (tên khách CRM, idCustomer, avatarColor)"],
             "codeRefs": [
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift"
@@ -363,7 +374,7 @@
           "platforms": ["ios"],
           "summary": {
             "overview": "Kiểm tra xem việc tra cứu tên khách hàng khi máy vừa thức dậy từ chế độ ngủ có bị rớt kết nối tạm thời hay không.",
-            "tech": "isTransientNetworkErrorForCRMRetry kiểm tra lỗi NSURLErrorDomain (-1005, -1001, -1009) hoặc POSIX (53, 54, 57) khi app vừa thức dậy từ background."
+            "tech": "isTransientNetworkErrorForCRMRetry kiểm tra lỗi NSURLErrorDomain (-1005, -1001, -1004, -1006) hoặc POSIX (53, 54, 57, 60) khi app vừa thức dậy từ background."
           },
           "techDetail": {
             "codeRefs": [
@@ -399,7 +410,7 @@
           "audience": "all",
           "summary": {
             "overview": "Khi bấm Trả lời, âm thanh được nối máy và mở giao diện cuộc gọi với đầy đủ nút điều khiển (loa, tắt mic, ghi chú, chuyển tiếp...).",
-            "tech": "iOS dùng LinphoneAPI + NewCallViewController (CRM > PushKit > SQLite > SĐT); Android dùng PJSIP PJCall/VBotCall + NewCallActivity và CallPipHelper.resolveCallerNameWithPriority (CRM > SQLite > Push Name > masked Phone)."
+            "tech": "iOS dùng TelephoneSDK (PJSIP) + NewCallViewController (CRM > PushKit > SQLite > SĐT; che SĐT ở tầng UI qua PhoneMaskingHelper); Android dùng PJSIP PJCall/VBotCall + NewCallActivity và CallPipHelper.resolveCallerNameWithPriority (CRM > SQLite > Phone)."
           },
           "media": [
             {
@@ -411,16 +422,17 @@
             }
           ],
           "techDetail": {
-            "platformDiffNote": "Thứ tự ưu tiên tên ở cuộc gọi đến: iOS là CRM > PushKit > SQLite > SĐT; Android là CRM > SQLite (vbot_user_contact.db) > Push Name > masked Phone (ngoại trừ miniAppDisplayName chỉ dùng cho gọi đi Mini App / Autodial).",
+            "platformDiffNote": "Thứ tự ưu tiên tên ở cuộc gọi đến: iOS là CRM > PushKit > SQLite > SĐT; Android là CRM > SQLite (vbot_user_contact.db) > Phone (CallPipHelper không có tầng Push Name; ngoại trừ miniAppDisplayName cho gọi đi Mini App / Autodial).",
             "codeRefs": [
               "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift",
-              "VBot/Linphone+CallKit/LinphoneAPI.swift"
+              "3rdLib/TelephoneSDK/Sources/TelephoneSDK.swift",
+              "VBot/Utils/Helper/PhoneMaskingHelper.swift"
             ],
             "byPlatform": {
               "android": {
                 "summary": "PJCall / VBotCall kết nối luồng thoại SIP/RTP qua PJSIP, cập nhật CallStyle sang forOngoingCall và NewCallActivity hợp nhất tên hiển thị qua CallPipHelper.resolveCallerNameWithPriority.",
                 "outputs": [
-                  "CallPipHelper.resolveCallerNameWithPriority: CRM > SQLite > Push Name > masked Phone"
+                  "CallPipHelper.resolveCallerNameWithPriority: CRM > SQLite > Phone"
                 ],
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
@@ -436,14 +448,14 @@
       "edges": [
         { "id": "e-ci-1", "source": "call-in-pushkit", "target": "call-in-raw-log", "platforms": ["ios"] },
         { "id": "e-ci-2", "source": "call-in-raw-log", "target": "call-in-callkit", "platforms": ["ios"] },
-        { "id": "e-ci-and-1", "source": "call-in-pushkit", "target": "call-in-android-fsi", "label": "FCM Data (type=3)", "platforms": ["android"] },
-        { "id": "e-ci-and-2", "source": "call-in-android-fsi", "target": "call-in-callkit", "label": "CallService + FSI", "platforms": ["android"] },
+        { "id": "e-ci-and-1", "source": "call-in-pushkit", "target": "call-in-android-fsi", "techLabel": "FCM Data (type=3)", "platforms": ["android"] },
+        { "id": "e-ci-and-2", "source": "call-in-android-fsi", "target": "call-in-callkit", "techLabel": "CallService + FSI", "platforms": ["android"] },
         { "id": "e-ci-3", "source": "call-in-callkit", "target": "call-in-crm-bg" },
         { "id": "e-ci-4", "source": "call-in-crm-bg", "target": "call-in-crm-retry", "platforms": ["ios"] },
-        { "id": "e-ci-5", "source": "call-in-crm-retry", "target": "call-in-answer", "label": "Thành công / Cập nhật CallKit", "platforms": ["ios"] },
-        { "id": "e-ci-6", "source": "call-in-crm-retry", "target": "call-in-crm-error", "label": "Lỗi mạng -1005 / POSIX 53", "platforms": ["ios"] },
-        { "id": "e-ci-7", "source": "call-in-crm-error", "target": "call-in-answer", "label": "Retry / Tra lại ở getInfoCall2", "platforms": ["ios"] },
-        { "id": "e-ci-and-3", "source": "call-in-crm-bg", "target": "call-in-answer", "label": "getInfoCall2 (5×1s retry)", "platforms": ["android"] }
+        { "id": "e-ci-5", "source": "call-in-crm-retry", "target": "call-in-answer", "label": "Nhấc máy", "techLabel": "Thành công / Cập nhật CallKit", "platforms": ["ios"] },
+        { "id": "e-ci-6", "source": "call-in-crm-retry", "target": "call-in-crm-error", "techLabel": "Lỗi mạng -1005 / POSIX 53", "platforms": ["ios"] },
+        { "id": "e-ci-7", "source": "call-in-crm-error", "target": "call-in-answer", "techLabel": "Retry / Tra lại ở getInfoCall2", "platforms": ["ios"] },
+        { "id": "e-ci-and-3", "source": "call-in-crm-bg", "target": "call-in-answer", "label": "Nhấc máy", "techLabel": "getInfoCall2 (5×1s retry)", "platforms": ["android"] }
       ],
       "scenarios": [
         {
@@ -499,7 +511,7 @@
             }
           ],
           "techDetail": {
-            "platformDiffNote": "Android nhận make_call qua VbMaHostCallback.onRequestCall -> MiniAppHelper.makeDirectCall, gán CallModel.miniAppDisplayName và trả event \"call_result\" sau ~200ms để WebView không bị ngắt bridge khi chuyển Activity.",
+            "platformDiffNote": "Android nhận make_call qua VbMaSDKDelegate.onRequestCall -> MiniAppHelper.makeDirectCall (9 tham số), gán CallModel.miniAppDisplayName, mở thẳng NewCallActivity (không qua UtilsKotlin.createCall) và trả event \"call_result\" sau ~200ms để WebView không bị ngắt bridge khi chuyển Activity.",
             "inputs": ["name (tên truyền từ Mini App / Danh bạ nếu có)", "phone", "isVPM", "typeCall"],
             "codeRefs": [
               "VBot/Controller/NewController/CallVC/MainDialPad/qMainDiaPadViewController.swift",
@@ -508,15 +520,16 @@
             ],
             "byPlatform": {
               "android": {
-                "summary": "Dialpad (NumberPadActivity) / Danh bạ đi qua UtilsKotlin.createCall; Mini App đi qua VbMaHostCallback.onRequestCall -> MiniAppHelper.makeDirectCall (gán CallModel.miniAppDisplayName và delay ~200ms trả call_result).",
-                "inputs": ["phoneNumber", "displayName (từ Mini App / Autodial)", "typeCall", "hotlineNumber"],
+                "summary": "Dialpad (NumberPadActivity) / Danh bạ đi qua UtilsKotlin.createCall -> CreateCallActivity; Mini App đi qua VbMaSDKDelegate.onRequestCall -> MiniAppHelper.makeDirectCall (tự dựng LoadDataManager.callModel, mở NewCallActivity, gọi thẳng vBotPhone.startOutgoingCall và delay ~200ms trả call_result).",
+                "inputs": ["phoneNumber", "displayName (từ Mini App / Autodial)", "typeCall"],
                 "edgeCases": [
                   "CallModel.miniAppDisplayName chỉ gán khi gọi từ Mini App hoặc Autodial, không gán khi bấm từ Dialpad / Danh bạ native"
                 ],
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/NumberPadActivity.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UtilsKotlin.kt",
-                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
                 ]
               }
             },
@@ -526,7 +539,7 @@
               "transport": "VbMaDelegate.onRequestCall → VPMAppService.makeCall",
               "transportByPlatform": {
                 "ios": "VbMaDelegate.onRequestCall → MiniAppService.onRequestCall → VPMAppService.makeCall",
-                "android": "VbMaHostCallback.onRequestCall → MiniAppHelper.makeDirectCall → VBotPhone.startOutgoingCall"
+                "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.makeDirectCall → NewCallActivity / VBotPhone.startOutgoingCall"
               },
               "messages": [
                 {
@@ -535,13 +548,13 @@
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
                   "hostFnByPlatform": {
                     "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
-                    "android": "MiniAppHelper.makeDirectCall(payload) → UtilsKotlin.createCall / VBotPhone.startOutgoingCall → VbMaSDK emit \"call_result\" (sau ~200ms)"
+                    "android": "MiniAppHelper.makeDirectCall(9 tham số) → LoadDataManager.callModel → NewCallActivity & VBotPhone.startOutgoingCall(to) → VbMaSDK emit \"call_result\" (sau ~200ms)"
                   },
                   "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
-                  "payload": "Nested: { request_id, callee_info: { phoneNumber, displayName, typeCall, avatar, avatarColor, hotline, payload: { customerId } } } hoặc Flat: { request_id, phoneNumber, displayName, customerId, hotlineNumber }",
-                  "response": "{ request_id, success: Bool, reason?: 'MISSING_PHONE_NUMBER' }",
-                  "note": "typeCall == 'app_to_app' → gọi nội bộ VPM; ngược lại → gọi Hotline ra ngoài và bảo toàn suppliedCallerName.",
-                  "parityNote": "iOS gửi \"call_result\" đồng bộ sau khi dispatch VPMAppService.makeCall; Android delay ~200ms khi gửi \"call_result\" để kịp giao tiếp trước khi CreateCallActivity/NewCallActivity chiếm focus. Android giữ CallModel.miniAppDisplayName cho Mini App còn iOS dùng suppliedCallerName chung."
+                  "payload": "Nested: { request_id, callee_info: { phoneNumber, displayName, typeCall, avatar, avatarColor } } hoặc Flat: { request_id, phoneNumber, displayName } (cả 2 HĐH đều chưa đọc hotline/hotlineNumber/customerId)",
+                  "response": "iOS: { request_id, success: Bool, reason?: 'MISSING_PHONE_NUMBER' } | Android: luôn callback { request_id, success: true } sau 200ms (không validate phoneNumber rỗng; chỉ có reason: 'ERROR' trong catch)",
+                  "note": "typeCall == 'app_to_app' → gọi nội bộ VPM; ngược lại → gọi Hotline ra ngoài và bảo toàn suppliedCallerName / miniAppDisplayName.",
+                  "parityNote": "iOS gửi \"call_result\" đồng bộ sau khi dispatch VPMAppService.makeCall (và có validate MISSING_PHONE_NUMBER); Android delay ~200ms trước khi gửi \"call_result\" (chỉ có reason ERROR trong catch) và mở thẳng NewCallActivity qua vBotPhone.startOutgoingCall. Android giữ CallModel.miniAppDisplayName cho Mini App còn iOS dùng suppliedCallerName chung."
                 }
               ]
             }
@@ -558,10 +571,11 @@
             "tech": "iOS qua PrepareCallViewController / SelectCallTypeViewController; Android qua CreateCallActivity kiểm tra quyền RECORD_AUDIO và mở ChooseHotlineCallBottomSheet (GET api/Hotline/getAllForCallByProject)."
           },
           "techDetail": {
-            "platformDiffNote": "Android hợp nhất chọn Hotline trong ChooseHotlineCallBottomSheet ngay trên CreateCallActivity và ghép chuỗi SIP dạng \"$hotline*$idProject*$phone\" (hoặc \"$idProject*$phone\").",
+            "platformDiffNote": "Cả iOS (PrepareCallViewController.swift:277-290) và Android (ChooseHotlineCallBottomSheet / CreateCallActivity) đều ghép chuỗi SIP dạng \"$hotline*$idProject*$phone\" hoặc \"$idProject*$phone\". Trên iOS, PrepareCallViewController mở qSelectHotlineForCallViewController để chọn Hotline gọi thường (còn SelectHotlineViewController chỉ dùng trong Call Marketing).",
             "codeRefs": [
               "VBot/Controller/NewController/CallVC/PrepareCallViewController.swift",
-              "VBot/Controller/NewController/CallVC/SelectCallTypeViewController.swift"
+              "VBot/Controller/NewController/CallVC/SelectCallTypeViewController.swift",
+              "VBot/Controller/NewController/Hotline/SelectHotline/qSelectHotlineForCallViewController.swift"
             ],
             "byPlatform": {
               "android": {
@@ -615,17 +629,18 @@
         },
         {
           "id": "call-out-sip",
-          "label": "Thiết lập phiên SIP & Mở màn hình gọi",
+          "label": "Kết nối tổng đài & Mở màn hình gọi",
+          "techLabel": "Thiết lập phiên SIP & Mở màn hình gọi",
           "kind": "external",
           "audience": "all",
           "summary": {
             "overview": "Kết nối đường truyền thoại qua tổng đài và hiển thị màn hình cuộc gọi đi với trạng thái Đang gọi / Đổ chuông / Đang nói chuyện.",
-            "tech": "iOS dùng LinphoneAPI + CallKitProviderDelegate + NewCallViewController; Android dùng VBotPhone.startOutgoingCall (PJSIP INVITE) + CallService foreground + NewCallActivity."
+            "tech": "iOS dùng TelephoneSDK (PJSIP) + CallKit + NewCallViewController; Android dùng VBotPhone.startOutgoingCall (PJSIP INVITE) + CallService foreground + NewCallActivity."
           },
           "techDetail": {
-            "platformDiffNote": "iOS chạy trên engine Linphone + đồng bộ CallKit outgoing call; Android chạy PJSIP (org.pjsip.pjsua2) qua VBotPhone.startOutgoingCall kèm CallService foreground.",
+            "platformDiffNote": "Cả iOS (TelephoneSDK / VBotPhoneSDK.xcframework) và Android (vbotphonesdk) đều chạy lõi PJSIP; iOS đồng bộ thêm CallKit outgoing call còn Android dựng CallService foreground.",
             "codeRefs": [
-              "VBot/Linphone+CallKit/LinphoneAPI.swift",
+              "3rdLib/TelephoneSDK/Sources/TelephoneSDK.swift",
               "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
             ],
             "byPlatform": {
@@ -671,18 +686,21 @@
           "audience": "all",
           "summary": {
             "overview": "Khi đang đàm thoại ổn định, nhân viên bấm Chuyển tiếp và chọn đích đến từ Thành viên nội bộ, Danh bạ chuyển tiếp hoặc Bàn phím nhập số tự do.",
-            "tech": "iOS mở ChildCallForwardViewController / ChildCallSelectMemberViewController; Android mở TransferCallBottomSheet / CallForwardBottomSheet / ForwardKeyboardBottomSheet (kèm ContactV2Manager)."
+            "tech": "iOS mở ChildCallSelectMemberViewController / CCallOutDialForwardViewController / ConfirmAskForwardViewController; Android mở CallForwardBottomSheet (sheet chính kèm ContactV2Manager) -> TransferCallBottomSheet (2 nút khi chọn Thành viên) hoặc ForwardKeyboardBottomSheet."
           },
           "techDetail": {
-            "platformDiffNote": "Cả iOS và Android chỉ cho chuyển tiếp khi cuộc gọi đã ACTIVE; Android tách 3 bottom sheet (TransferCallBottomSheet, CallForwardBottomSheet, ForwardKeyboardBottomSheet).",
-            "edgeCases": ["Quyền hiển thị Danh bạ chuyển tiếp V2 phụ thuộc cờ shouldShowContactForward"],
+            "platformDiffNote": "Cả iOS và Android chỉ cho chuyển tiếp khi cuộc gọi đã ACTIVE; iOS dùng ChildCallSelectMemberVC (kèm ContactV2Repository & ContactV2AdvancedFilterBottomSheet) / CCallOutDialForwardVC / ConfirmAskForwardVC; Android dùng CallForwardBottomSheet làm sheet chính, TransferCallBottomSheet chỉ hiện 2 lựa chọn khi chọn Thành viên.",
+            "edgeCases": [
+              "ChildCallSelectMemberViewController sử dụng ContactV2Repository và ContactV2AdvancedFilterBottomSheet cho tab Danh bạ V2 (TelemetryManager.shouldShowContactForward hiện có 0 caller trên Nam-dev)"
+            ],
             "codeRefs": [
-              "VBot/Controller/NewController/CallVC/ChildCallForwardViewController.swift",
-              "VBot/Controller/NewController/CallVC/ChildCallSelectMemberViewController.swift"
+              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift",
+              "VBot/Controller/NewController/CallVC/ChildCallSelectMemberViewController.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/CCallOutDialForwardViewController.swift"
             ],
             "byPlatform": {
               "android": {
-                "summary": "TransferCallBottomSheet cho phép chọn Thành viên, Danh bạ chuyển tiếp V2 (ContactV2Manager) hoặc Bàn phím số (ForwardKeyboardBottomSheet) để điều phối sang CallForwardBottomSheet.",
+                "summary": "CallForwardBottomSheet là sheet chính chứa tab Thành viên, tab Danh bạ chuyển tiếp V2 (ContactV2Manager), nút mở bàn phím (ForwardKeyboardBottomSheet) và UI chờ/xác nhận Attended; khi chọn 1 Thành viên mới mở TransferCallBottomSheet (2 lựa chọn Chuyển ngay / Hỏi trước).",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/TransferCallBottomSheet.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallForwardBottomSheet.kt",
@@ -701,55 +719,52 @@
           "audience": "all",
           "summary": {
             "overview": "Chuyển ngay (Blind Transfer) phù hợp nối máy nhanh; Hỏi trước (Attended Transfer) giúp trao đổi sơ bộ với đồng nghiệp trước khi giao khách.",
-            "tech": "Thành viên nội bộ hỗ trợ cả Blind (#1) và Attended (*2); Danh bạ V2 / số tự do mặc định thực hiện Blind Transfer."
+            "tech": "Thành viên nội bộ hỗ trợ cả Blind (#1) và Attended (*2); Danh bạ V2 / số tự do thực hiện Blind Transfer (#1)."
           },
           "techDetail": {
-            "platformDiffNote": "Khi chọn Blind Transfer: iOS rẽ nhánh gọi HTTP FreeSWITCH bgapi trước rồi mới fallback DTMF #1; Android đi thẳng bằng DTMF #1 qua vBotPhone.sendDTMF.",
+            "platformDiffNote": "Cả 2 HĐH đều đi thẳng bằng DTMF #1 (Blind) hoặc *2 (Attended) với delay 300ms qua kênh thoại; Android dùng CallForwardBottomSheet / TransferCallBottomSheet, còn logic thêm thành viên vào cuộc gọi (#8 + *3<ext>#) nằm ở NewCallActivity từ AddMemberToCallBottomSheet.",
             "byPlatform": {
               "android": {
-                "summary": "TransferCallBottomSheet / CallForwardBottomSheet phân luồng Blind (#1) hoặc Attended (*2); thêm nhóm gọi dùng #8 + *3<ext>#."
+                "summary": "CallForwardBottomSheet phân luồng Blind (#1) hoặc Attended (*2) với TransferCallBottomSheet cho Thành viên; thêm nhóm gọi (#8 + *3<ext>#) xử lý ở NewCallActivity từ AddMemberToCallBottomSheet.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/AddMemberToCallBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                ]
               }
             }
           }
         },
         {
-          "id": "call-tr-blind-api",
-          "label": "Gửi lệnh chuyển ngay qua HTTP FreeSWITCH API",
-          "kind": "external",
+          "id": "call-tr-blind-dtmf",
+          "label": "Phát chuỗi mã DTMF #1 qua kênh thoại (delay 300ms)",
+          "kind": "process",
           "audience": "tech",
-          "platforms": ["ios"],
           "summary": {
-            "overview": "Hệ thống gửi yêu cầu chuyển máy tức thì tới tổng đài chỉ trong 1 thao tác.",
-            "tech": "FreeSwitchTransferHelper.shared.executeBlindTransfer gọi HTTP bgapi chạy script Lua truyền (UUID_CALLER, CUSTOMER_NUMBER, SIP_SENDER, DIGITS) với timeout 5 giây."
+            "overview": "Phát tín hiệu phím tắt trên kênh thoại để tổng đài thực hiện chuyển tiếp ngay cuộc gọi sang người nhận.",
+            "tech": "iOS gọi VPMAppService.blindTransfer(ext:projectId:) hoặc phoneTransfer(phone:hotline:) (file tên legacy VPMAppService+Linphone gọi TelephoneSDK) phát DTMF #1 -> delay 0.3s -> đích; Android gọi CallForwardDTMFHelper qua vBotPhone.sendDTMF(\"#1\") + delay 300ms -> cleanTarget."
           },
           "techDetail": {
-            "platformDiffNote": "Chỉ có trên iOS — Android không gọi HTTP FreeSWITCH /webapi/bgapi mà phát DTMF #1 trực tiếp.",
-            "apisOrEvents": ["GET/POST /webapi/bgapi (FreeSWITCH Lua blindtransfer_call_phone)"],
-            "outputs": ["+OK Job-UUID"],
+            "platformDiffNote": "Cả 2 HĐH đều dùng thuần DTMF #1 + delay 300ms -> cleanTarget (không lặp #1 hai lần và không gọi HTTP /webapi/bgapi trong luồng chạy thật). iOS tính đích qua getTransferTargetSequence (inbound: <projectId>*<ext>, outbound: <ext>) và phoneTransfer (<hotline>*<phone> | <phone>); Android phát qua CallForwardDTMFHelper trên PJSIP.",
+            "apisOrEvents": [
+              "DTMF #1 + delay 300ms -> <projectId>*<ext> / <ext> (Blind thành viên)",
+              "DTMF #1 + delay 300ms -> <hotline>*<phone> / <phone> (Blind số ngoài)"
+            ],
+            "edgeCases": [
+              "File VBot/Service/API/FreeSwitchTransferHelper.swift (HTTP /webapi/bgapi) vẫn còn trong mã nguồn iOS cùng unit test nhưng KHÔNG được gọi ở bất kỳ màn hình nào trên nhánh Nam-dev",
+              "Các hàm transfer trong CallActionBridgeHelper.swift cũng có 0 caller trên Nam-dev"
+            ],
             "codeRefs": [
-              "VBot/Service/API/FreeSwitchTransferHelper.swift",
-              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift"
-            ]
-          }
-        },
-        {
-          "id": "call-tr-blind-fallback",
-          "label": "Phát mã DTMF #1 qua kênh thoại (Fallback iOS / Chính Android)",
-          "kind": "error",
-          "audience": "tech",
-          "summary": {
-            "overview": "Phát tín hiệu phím tắt #1 trên kênh thoại để tổng đài thực hiện chuyển tiếp ngay cuộc gọi.",
-            "tech": "iOS fallback khi HTTP bgapi lỗi hoặc timeout 5s; Android gửi trực tiếp qua CallForwardDTMFHelper: DTMF #1 + delay 300ms -> #1<projectId>*<ext> / #1<hotline>*<phone> / #1<phone>."
-          },
-          "techDetail": {
-            "platformDiffNote": "iOS chỉ phát DTMF #1 khi HTTP /webapi/bgapi lỗi hoặc timeout 5s; Android dùng CallForwardDTMFHelper + vBotPhone.sendDTMF làm đường đi chính (không có HTTP bgapi).",
-            "codeRefs": ["VBot/Service/API/FreeSwitchTransferHelper.swift"],
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+Linphone.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift",
+              "VBot/Controller/NewController/CallVC/ChildCallSelectMemberViewController.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/CCallOutDialForwardViewController.swift"
+            ],
             "byPlatform": {
               "android": {
-                "summary": "CallForwardDTMFHelper gửi DTMF #1 qua vBotPhone.sendDTMF, chờ 300ms rồi gửi tiếp #1<projectId>*<ext> / #1<hotline>*<phone> / #1<phone>.",
+                "summary": "CallForwardDTMFHelper gửi DTMF #1 qua vBotPhone.sendDTMF, chờ 300ms rồi gửi tiếp cleanTarget (<projectId>*<ext> / <ext> / <hotline>*<phone> / <phone>) — KHÔNG lặp #1 hai lần.",
                 "apisOrEvents": [
                   "vBotPhone.sendDTMF(\"#1\") + delay 300ms",
-                  "#1<projectId>*<ext> / #1<hotline>*<phone> / #1<phone>"
+                  "<projectId>*<ext> / <ext> / <hotline>*<phone> / <phone> (không lặp #1)"
                 ],
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/CallForwardDTMFHelper.kt",
@@ -778,17 +793,19 @@
         },
         {
           "id": "call-tr-att-hold",
-          "label": "Giữ máy khách (Hold) & Gọi trao đổi trước",
+          "label": "Giữ máy khách & Gọi trao đổi trước",
+          "techLabel": "Giữ máy khách (Hold) & Gọi trao đổi trước",
           "kind": "process",
           "audience": "all",
           "summary": {
             "overview": "Khách hàng tạm nghe nhạc chờ trong lúc nhân viên gọi riêng cho người nhận để tóm tắt vấn đề của khách.",
-            "tech": "Gửi DTMF *2<project>*<ext> (hoặc *2<project>*<hotline>*<phone>) đưa khách vào Hold; iOS mở ChildConfirmForwardCallViewController, Android mở CallForwardBottomSheet."
+            "tech": "iOS (VPMAppService.attendedTransfer -> *2 + 0.3s + target) & Android (CallForwardDTMFHelper -> *2...) đưa khách vào Hold và mở màn xác nhận chuyển tiếp."
           },
           "techDetail": {
-            "platformDiffNote": "Cả 2 nền tảng đều phát DTMF *2 khởi tạo Attended Transfer; Android mở CallForwardBottomSheet và lắng nghe WebSocket CALL_TRANSFER / FCM type=10.",
+            "platformDiffNote": "Cả 2 nền tảng đều phát DTMF *2 (delay 300ms) để khởi tạo Attended Transfer (iOS không gửi lại *2 khi người nhận bắt máy); Android mở CallForwardBottomSheet và lắng nghe WebSocket CALL_TRANSFER / FCM type=10.",
             "codeRefs": [
-              "VBot/Controller/NewController/CallVC/Forward/ChildConfirmForwardCallViewController.swift"
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+Linphone.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift"
             ],
             "byPlatform": {
               "android": {
@@ -832,34 +849,45 @@
         },
         {
           "id": "call-tr-att-confirm",
-          "label": "Xác nhận bàn giao cuộc gọi (*9 / *2)",
+          "label": "Xác nhận bàn giao cuộc gọi",
+          "techLabel": "Xác nhận bàn giao cuộc gọi (*9)",
           "kind": "action",
           "audience": "all",
           "summary": {
             "overview": "Khách hàng được nối máy trực tiếp với người nhận mới, nhân viên ban đầu tự động rời khỏi cuộc gọi.",
-            "tech": "Bấm Xác nhận gửi DTMF *9 (hoặc *2 khi trạng thái ANSWER) -> FreeSWITCH nối Caller với Target và ngắt kênh Agent."
+            "tech": "Bấm Xác nhận luôn gửi DTMF *9 trên cả iOS (VPMAppService.attendedTransferAccept) và Android (CallForwardBottomSheet.tvForward); riêng Android khi polling nhận EnumStatusForward.ANSWER sẽ tự động gửi *2 rồi đóng sheet."
           },
           "techDetail": {
+            "platformDiffNote": "Khi người nhận bắt máy (EnumStatusForward.ANSWER), Android tự động gửi DTMF *2 và đóng CallForwardBottomSheet; iOS (ConfirmAskForwardViewController) cố tình không tự gửi lại *2 mà chờ người dùng chủ động bấm Xác nhận (*9).",
+            "codeRefs": [
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+Linphone.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift"
+            ],
             "byPlatform": {
               "android": {
-                "summary": "CallForwardBottomSheet phát DTMF *9 (hoặc *2) qua vBotPhone.sendDTMF để hoàn tất bàn giao cuộc gọi."
+                "summary": "Nút Xác nhận (tvForward) trên CallForwardBottomSheet luôn phát DTMF *9 qua vBotPhone.sendDTMF; riêng khi polling gặp ANSWER sẽ tự động phát *2 và đóng sheet."
               }
             }
           }
         },
         {
           "id": "call-tr-att-cancel",
-          "label": "Hủy chuyển (*1) & Quay lại nói chuyện với khách",
+          "label": "Hủy chuyển tiếp & Quay lại nói chuyện với khách",
+          "techLabel": "Hủy chuyển (*1) & Quay lại nói chuyện với khách",
           "kind": "error",
           "audience": "all",
           "summary": {
             "overview": "Nếu người nhận bận, từ chối hoặc không bắt máy, cuộc gọi tự động hoàn trả để nhân viên tiếp tục giải thích và hỗ trợ khách hàng.",
-            "tech": "Khi bấm Hủy hoặc nhận NOANSWER / MISSCALL / ENDCALL, app gửi DTMF *1, đóng màn hình chuyển tiếp và khôi phục đàm thoại giữa Agent và khách."
+            "tech": "CHỈ khi người dùng bấm nút Hủy, iOS (ConfirmAskForwardViewController -> VPMAppService.attendedTransferCancel) và Android (CallForwardBottomSheet) mới gửi DTMF *1. Khi nhận NOANSWER / MISSCALL / ENDCALL, cả 2 HĐH đều KHÔNG gửi *1 mà chỉ thông báo và đóng/reset UI."
           },
           "techDetail": {
+            "codeRefs": [
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+Linphone.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift"
+            ],
             "byPlatform": {
               "android": {
-                "summary": "CallForwardBottomSheet phát DTMF *1 qua vBotPhone.sendDTMF khi bấm Hủy hoặc nhận tín hiệu NOANSWER/MISSCALL từ FCM/WebSocket."
+                "summary": "CallForwardBottomSheet CHỈ phát DTMF *1 qua vBotPhone.sendDTMF khi người dùng bấm nút Hủy; khi nhận NOANSWER / MISSCALL / ENDCALL từ FCM/WebSocket chỉ hiện thông báo và đóng sheet (không gửi *1)."
               }
             }
           }
@@ -867,12 +895,9 @@
       ],
       "edges": [
         { "id": "e-tr-1", "source": "call-tr-open", "target": "call-tr-dest" },
-        { "id": "e-tr-2", "source": "call-tr-dest", "target": "call-tr-blind-api", "label": "Chuyển ngay (Blind - HTTP)", "platforms": ["ios"] },
-        { "id": "e-tr-3", "source": "call-tr-blind-api", "target": "call-tr-blind-done", "label": "+OK", "platforms": ["ios"] },
-        { "id": "e-tr-4", "source": "call-tr-blind-api", "target": "call-tr-blind-fallback", "label": "Lỗi / Timeout 5s", "platforms": ["ios"] },
-        { "id": "e-tr-and-1", "source": "call-tr-dest", "target": "call-tr-blind-fallback", "label": "Chuyển ngay (Blind - DTMF #1)", "platforms": ["android"] },
-        { "id": "e-tr-5", "source": "call-tr-blind-fallback", "target": "call-tr-blind-done" },
-        { "id": "e-tr-6", "source": "call-tr-dest", "target": "call-tr-att-hold", "label": "Hỏi trước (Attended)" },
+        { "id": "e-tr-2", "source": "call-tr-dest", "target": "call-tr-blind-dtmf", "label": "Chuyển ngay", "techLabel": "Chuyển ngay (Blind - DTMF #1)" },
+        { "id": "e-tr-5", "source": "call-tr-blind-dtmf", "target": "call-tr-blind-done" },
+        { "id": "e-tr-6", "source": "call-tr-dest", "target": "call-tr-att-hold", "label": "Hỏi trước", "techLabel": "Hỏi trước (Attended - DTMF *2)" },
         { "id": "e-tr-7", "source": "call-tr-att-hold", "target": "call-tr-att-decision" },
         { "id": "e-tr-8", "source": "call-tr-att-decision", "target": "call-tr-att-confirm", "label": "Đồng ý nhận" },
         { "id": "e-tr-9", "source": "call-tr-att-decision", "target": "call-tr-att-cancel", "label": "Hủy / Bận / Không nghe" }
@@ -887,22 +912,12 @@
           "edgeIds": ["e-tr-1", "e-tr-6", "e-tr-7", "e-tr-8"]
         },
         {
-          "id": "sc-transfer-blind-fallback",
-          "name": "Blind Transfer iOS lỗi HTTP tự fallback DTMF",
-          "description": "API bgapi timeout 5s -> app iOS tự phát DTMF #1 để không làm rớt yêu cầu chuyển tiếp.",
+          "id": "sc-transfer-blind-dtmf",
+          "name": "Chuyển tiếp ngay (Blind Transfer) thuần DTMF #1",
+          "description": "Cả iOS (VPMAppService.blindTransfer/phoneTransfer) và Android (CallForwardDTMFHelper) đều phát thẳng DTMF #1 (delay 300ms) qua kênh thoại.",
           "audience": "tech",
-          "platforms": ["ios"],
-          "nodeIds": ["call-tr-open", "call-tr-dest", "call-tr-blind-api", "call-tr-blind-fallback", "call-tr-blind-done"],
-          "edgeIds": ["e-tr-1", "e-tr-2", "e-tr-4", "e-tr-5"]
-        },
-        {
-          "id": "sc-transfer-android-blind",
-          "name": "Android Blind Transfer thuần DTMF #1",
-          "description": "Android bỏ qua HTTP FreeSWITCH bgapi, phát thẳng DTMF #1 (+ delay 300ms) qua CallForwardDTMFHelper.",
-          "audience": "tech",
-          "platforms": ["android"],
-          "nodeIds": ["call-tr-open", "call-tr-dest", "call-tr-blind-fallback", "call-tr-blind-done"],
-          "edgeIds": ["e-tr-1", "e-tr-and-1", "e-tr-5"]
+          "nodeIds": ["call-tr-open", "call-tr-dest", "call-tr-blind-dtmf", "call-tr-blind-done"],
+          "edgeIds": ["e-tr-1", "e-tr-2", "e-tr-5"]
         }
       ]
     },
@@ -914,18 +929,19 @@
       "nodes": [
         {
           "id": "call-ctrl-pip",
-          "label": "Thu nhỏ cuộc gọi (Picture-in-Picture)",
+          "label": "Thu nhỏ màn hình cuộc gọi (Cửa sổ nổi)",
+          "techLabel": "Thu nhỏ cuộc gọi (Picture-in-Picture)",
           "kind": "action",
           "audience": "all",
           "summary": {
             "overview": "Thu nhỏ màn hình gọi thành bong bóng nổi để nhân viên vừa nói chuyện vừa tra cứu dữ liệu ở các tab khác trong app.",
-            "tech": "iOS dùng PipCallViewController / FloatingView+Appdelegate; Android dùng NewCallActivity.enterPipMode() chuẩn Android Picture-in-Picture (CallBubbleService.kt đã tắt)."
+            "tech": "iOS dùng WindowsManager + PipCallViewController (FloatingView+Appdelegate đã comment out); Android dùng NewCallActivity.enterPipMode() chuẩn Android Picture-in-Picture (CallBubbleService.kt đã tắt)."
           },
           "techDetail": {
-            "platformDiffNote": "iOS tự vẽ cửa sổ nổi in-app (PipCallViewController); Android tắt CallBubbleService (overlay cũ) và chuyển sang hệ thống Picture-in-Picture gốc với RemoteAction tỷ lệ 2:3.",
+            "platformDiffNote": "iOS tự vẽ cửa sổ nổi in-app (WindowsManager + PipCallViewController); Android tắt CallBubbleService (overlay cũ) và chuyển sang hệ thống Picture-in-Picture gốc với RemoteAction tỷ lệ 2:3.",
             "codeRefs": [
               "VBot/Controller/NewController/CallVC/new/PipCallViewController.swift",
-              "VBot/AppDelegate/FloatingView+Appdelegate.swift"
+              "VBot/Controller/NewController/AppWindows/WindowsManager.swift"
             ],
             "byPlatform": {
               "android": {
@@ -943,18 +959,19 @@
         },
         {
           "id": "call-ctrl-audio",
-          "label": "Âm thanh, Giữ máy & Phím bấm (DTMF)",
+          "label": "Loa ngoài, Tắt mic & Bàn phím số",
+          "techLabel": "Âm thanh & Phím bấm (DTMF)",
           "kind": "process",
           "audience": "all",
           "summary": {
-            "overview": "Bật/tắt micro, chuyển loa ngoài/Bluetooth, tạm giữ cuộc gọi (Hold trên iOS) và bấm phím số tương tác tổng đài tự động (IVR).",
-            "tech": "iOS hỗ trợ đầy đủ Mute, Speaker, Hold & DTMF qua VPMAppService+CallFeatures; Android dùng AudioManager.isMicrophoneMute + vBotPhone.sendDTMF + native in-call actions (chưa có nút Hold)."
+            "overview": "Bật/tắt micro, chuyển loa ngoài/Bluetooth và bấm phím số tương tác tổng đài tự động.",
+            "tech": "iOS gọi trực tiếp Telephone.sharedInstance (muteCall, onOffSpeaker, sendDTMF) ngay trong NewCallViewController (không có nút Hold); Android dùng AudioManager.isMicrophoneMute + vBotPhone.sendDTMF + native in-call actions (VBotCall.toggleHold() đã comment out)."
           },
           "techDetail": {
-            "platformDiffNote": "Chênh lệch tính năng: iOS có nút Hold (giữ máy); Android đã comment out VBotCall.toggleHold() nên không hiển thị nút Hold trên NewCallActivity và dùng các nút thao tác native thay cho Mini App bridge trong cuộc gọi.",
+            "platformDiffNote": "1) Cả iOS (NewCallViewController, enum VPMCallFunc) và Android (VBotCall.toggleHold() đã comment out) đều KHÔNG có nút Hold trên UI live. 2) Android dùng native in-call actions trên NewCallActivity thay vì Mini App bridge trong cuộc gọi.",
             "codeRefs": [
-              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallFeatures.swift",
-              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallState.swift"
+              "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift",
+              "3rdLib/TelephoneSDK/Sources/TelephoneSDK.swift"
             ],
             "byPlatform": {
               "android": {
@@ -978,7 +995,7 @@
           "audience": "tech",
           "summary": {
             "overview": "Khi cuộc gọi chưa kết nối (đang đổ chuông), toàn bộ nút tính năng (Tag, Ghi chú, Chuyển tiếp...) bị làm mờ và khóa bấm để tránh thao tác nhầm; phần Khảo sát DTMF #3 mới dừng ở lớp helper trên iOS và chưa gắn lên UI ở nhánh Nam-dev.",
-            "tech": "iOS dùng CallSurveyHelper.canTriggerCallFunc (alpha = 0.45 khi !isCallConnected) tại ChildCallFuncViewController & NewCallViewController; Android dùng CallPipHelper.resolveCallFeatureVisibility (DISABLED_FEATURE_ALPHA = 0.45f, areFeaturesEnabled = isConnected)."
+            "tech": "iOS dùng CallSurveyHelper.canTriggerCallFunc (alpha = 0.45 khi !isCallConnected) tại NewCallViewController (ChildCallFuncViewController thuộc VPMCallViewController cũ đã không còn được gọi); Android dùng CallPipHelper.resolveCallFeatureVisibility (DISABLED_FEATURE_ALPHA = 0.45f, areFeaturesEnabled = isConnected)."
           },
           "techDetail": {
             "platformDiffNote": "Trên nhánh Nam-dev của cả iOS lẫn Android, nút Khảo sát (#3) CHƯA được gắn lên giao diện (iOS chỉ mới chuẩn bị sẵn helper CallSurveyHelper.dtmfSequence = \"#3\", còn Android chưa có showConfirmCallSurveyDialog / DTMF #3). Cả hai HĐH đều đồng bộ khóa mờ các nút chức năng tại alpha 0.45 khi chưa kết nối.",
@@ -988,7 +1005,6 @@
             ],
             "codeRefs": [
               "VBot/Service/CallSurveyHelper.swift",
-              "VBot/Controller/NewController/CallVC/ChildCallFuncViewController.swift",
               "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
             ],
             "byPlatform": {
@@ -1016,7 +1032,7 @@
             "tech": "Khi trạng thái DISCONNECTED, InAppTopIndicatorHelper.showCallResult tra SipCodeRepository (GET api/module-cdr/sipcode/getAll?type=CDR + bảng fallback 200, 486, 603, 480, 487, 408, 503) rồi hiện TopCapsuleOverlayHost (foreground 2000ms) hoặc SipCallResultNotificationHelper (background)."
           },
           "techDetail": {
-            "platformDiffNote": "Tính năng riêng của Android (iOS chưa có tương đương): chống trùng lặp 2 giây và phát Notification trên kênh vbot_sip_call_result khi app ở nền.",
+            "platformDiffNote": "Android-only cho SipCodeRepository (GET api/module-cdr/sipcode/getAll?type=CDR) & notification nền kênh vbot_sip_call_result; iOS tuy không có SipCodeRepository hay notification nền nhưng CÓ banner kết quả cuộc gọi ở foreground qua AppDelegate.showEndCallIndicator(reason: TeleEndCallReason) -> SPIndicator (nhiều nhãn trên Android còn comment lấy chuẩn theo iOS).",
             "apisOrEvents": [
               "GET api/module-cdr/sipcode/getAll?type=CDR",
               "Fallback local map: 200, 486, 603, 480, 487, 408, 503",

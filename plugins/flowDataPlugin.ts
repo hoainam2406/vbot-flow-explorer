@@ -47,6 +47,33 @@ export function collectTechOnlyMediaPaths(dataset: MergedFlowDataset): string[] 
   return [...techSrcs].filter((src) => !publicSrcs.has(src));
 }
 
+export function hasRealMediaFiles(rootDir: string, dataset: MergedFlowDataset): boolean {
+  const publicDir = path.resolve(rootDir, 'public');
+  const inspectNodes = (nodes: FlowNodeData[]): boolean => {
+    for (const node of nodes) {
+      for (const m of node.media ?? []) {
+        const cleanRel = m.src.replace(/^\/+/, '');
+        if (!cleanRel) continue;
+        const fullPath = path.resolve(publicDir, cleanRel);
+        if (fullPath.startsWith(publicDir + path.sep) && fs.existsSync(fullPath)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  if (inspectNodes([dataset.rootNode, ...dataset.branches])) {
+    return true;
+  }
+  for (const sub of Object.values(dataset.subtreesByParentId)) {
+    if (inspectNodes(sub.nodes)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function loadMergedDataset(rootDir: string): MergedFlowDataset {
   const dataDir = path.join(rootDir, 'data');
   const manifest = JSON.parse(
@@ -82,7 +109,11 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
       const merged = loadMergedDataset(resolvedConfig.root);
       techOnlyMedia = collectTechOnlyMediaPaths(merged);
       const output = buildTarget === 'public' ? sanitizeForPublic(merged) : merged;
-      return `export default ${JSON.stringify(output)};`;
+      const payload: MergedFlowDataset = {
+        ...output,
+        hasRealMedia: hasRealMediaFiles(resolvedConfig.root, output),
+      };
+      return `export default ${JSON.stringify(payload)};`;
     },
     handleHotUpdate({ file, server }) {
       const dataPrefix = path.join(resolvedConfig.root, 'data') + path.sep;

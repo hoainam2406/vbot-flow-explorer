@@ -40,6 +40,7 @@ export function searchFlowNodes(
     const extraTechFields =
       __ENABLE_TECH_MODE__ && mode === 'tech'
         ? [
+            n.techLabel ?? '',
             n.summary.tech ?? '',
             n.techDetail?.platformDiffNote ?? '',
             ...(n.techDetail?.apisOrEvents ?? []),

@@ -5,6 +5,15 @@ import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { extractParityReport } from '../core/parityAnalyzer';
 import type { PlatformViewMode } from '../data/schema';
 
+const props = withDefaults(
+  defineProps<{
+    showParity?: boolean;
+  }>(),
+  {
+    showParity: true,
+  },
+);
+
 const emit = defineEmits<{
   openParity: [];
 }>();
@@ -14,7 +23,9 @@ if (!explorer) {
   throw new Error('FLOW_EXPLORER_KEY must be provided');
 }
 
-const parityTotal = computed(() => extractParityReport(explorer.dataset).total);
+const parityTotal = computed(() =>
+  props.showParity ? extractParityReport(explorer.dataset).total : 0,
+);
 
 const selectPlatform = (mode: PlatformViewMode) => {
   explorer.setPlatformMode(mode);
@@ -68,6 +79,7 @@ const selectPlatform = (mode: PlatformViewMode) => {
     </div>
 
     <button
+      v-if="props.showParity"
       type="button"
       class="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 transition hover:border-amber-300 hover:bg-amber-100"
       title="Xem bảng tổng hợp mọi điểm khác biệt iOS ↔ Android"

@@ -3,6 +3,7 @@ import { computed, inject, ref, watch } from 'vue';
 import { Handle, Position } from '@vue-flow/core';
 import { Film, Image as ImageIcon } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY, getVisibleMedia } from '../../composables/useFlowExplorer';
+import { getNodeDisplayLabel } from '../../core/graphEngine';
 import type { PositionedFlowNodeData } from '../../composables/useGraphLayout';
 import type { NodeKind } from '../../data/schema';
 
@@ -94,6 +95,10 @@ const platformBadge = computed<{ label: string; cls: string } | null>(() => {
 const visibleMedia = computed(() => getVisibleMedia(props.data, explorer.audienceMode.value));
 const firstMedia = computed(() => visibleMedia.value[0] ?? null);
 const mediaError = ref(false);
+const hasRealMedia = computed(() => explorer.dataset.hasRealMedia !== false);
+const displayLabel = computed(() =>
+  getNodeDisplayLabel(props.data, explorer.audienceMode.value),
+);
 
 watch(
   () => firstMedia.value?.src,
@@ -103,7 +108,11 @@ watch(
 );
 
 const showThumbnail = computed(
-  () => explorer.showCanvasMedia.value && Boolean(firstMedia.value) && !mediaError.value,
+  () =>
+    hasRealMedia.value &&
+    explorer.showCanvasMedia.value &&
+    Boolean(firstMedia.value) &&
+    !mediaError.value,
 );
 
 const canExpand = computed(() => explorer.hasSubtree(props.data.id));
@@ -113,19 +122,38 @@ const isSelected = computed(
   () => explorer.selectedNodeId.value === props.data.id || Boolean(props.selected),
 );
 
-const activeScenario = computed(() => {
-  const scId = explorer.activeScenarioId.value;
-  if (!scId) return null;
-  return explorer.visibleFlow.value.activeScenarios.find((s) => s.id === scId) ?? null;
+const activeScenario = computed(() => explorer.activeScenario.value);
+const scenarioStepIndex = computed(() =>
+  activeScenario.value ? activeScenario.value.nodeIds.indexOf(props.data.id) : -1,
+);
+const scenarioStepNumber = computed(() =>
+  scenarioStepIndex.value >= 0 ? scenarioStepIndex.value + 1 : null,
+);
+const activeStepIdx = computed(() => explorer.activeScenarioStepIndex.value);
+const isScenarioHit = computed(() => scenarioStepIndex.value >= 0);
+const isCurrentScenarioStep = computed(
+  () =>
+    isScenarioHit.value &&
+    activeStepIdx.value !== null &&
+    scenarioStepIndex.value === activeStepIdx.value,
+);
+const isUpcomingScenarioStep = computed(
+  () =>
+    isScenarioHit.value &&
+    activeStepIdx.value !== null &&
+    scenarioStepIndex.value > activeStepIdx.value,
+);
+
+const scenarioCardClass = computed(() => {
+  if (!activeScenario.value) return '';
+  if (!isScenarioHit.value) return 'opacity-20';
+  if (isCurrentScenarioStep.value) return 'ring-2 ring-blue-600 ring-offset-2 shadow-lg';
+  if (isUpcomingScenarioStep.value) return 'opacity-70 ring-1 ring-blue-300';
+  return 'ring-2 ring-blue-500 shadow-md';
 });
 
-const isScenarioHit = computed(() =>
-  activeScenario.value ? activeScenario.value.nodeIds.includes(props.data.id) : false,
-);
-const isDimmed = computed(() => Boolean(activeScenario.value) && !isScenarioHit.value);
-
 const onSelectNode = () => {
-  explorer.selectedNodeId.value = props.data.id;
+  explorer.selectNode(props.data.id);
 };
 
 const onToggleBranch = () => {
@@ -141,13 +169,25 @@ const onToggleBranch = () => {
     :class="[
       kindMeta.card,
       isSelected ? 'ring-2 ring-slate-900 ring-offset-1' : '',
-      isScenarioHit ? 'ring-2 ring-blue-500 shadow-md' : '',
-      isDimmed ? 'opacity-25' : 'opacity-100',
+      scenarioCardClass,
     ]"
     :style="{ width: `${props.data.estimatedWidth}px` }"
     @click="onSelectNode"
     @dblclick.stop="onToggleBranch"
   >
+    <span
+      v-if="scenarioStepNumber !== null"
+      class="absolute -top-2.5 -left-2.5 z-10 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-bold shadow-sm"
+      :class="
+        isCurrentScenarioStep
+          ? 'bg-blue-600 text-white ring-2 ring-white'
+          : isUpcomingScenarioStep
+            ? 'border border-blue-300 bg-blue-50 text-blue-700'
+            : 'bg-blue-500 text-white'
+      "
+    >
+      {{ scenarioStepNumber }}
+    </span>
     <Handle
       type="target"
       :position="targetPosition ?? Position.Left"
@@ -184,7 +224,7 @@ const onToggleBranch = () => {
       </div>
 
       <span
-        v-if="visibleMedia.length > 0"
+        v-if="hasRealMedia && visibleMedia.length > 0"
         class="inline-flex shrink-0 items-center gap-0.5 rounded bg-white/80 px-1 py-0.5 text-[10px] font-medium text-slate-600"
         title="Có ảnh / video minh họa"
       >
@@ -195,7 +235,7 @@ const onToggleBranch = () => {
     </div>
 
     <div class="line-clamp-2 text-[13px] leading-snug font-semibold text-slate-900">
-      {{ props.data.label }}
+      {{ displayLabel }}
     </div>
 
     <div

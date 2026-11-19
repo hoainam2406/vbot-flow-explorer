@@ -1,6 +1,9 @@
 // tests/flowDataPlugin.test.ts
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { collectTechOnlyMediaPaths } from '../plugins/flowDataPlugin';
+import { collectTechOnlyMediaPaths, hasRealMediaFiles } from '../plugins/flowDataPlugin';
 import type { MergedFlowDataset } from '../src/data/schema';
 
 describe('collectTechOnlyMediaPaths', () => {
@@ -92,5 +95,38 @@ describe('collectTechOnlyMediaPaths', () => {
     };
 
     expect(collectTechOnlyMediaPaths(dataset)).toEqual(['/media/nested-tech.webp']);
+  });
+
+  it('detects whether any referenced media files actually exist under public/', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vbot-media-test-'));
+    try {
+      const publicMediaDir = path.join(tmpRoot, 'public', 'media', 'app');
+      fs.mkdirSync(publicMediaDir, { recursive: true });
+
+      const dataset: MergedFlowDataset = {
+        app: { name: 'VBot', tagline: 'Test' },
+        rootNode: {
+          id: 'root',
+          label: 'Root',
+          kind: 'module',
+          audience: 'all',
+          summary: { overview: 'R' },
+          media: [
+            { src: '/media/app/vbot-home.webp', caption: 'Home', audience: 'all' },
+            { src: '../../package.json', caption: 'Outside traversal' },
+          ],
+        },
+        branches: [],
+        branchEdges: [],
+        subtreesByParentId: {},
+      };
+
+      expect(hasRealMediaFiles(tmpRoot, dataset)).toBe(false);
+
+      fs.writeFileSync(path.join(publicMediaDir, 'vbot-home.webp'), 'stub-webp');
+      expect(hasRealMediaFiles(tmpRoot, dataset)).toBe(true);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });

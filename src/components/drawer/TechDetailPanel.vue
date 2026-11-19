@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import {
   AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronRight,
   Columns2,
+  Copy,
 } from 'lucide-vue-next';
+import { copyTextToClipboard } from '../../core/downloadHelper';
 import type {
   BridgeMessage,
   FlowNodeData,
@@ -22,11 +25,29 @@ const props = defineProps<{
 }>();
 
 const expandedMap = ref<Record<number, boolean>>({});
+const copiedKey = ref<string | null>(null);
+let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+const copyValue = async (key: string, value: string) => {
+  const ok = await copyTextToClipboard(value);
+  if (ok) {
+    copiedKey.value = key;
+    if (copyResetTimer) clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      copiedKey.value = null;
+    }, 1500);
+  }
+};
+
+onBeforeUnmount(() => {
+  if (copyResetTimer) clearTimeout(copyResetTimer);
+});
 
 watch(
   () => props.node.id,
   () => {
     expandedMap.value = {};
+    copiedKey.value = null;
   },
 );
 
@@ -577,10 +598,20 @@ const techSections = computed<RenderedTechSection[]>(() => {
           </p>
 
           <div v-if="msg.examplePayload || msg.payload" class="space-y-1">
-            <div class="flex flex-wrap items-baseline justify-between gap-1 text-[11px]">
+            <div class="flex flex-wrap items-center justify-between gap-1 text-[11px]">
               <span class="font-semibold text-slate-700">
                 {{ msg.examplePayload ? 'Ví dụ dữ liệu truyền vào (JSON)' : 'Tham số truyền (Schema)' }}
               </span>
+              <button
+                v-if="msg.examplePayload"
+                type="button"
+                class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                @click="copyValue(`payload-${idx}`, msg.examplePayload)"
+              >
+                <Check v-if="copiedKey === `payload-${idx}`" class="h-3 w-3 text-emerald-600" />
+                <Copy v-else class="h-3 w-3" />
+                {{ copiedKey === `payload-${idx}` ? 'Đã copy' : 'Copy' }}
+              </button>
             </div>
             <pre
               v-if="msg.examplePayload"
@@ -596,8 +627,20 @@ const techSections = computed<RenderedTechSection[]>(() => {
           </div>
 
           <div v-if="msg.exampleResponse || msg.response" class="space-y-1">
-            <div class="text-[11px] font-semibold text-slate-700">
-              {{ msg.exampleResponse ? 'Ví dụ dữ liệu trả về (JSON)' : 'Dữ liệu trả về (Schema)' }}
+            <div class="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+              <span class="font-semibold text-slate-700">
+                {{ msg.exampleResponse ? 'Ví dụ dữ liệu trả về (JSON)' : 'Dữ liệu trả về (Schema)' }}
+              </span>
+              <button
+                v-if="msg.exampleResponse"
+                type="button"
+                class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                @click="copyValue(`response-${idx}`, msg.exampleResponse)"
+              >
+                <Check v-if="copiedKey === `response-${idx}`" class="h-3 w-3 text-emerald-600" />
+                <Copy v-else class="h-3 w-3" />
+                {{ copiedKey === `response-${idx}` ? 'Đã copy' : 'Copy' }}
+              </button>
             </div>
             <pre
               v-if="msg.exampleResponse"
@@ -643,9 +686,22 @@ const techSections = computed<RenderedTechSection[]>(() => {
               v-for="item in section.iosItems"
               :key="`ios-${item}`"
               class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
-              :class="section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed'"
+              :class="[
+                section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed',
+                section.key === 'codeRefs' ? 'flex items-start justify-between gap-2' : '',
+              ]"
             >
-              {{ item }}
+              <span :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 break-all' : ''">{{ item }}</span>
+              <button
+                v-if="section.key === 'codeRefs'"
+                type="button"
+                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                :title="copiedKey === `ios-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
+                @click="copyValue(`ios-ref-${item}`, item)"
+              >
+                <Check v-if="copiedKey === `ios-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600" />
+                <Copy v-else class="h-3.5 w-3.5" />
+              </button>
             </li>
           </ul>
           <p v-else class="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs italic text-slate-400">
@@ -662,9 +718,22 @@ const techSections = computed<RenderedTechSection[]>(() => {
               v-for="item in section.androidItems"
               :key="`and-${item}`"
               class="rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs text-slate-700"
-              :class="section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed'"
+              :class="[
+                section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed',
+                section.key === 'codeRefs' ? 'flex items-start justify-between gap-2' : '',
+              ]"
             >
-              {{ item }}
+              <span :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 break-all' : ''">{{ item }}</span>
+              <button
+                v-if="section.key === 'codeRefs'"
+                type="button"
+                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                :title="copiedKey === `and-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
+                @click="copyValue(`and-ref-${item}`, item)"
+              >
+                <Check v-if="copiedKey === `and-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600" />
+                <Copy v-else class="h-3.5 w-3.5" />
+              </button>
             </li>
           </ul>
           <p v-else class="rounded-lg border border-dashed border-emerald-200 px-3 py-2 text-xs italic text-slate-400">
@@ -678,9 +747,22 @@ const techSections = computed<RenderedTechSection[]>(() => {
           v-for="item in section.sharedItems"
           :key="item"
           class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
-          :class="section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed'"
+          :class="[
+            section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed',
+            section.key === 'codeRefs' ? 'flex items-start justify-between gap-2' : '',
+          ]"
         >
-          {{ item }}
+          <span :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 break-all' : ''">{{ item }}</span>
+          <button
+            v-if="section.key === 'codeRefs'"
+            type="button"
+            class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700"
+            :title="copiedKey === `shared-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
+            @click="copyValue(`shared-ref-${item}`, item)"
+          >
+            <Check v-if="copiedKey === `shared-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600" />
+            <Copy v-else class="h-3.5 w-3.5" />
+          </button>
         </li>
       </ul>
     </section>

@@ -163,8 +163,9 @@ describe('parityAnalyzer', () => {
 
     expect(byId.get('call-in-android-fsi')?.primaryCategory).toBe('android_only');
     expect(byId.get('call-ctrl-sip-code')?.primaryCategory).toBe('android_only');
-    expect(byId.get('call-tr-blind-api')?.primaryCategory).toBe('ios_only');
     expect(byId.get('call-in-raw-log')?.primaryCategory).toBe('ios_only');
+    expect(byId.get('prj-call-type-ios')?.primaryCategory).toBe('ios_only');
+    expect(byId.get('acc-delete-ios')?.primaryCategory).toBe('ios_only');
 
     const loopGuard = byId.get('mauc-loop-guard');
     expect(loopGuard).toBeDefined();

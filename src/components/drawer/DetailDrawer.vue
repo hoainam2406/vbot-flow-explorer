@@ -1,9 +1,23 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref } from 'vue';
-import { Check, Download, FileText, Focus, GitBranch, Link2, RotateCcw, X } from 'lucide-vue-next';
+import {
+  ArrowLeft,
+  Check,
+  Download,
+  FileText,
+  Focus,
+  GitBranch,
+  Link2,
+  RotateCcw,
+  X,
+} from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
 import { copyTextToClipboard, downloadTextFile, slugifyFilename } from '../../core/downloadHelper';
-import { isVisibleForMode, isVisibleForPlatform } from '../../core/graphEngine';
+import {
+  getNodeDisplayLabel,
+  isVisibleForMode,
+  isVisibleForPlatform,
+} from '../../core/graphEngine';
 import { exportNodeOverviewMarkdown } from '../../core/publicMarkdownExport';
 import type { NodeKind } from '../../data/schema';
 import MediaGallery from './MediaGallery.vue';
@@ -30,6 +44,15 @@ const KIND_BADGE_MAP: Record<NodeKind, { label: string; cls: string }> = {
 };
 
 const node = computed(() => explorer.selectedNode.value);
+const displayLabel = computed(() =>
+  node.value ? getNodeDisplayLabel(node.value, explorer.audienceMode.value) : '',
+);
+const previousNodeLabel = computed(() =>
+  explorer.previousNode.value
+    ? getNodeDisplayLabel(explorer.previousNode.value, explorer.audienceMode.value)
+    : null,
+);
+const isTechView = computed(() => enableTechMode && explorer.audienceMode.value === 'tech');
 const kindMeta = computed(() => (node.value ? KIND_BADGE_MAP[node.value.kind] : null));
 const isTechNode = computed(() => enableTechMode && node.value?.audience === 'tech');
 
@@ -74,7 +97,9 @@ const drawerWidthClass = computed(() =>
 );
 
 const copiedMd = ref(false);
+const copiedLink = ref(false);
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+let linkResetTimer: ReturnType<typeof setTimeout> | null = null;
 
 const buildCurrentNodeMarkdown = async (): Promise<string> => {
   const current = node.value;
@@ -106,11 +131,24 @@ const handleDownloadMd = async () => {
   if (!current) return;
   const md = await buildCurrentNodeMarkdown();
   if (!md) return;
-  downloadTextFile(`${slugifyFilename(current.label)}.md`, md);
+  downloadTextFile(`${slugifyFilename(displayLabel.value)}.md`, md);
+};
+
+const handleCopyLink = async () => {
+  if (typeof window === 'undefined') return;
+  const ok = await copyTextToClipboard(window.location.href);
+  if (ok) {
+    copiedLink.value = true;
+    if (linkResetTimer) clearTimeout(linkResetTimer);
+    linkResetTimer = setTimeout(() => {
+      copiedLink.value = false;
+    }, 1500);
+  }
 };
 
 onBeforeUnmount(() => {
   if (copyResetTimer) clearTimeout(copyResetTimer);
+  if (linkResetTimer) clearTimeout(linkResetTimer);
 });
 </script>
 
@@ -121,7 +159,18 @@ onBeforeUnmount(() => {
     :class="drawerWidthClass"
   >
     <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-      <div class="min-w-0">
+      <div class="min-w-0 flex-1">
+        <button
+          v-if="previousNodeLabel"
+          type="button"
+          class="mb-2 inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+          :title="`Quay lại: ${previousNodeLabel}`"
+          @click="explorer.goBack()"
+        >
+          <ArrowLeft class="h-3 w-3 shrink-0" />
+          <span class="truncate">Quay lại: {{ previousNodeLabel }}</span>
+        </button>
+
         <div class="mb-1.5 flex flex-wrap items-center gap-1.5">
           <span
             v-if="kindMeta"
@@ -138,18 +187,31 @@ onBeforeUnmount(() => {
           </span>
         </div>
         <h2 class="text-base leading-snug font-bold text-slate-900">
-          {{ node.label }}
+          {{ displayLabel }}
         </h2>
       </div>
 
-      <button
-        type="button"
-        aria-label="Đóng chi tiết"
-        class="shrink-0 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-        @click="explorer.selectedNodeId.value = null"
-      >
-        <X class="h-4 w-4" />
-      </button>
+      <div class="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          :aria-label="copiedLink ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn tới mục này'"
+          :title="copiedLink ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn tới mục này'"
+          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          @click="handleCopyLink"
+        >
+          <Check v-if="copiedLink" class="h-4 w-4 text-emerald-600" />
+          <Link2 v-else class="h-4 w-4" />
+        </button>
+
+        <button
+          type="button"
+          aria-label="Đóng chi tiết"
+          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          @click="explorer.selectedNodeId.value = null"
+        >
+          <X class="h-4 w-4" />
+        </button>
+      </div>
     </div>
 
     <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4">
@@ -187,7 +249,15 @@ onBeforeUnmount(() => {
         >
           <Check v-if="copiedMd" class="h-3.5 w-3.5 text-emerald-600" />
           <FileText v-else class="h-3.5 w-3.5" />
-          {{ copiedMd ? 'Đã copy MD' : 'Copy MD' }}
+          {{
+            copiedMd
+              ? isTechView
+                ? 'Đã copy MD'
+                : 'Đã sao chép'
+              : isTechView
+                ? 'Copy MD'
+                : 'Sao chép mô tả'
+          }}
         </button>
 
         <button
@@ -196,7 +266,7 @@ onBeforeUnmount(() => {
           @click="handleDownloadMd"
         >
           <Download class="h-3.5 w-3.5" />
-          Tải .md
+          {{ isTechView ? 'Tải .md' : 'Tải tài liệu' }}
         </button>
       </div>
 
@@ -234,7 +304,7 @@ onBeforeUnmount(() => {
             class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
             @click="explorer.jumpToNode(target.id)"
           >
-            {{ target.label }}
+            {{ getNodeDisplayLabel(target, explorer.audienceMode.value) }}
           </button>
         </div>
       </section>
