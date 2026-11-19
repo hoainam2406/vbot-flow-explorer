@@ -1,7 +1,7 @@
 // tests/validateDataset.test.ts
 import { describe, expect, it } from 'vitest';
 import { validateDataset } from '../src/data/validateDataset';
-import type { AppManifest, FlowModuleFile } from '../src/data/schema';
+import { BridgeMessageSchema, type AppManifest, type FlowModuleFile } from '../src/data/schema';
 
 const validManifest: AppManifest = {
   schemaVersion: '1.0',
@@ -98,6 +98,8 @@ describe('validateDataset', () => {
                     {
                       direction: 'miniapp_to_host',
                       name: 'user_contact_get_local',
+                      hostFn: 'MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.executeGetLocal',
+                      miniAppFn: 'getLocalContactsState() → postEvent("request_host_action")',
                       payload: '{ request_id }',
                       response: '{ success, contacts[] }',
                     },
@@ -110,6 +112,49 @@ describe('validateDataset', () => {
       },
     };
     expect(validateDataset(validManifest, [withValidBridge])).toEqual([]);
+
+    const parsedMessage = BridgeMessageSchema.parse({
+      direction: 'miniapp_to_host',
+      name: 'user_contact_get_local',
+      hostFn: 'MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.executeGetLocal',
+      miniAppFn: 'getLocalContactsState() → postEvent("request_host_action")',
+    });
+    expect(parsedMessage.hostFn).toBe(
+      'MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.executeGetLocal',
+    );
+    expect(parsedMessage.miniAppFn).toBe('getLocalContactsState() → postEvent("request_host_action")');
+
+    const withEmptyHostFn = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Empty hostFn',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'Bad' },
+              techDetail: {
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-test',
+                  embedMode: 'modal',
+                  messages: [
+                    {
+                      direction: 'miniapp_to_host',
+                      name: 'test_action',
+                      hostFn: '',
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [withEmptyHostFn]).length).toBeGreaterThan(0);
 
     const withInvalidBridge = {
       ...validModule,

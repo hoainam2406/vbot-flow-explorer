@@ -150,6 +150,8 @@ describe('graphEngine', () => {
                 {
                   direction: 'miniapp_to_host',
                   name: 'user_contact_get_local',
+                  hostFn: 'UserContactMiniAppBridgeHelper.executeGetLocal',
+                  miniAppFn: 'getLocalContactsState()',
                 },
               ],
             },
@@ -164,5 +166,7 @@ describe('graphEngine', () => {
     expect(jsonText).not.toContain('miniAppBridge');
     expect(jsonText).not.toContain('vb-ma-user-contact');
     expect(jsonText).not.toContain('user_contact_get_local');
+    expect(jsonText).not.toContain('executeGetLocal');
+    expect(jsonText).not.toContain('getLocalContactsState');
   });
 });

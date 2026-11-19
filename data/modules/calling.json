@@ -310,6 +310,8 @@
                 {
                   "direction": "miniapp_to_host",
                   "name": "make_call",
+                  "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
+                  "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
                   "payload": "Nested: { request_id, callee_info: { phoneNumber, displayName, typeCall, avatar, avatarColor, hotline, payload: { customerId } } } hoặc Flat: { request_id, phoneNumber, displayName, customerId, hotlineNumber }",
                   "response": "{ request_id, success: Bool, reason?: 'MISSING_PHONE_NUMBER' }",
                   "note": "typeCall == 'app_to_app' → gọi nội bộ VPM; ngược lại → gọi Hotline ra ngoài và bảo toàn suppliedCallerName."

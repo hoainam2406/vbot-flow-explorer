@@ -49,12 +49,16 @@
           {
             "direction": "host_init",
             "name": "openMiniApp / createMiniAppViewController",
+            "hostFn": "MiniAppService.openMiniApp(id:locale:startParam:extraData:) → VbMa.shared.openMiniApp(...) / VbMa.shared.createMiniAppViewController(...)",
+            "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
             "payload": "{ locale, startParam, extraData: { theme_params, themeParams, isAdmin } }",
             "note": "Host cung cấp apiBaseURL, currentAccessToken, projectCode, uid, source: 'App' qua VbMaDelegate."
           },
           {
             "direction": "miniapp_to_host",
             "name": "request_mini_app_token",
+            "hostFn": "MiniAppService.prewarmMiniAppTokenIfNeeded(force:) / VbMaViewController.userContentController(_:didReceive:) → sendEvent(\"mini_app_token_result\", payload:)",
+            "miniAppFn": "requestMiniAppToken(timeoutMs) → postEvent(\"request_mini_app_token\") + on(\"mini_app_token_result\", cb)",
             "payload": "{ request_id }",
             "response": "MiniAppToken (RAM cache TTL 600s, scope apiBaseURL|projectCode|uid)",
             "note": "Host chủ động pre-warm sau configure() và refreshHostToken()."
@@ -62,12 +66,16 @@
           {
             "direction": "miniapp_to_host",
             "name": "refreshHostToken",
+            "hostFn": "MiniAppService.refreshHostToken() → BaseService.reLoginWithToken(...) + prewarmMiniAppTokenIfNeeded(force: true)",
+            "miniAppFn": "requestMiniAppToken() / requestModuleToken(module, timeoutMs, force: true) (@vbotma/sdk)",
             "response": "Token mới + pre-warm lại MiniAppToken",
             "note": "SDK tự gọi khi API Mini App trả 401 (BaseService.reLoginWithToken)."
           },
           {
             "direction": "miniapp_to_host",
             "name": "check_permissions",
+            "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → VPMRoleService → VbMaViewController.sendEvent(\"permissions_result\", payload:)",
+            "miniAppFn": "checkPermission(module, action) / checkPermissions(module, actions) → postEvent(\"check_permissions\") + on(\"permissions_result\", cb)",
             "payload": "{ module, actions[] }",
             "response": "{ [action]: Bool }",
             "note": "Map qua VPMRoleService (VD 'CRM' -> 'CUSTOMER', 'VIEW' -> 'SHOW')."
@@ -75,12 +83,16 @@
           {
             "direction": "miniapp_to_host",
             "name": "get_session_info",
+            "hostFn": "MiniAppService.onHostActionRequested(requestId:action:payload:) [case \"get_session_info\"] → VbMaViewController.sendEvent(\"host_action_result\", payload:)",
+            "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"get_session_info\" }) + on(\"host_action_result\", cb)",
             "payload": "{ request_id }",
             "response": "{ request_id, success, session_id, socket_url, isAdmin }"
           },
           {
             "direction": "miniapp_to_host",
             "name": "make_call",
+            "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
+            "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
             "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall, avatar, hotline }",
             "response": "{ request_id, success, reason? }"
           }
@@ -284,6 +296,8 @@
                 {
                   "direction": "miniapp_to_host",
                   "name": "start_autodial",
+                  "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → start(autoDialId:hotline:campaignName:)",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"start_autodial\", payload }) + on(\"host_action_result\", cb)",
                   "payload": "{ autoDialId, hotline, campaignName? }",
                   "response": "{ request_id, success, state, totalCalled, currentPhone, ... }",
                   "note": "Từ chối nếu đang có cuộc gọi active; mở WebSocket Autodial."
@@ -291,35 +305,47 @@
                 {
                   "direction": "miniapp_to_host",
                   "name": "pause_autodial",
+                  "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → pause()",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"pause_autodial\" }) + on(\"host_action_result\", cb)",
                   "response": "State snapshot (state: 'paused')",
                   "note": "Hoàn tất cuộc gọi hiện tại rồi dừng quay số mới."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "resume_autodial",
+                  "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → resume()",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"resume_autodial\" }) + on(\"host_action_result\", cb)",
                   "response": "State snapshot",
                   "note": "Tiếp tục lấy số điện thoại kế tiếp."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "stop_autodial",
+                  "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → stop()",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"stop_autodial\" }) + on(\"host_action_result\", cb)",
                   "response": "State snapshot (state: 'stopped')",
                   "note": "Đóng WebSocket và kết thúc phiên chiến dịch."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "get_autodial_state",
+                  "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → toStateMap()",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"get_autodial_state\" }) + on(\"host_action_result\", cb)",
                   "response": "{ state, currentAutoDialId, totalCalled, currentPhone, errorMessage? }"
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "autodial_finished",
+                  "hostFn": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent(\"autodial_finished\", data:) → VbMa.shared.emitEvent(...)",
+                  "miniAppFn": "on(\"autodial_finished\", cb) (@vbotma/sdk)",
                   "payload": "{ autoDialId, campaignName }",
                   "note": "Đẩy về Mini App khi chiến dịch hết số."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "autodial_error",
+                  "hostFn": "AutodialManager.handleAutoDialError(_:) → MiniAppService.shared.emitMiniAppEvent(\"autodial_error\", data:) → VbMa.shared.emitEvent(...)",
+                  "miniAppFn": "on(\"autodial_error\", cb) (@vbotma/sdk)",
                   "payload": "{ autoDialId, message }",
                   "note": "Đẩy về Mini App khi gặp lỗi kết nối/chiến dịch."
                 }
@@ -379,18 +405,24 @@
                 {
                   "direction": "host_init",
                   "name": "openMiniApp(id, locale, startParam?, extraData)",
+                  "hostFn": "FeaturesViewControllerV2 → MiniAppService.fetchFilteredGlobalMiniApps(...) / MiniAppService.openMiniApp(id:locale:startParam:extraData:)",
+                  "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ theme_params, themeParams, isAdmin }",
                   "note": "Tự gắn instanceKey vào MiniAppActiveTracker và xóa khi onClose. Lọc ẩn hiddenApps (vb-ma-user-contact, vb-ma-2fa-setting), adminOnlyApps và memberAppPermissions trước khi hiển thị."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "check_permissions",
+                  "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → VbMaViewController.sendEvent(\"permissions_result\", payload:)",
+                  "miniAppFn": "checkPermission(module, action) / checkPermissions(module, actions) (@vbotma/sdk)",
                   "payload": "{ module, actions[] }",
                   "response": "{ [action]: Bool }"
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "get_session_info",
+                  "hostFn": "MiniAppService.onHostActionRequested(requestId:action:payload:) [case \"get_session_info\"] → sendEvent(\"host_action_result\", payload:)",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"get_session_info\" }) + on(\"host_action_result\", cb)",
                   "payload": "{ request_id }",
                   "response": "{ session_id, socket_url, isAdmin }"
                 }
@@ -442,6 +474,8 @@
                 {
                   "direction": "miniapp_to_host",
                   "name": "monitor_call",
+                  "hostFn": "MiniAppService.onMonitorCall(requestId:action:transId:payload:) → MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot → VPMAppService.startMonitoringCall(...) → sendEvent(\"monitor_call_result\", payload:)",
+                  "miniAppFn": "postEvent(\"monitor_call\", { request_id, action, transId, ... }) + on(\"monitor_call_result\", cb)",
                   "payload": "{ request_id, action: 'listen'|'capture'|'capture_bot'|'whisper', transId, hotline?, agentName?, customerPhone? }",
                   "response": "{ request_id, action, transId, status: 'CONNECTING'|'CALL_BUSY'|'INVALID_ACTION'|'PERMISSION_DENIED' }",
                   "note": "Kiểm tra quyền Admin (bản Release), khóa slot nguyên tử, kiểm tra quyền Micro rồi quay SIP 1#/2#/4#/5#<transId>."
@@ -449,6 +483,8 @@
                 {
                   "direction": "host_to_miniapp",
                   "name": "monitor_call_state_changed",
+                  "hostFn": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:) → emitMiniAppEvent(\"monitor_call_state_changed\", data:)",
+                  "miniAppFn": "on(\"monitor_call_state_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ request_id, state, reason? }",
                   "note": "NewCallViewController & VPMAppService đẩy cập nhật trạng thái kết nối/ngắt về Mini App."
                 }
@@ -487,23 +523,31 @@
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController",
+                  "hostFn": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }"
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "filter_changed",
+                  "hostFn": "UserHistoryCallViewController.handleSegmentChange(_:) → miniAppVC?.emitEvent(\"filter_changed\", data:)",
+                  "miniAppFn": "on(\"filter_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ type: 'all' | 'missed' }",
                   "note": "Phát mỗi khi người dùng đổi UISegmentedControl native trên thanh tiêu đề."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
+                  "hostFn": "UserHistoryCallViewController.onTabActivated() / markCallEndedRefreshPending() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "miniAppFn": "on(\"refresh_data\", cb) (@vbotma/sdk)",
                   "payload": "{ reason: 'call_ended' | 'tab_activated', force: Bool }",
                   "note": "Dùng cờ callEndedRefreshPending để gom lệnh refresh khi vừa tắt màn hình gọi và chỉ phát khi tab Gần đây hiển thị trở lại; tự áp dụng applyPendingBundleUpdate()."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "make_call",
+                  "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
+                  "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
                   "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall }",
                   "response": "{ request_id, success }",
                   "note": "Gọi lại trực tiếp từ nhật ký cuộc gọi."
@@ -511,6 +555,8 @@
                 {
                   "direction": "miniapp_to_host",
                   "name": "check_permissions",
+                  "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → sendEvent(\"permissions_result\", payload:)",
+                  "miniAppFn": "checkPermissions(\"CALL\", [\"VIEW\", \"RECORDING\"]) (@vbotma/sdk)",
                   "payload": "{ module: 'CALL', actions: ['VIEW', 'RECORDING'] }",
                   "response": "{ [action]: Bool }"
                 }

@@ -23,6 +23,8 @@ export const MediaItemSchema = z.object({
 export const BridgeMessageSchema = z.object({
   direction: z.enum(['host_init', 'host_to_miniapp', 'miniapp_to_host']),
   name: z.string().min(1),
+  hostFn: z.string().min(1).optional(),
+  miniAppFn: z.string().min(1).optional(),
   payload: z.string().optional(),
   response: z.string().optional(),
   note: z.string().optional(),

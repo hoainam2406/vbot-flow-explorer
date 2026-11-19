@@ -28,6 +28,8 @@ export function searchFlowNodes(
             n.techDetail?.miniAppBridge?.miniAppId ?? '',
             ...(n.techDetail?.miniAppBridge?.messages.flatMap((m) => [
               m.name,
+              m.hostFn ?? '',
+              m.miniAppFn ?? '',
               m.payload ?? '',
               m.note ?? '',
             ]) ?? []),

@@ -157,6 +157,8 @@ describe('createFlowExplorerState', () => {
                     {
                       direction: 'host_to_miniapp',
                       name: 'setup_2fa',
+                      hostFn: 'VbTwoFactorSocketHandler.dispatchParsedEvent → MiniAppService.emitEventIfMiniAppOpen',
+                      miniAppFn: 'on("setup_2fa", cb)',
                       payload: '{ is_enable, timestamp }',
                     },
                   ],
@@ -170,11 +172,19 @@ describe('createFlowExplorerState', () => {
 
     expect(searchFlowNodes(bridgeDataset, 'vb-ma-2fa-setting', 'overview')).toEqual([]);
     expect(searchFlowNodes(bridgeDataset, 'setup_2fa', 'overview')).toEqual([]);
+    expect(searchFlowNodes(bridgeDataset, 'emitEventIfMiniAppOpen', 'overview')).toEqual([]);
+    expect(searchFlowNodes(bridgeDataset, 'on("setup_2fa", cb)', 'overview')).toEqual([]);
 
     expect(searchFlowNodes(bridgeDataset, 'vb-ma-2fa-setting', 'tech').map((h) => h.node.id)).toEqual([
       'b1-1',
     ]);
     expect(searchFlowNodes(bridgeDataset, 'setup_2fa', 'tech').map((h) => h.node.id)).toEqual([
+      'b1-1',
+    ]);
+    expect(searchFlowNodes(bridgeDataset, 'emitEventIfMiniAppOpen', 'tech').map((h) => h.node.id)).toEqual([
+      'b1-1',
+    ]);
+    expect(searchFlowNodes(bridgeDataset, 'on("setup_2fa", cb)', 'tech').map((h) => h.node.id)).toEqual([
       'b1-1',
     ]);
   });
