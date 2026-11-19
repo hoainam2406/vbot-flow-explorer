@@ -4,6 +4,8 @@ import {
   VueFlow,
   getTransformForBounds,
   useVueFlow,
+  type EdgeComponent,
+  type EdgeTypesObject,
   type NodeComponent,
   type NodeTypesObject,
 } from '@vue-flow/core';
@@ -12,10 +14,11 @@ import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
 import { FLOW_EXPLORER_KEY, getCameraTargetNodeIds } from '../composables/useFlowExplorer';
 import {
-  computeDagreLayout,
+  computeDagreGraphLayout,
   computeNodesBounds,
   toVueFlowEdges,
 } from '../composables/useGraphLayout';
+import RoutedFlowEdge from './edges/RoutedFlowEdge.vue';
 import AppFlowNode from './nodes/AppFlowNode.vue';
 import ScenarioBar from './ScenarioBar.vue';
 
@@ -30,6 +33,10 @@ const nodeTypes: NodeTypesObject = {
   appFlow: markRaw(AppFlowNode) as NodeComponent,
 };
 
+const edgeTypes: EdgeTypesObject = {
+  routed: markRaw(RoutedFlowEdge) as EdgeComponent,
+};
+
 const activeScenario = computed(() => {
   const scId = explorer.activeScenarioId.value;
   if (!scId) return null;
@@ -40,18 +47,21 @@ const activeEdgeIds = computed(() =>
   activeScenario.value ? new Set(activeScenario.value.edgeIds) : undefined,
 );
 
-const layoutNodes = computed(() =>
-  computeDagreLayout(explorer.visibleFlow.value.nodes, explorer.visibleFlow.value.edges, {
+const graphLayout = computed(() =>
+  computeDagreGraphLayout(explorer.visibleFlow.value.nodes, explorer.visibleFlow.value.edges, {
     direction: 'LR',
     showCanvasMedia: explorer.showCanvasMedia.value,
   }),
 );
+
+const layoutNodes = computed(() => graphLayout.value.nodes);
 
 const layoutEdges = computed(() =>
   toVueFlowEdges(
     explorer.visibleFlow.value.edges,
     activeEdgeIds.value,
     Boolean(activeScenario.value),
+    graphLayout.value.edgeRoutes,
   ),
 );
 
@@ -109,6 +119,7 @@ const onPaneReady = () => {
       :nodes="layoutNodes"
       :edges="layoutEdges"
       :node-types="nodeTypes"
+      :edge-types="edgeTypes"
       :nodes-draggable="false"
       :nodes-connectable="false"
       :elements-selectable="true"

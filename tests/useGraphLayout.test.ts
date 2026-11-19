@@ -1,6 +1,12 @@
 // tests/useGraphLayout.test.ts
 import { describe, expect, it } from 'vitest';
-import { computeDagreLayout, computeNodesBounds } from '../src/composables/useGraphLayout';
+import { Position } from '@vue-flow/core';
+import {
+  buildRoutedEdgePath,
+  computeDagreGraphLayout,
+  computeDagreLayout,
+  computeNodesBounds,
+} from '../src/composables/useGraphLayout';
 import type { FlowEdgeData, FlowNodeData } from '../src/data/schema';
 
 describe('computeDagreLayout', () => {
@@ -55,5 +61,60 @@ describe('computeDagreLayout', () => {
           layoutNodes[1].position.y + layoutNodes[1].data.estimatedHeight,
         ) - Math.min(layoutNodes[0].position.y, layoutNodes[1].position.y),
     });
+  });
+
+  it('routes bypass edges around intermediate nodes instead of cutting through them', () => {
+    const nodes: FlowNodeData[] = [
+      { id: 'api', label: 'Gửi lệnh chuyển ngay', kind: 'external', audience: 'tech', summary: { overview: 'API' } },
+      { id: 'fallback', label: 'Fallback DTMF #1', kind: 'error', audience: 'tech', summary: { overview: 'Fallback' } },
+      { id: 'done', label: 'Nhân viên cúp máy', kind: 'action', audience: 'all', summary: { overview: 'Done' } },
+    ];
+    const edges: FlowEdgeData[] = [
+      { id: 'e-ok', source: 'api', target: 'done', label: '+OK' },
+      { id: 'e-err', source: 'api', target: 'fallback', label: 'Lỗi / Timeout 5s' },
+      { id: 'e-fb', source: 'fallback', target: 'done' },
+    ];
+
+    const { nodes: layoutNodes, edgeRoutes } = computeDagreGraphLayout(nodes, edges, {
+      direction: 'LR',
+    });
+    expect(edgeRoutes['e-ok'].points.length).toBeGreaterThan(3);
+
+    const apiNode = layoutNodes.find((n) => n.id === 'api')!;
+    const fallbackNode = layoutNodes.find((n) => n.id === 'fallback')!;
+    const doneNode = layoutNodes.find((n) => n.id === 'done')!;
+
+    const routed = buildRoutedEdgePath({
+      sourceX: apiNode.position.x + apiNode.data.estimatedWidth,
+      sourceY: apiNode.position.y + apiNode.data.estimatedHeight / 2,
+      sourcePosition: Position.Right,
+      targetX: doneNode.position.x,
+      targetY: doneNode.position.y + doneNode.data.estimatedHeight / 2,
+      targetPosition: Position.Left,
+      route: edgeRoutes['e-ok'],
+    });
+
+    const fallbackTop = fallbackNode.position.y;
+    const fallbackBottom = fallbackTop + fallbackNode.data.estimatedHeight;
+    expect(routed.labelY < fallbackTop || routed.labelY > fallbackBottom).toBe(true);
+  });
+
+  it('allocates enough horizontal gap for long Vietnamese decision branch labels', () => {
+    const nodes: FlowNodeData[] = [
+      { id: 'decision', label: 'Người nhận đồng ý tiếp nhận?', kind: 'decision', audience: 'all', summary: { overview: 'D' } },
+      { id: 'confirm', label: 'Xác nhận bàn giao', kind: 'action', audience: 'all', summary: { overview: 'Y' } },
+      { id: 'cancel', label: 'Hủy chuyển', kind: 'error', audience: 'all', summary: { overview: 'N' } },
+    ];
+    const edges: FlowEdgeData[] = [
+      { id: 'e-yes', source: 'decision', target: 'confirm', label: 'Đồng ý nhận' },
+      { id: 'e-no', source: 'decision', target: 'cancel', label: 'Hủy / Bận / Không nghe' },
+    ];
+
+    const { nodes: layoutNodes } = computeDagreGraphLayout(nodes, edges, { direction: 'LR' });
+    const decisionNode = layoutNodes.find((n) => n.id === 'decision')!;
+    const cancelNode = layoutNodes.find((n) => n.id === 'cancel')!;
+
+    const gap = cancelNode.position.x - (decisionNode.position.x + decisionNode.data.estimatedWidth);
+    expect(gap).toBeGreaterThanOrEqual(200);
   });
 });
