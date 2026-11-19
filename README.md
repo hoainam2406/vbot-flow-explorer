@@ -27,38 +27,38 @@
 ## Cài đặt & Chạy dự án
 
 ### Yêu cầu
-- Node.js (khuyến nghị Node 22+ / 24+) và npm
+- Node.js (khuyến nghị Node 22+ / 24+) và pnpm (`pnpm@10.23.0`)
 
 ### Cài đặt dependencies
 ```bash
-npm install
+pnpm install
 ```
 
 ### Lệnh phát triển & kiểm thử
 ```bash
 # Chạy chế độ phát triển đầy đủ (bản Nội bộ: có Tổng quan | Kỹ thuật)
-npm run dev
+pnpm dev
 
 # Chạy xem thử đúng hành vi bản Public (ẩn dữ liệu & giao diện kỹ thuật)
-npm run dev:public
+pnpm dev:public
 
 # Kiểm tra tính toàn vẹn toàn bộ JSON trong data/
-npm run validate:data
+pnpm validate:data
 
 # Chạy unit test (Vitest)
-npm run test
+pnpm test
 
 # Kiểm tra kiểu TypeScript + Vue SFC
-npm run typecheck
+pnpm typecheck
 ```
 
 ### Build 2 bản độc lập & Kiểm tra bảo mật bản Public
 ```bash
 # Build bản Public (cho khách hàng / đối tác) -> dist-public/
-npm run build:public
+pnpm build:public
 
 # Build bản Internal (cho nội bộ) -> dist-internal/
-npm run build:internal
+pnpm build:internal
 
 # Xác minh không rò rỉ dữ liệu kỹ thuật vào bundle Public
 grep -rn "TwoFactorSessionManager\|FreeSwitchTransferHelper\|codeRefs" dist-public/ || echo "CLEAN_PUBLIC_BUNDLE"
@@ -121,10 +121,10 @@ vbot-flow-explorer/
 1. **Chỉnh sửa hoặc tách module mới:**
    - Cập nhật `data/app.json` hoặc các file trong `data/modules/<module>.json` theo schema tại [src/data/schema.ts](src/data/schema.ts).
    - Nếu tách thêm module mới từ `inlineSubtrees` (ví dụ `mod-autodial`), tạo `data/modules/autodial.json` với `moduleId: "mod-autodial"` và thêm `"autodial"` vào mảng `moduleFiles` trong `data/app.json`.
-   - Sau khi sửa JSON, luôn chạy `npm run validate:data` để kiểm tra không bị trùng ID hay gãy liên kết.
+   - Sau khi sửa JSON, luôn chạy `pnpm validate:data` để kiểm tra không bị trùng ID hay gãy liên kết.
 2. **Bổ sung ảnh / video minh họa:**
    - Đặt file vào đúng đường dẫn trong `public/media/` theo danh sách gợi ý tại [data/README.md](data/README.md) (khuyên dùng `.webp` cho ảnh và `.mp4`/`.webm` cho video ngắn).
-   - Các media gắn `"audience": "tech"` sẽ tự động bị loại khỏi `dist-public/` khi chạy `npm run build:public`.
+   - Các media gắn `"audience": "tech"` sẽ tự động bị loại khỏi `dist-public/` khi chạy `pnpm build:public`.
 
 ---
 
