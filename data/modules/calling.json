@@ -299,8 +299,23 @@
             "inputs": ["name (tên truyền từ Mini App / Danh bạ nếu có)", "phone", "isVPM", "typeCall"],
             "codeRefs": [
               "VBot/Controller/NewController/CallVC/MainDialPad/qMainDiaPadViewController.swift",
-              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift"
-            ]
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift",
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-crm / vb-ma-user-contact / ...",
+              "embedMode": "sdk_global",
+              "transport": "VbMaDelegate.onRequestCall → VPMAppService.makeCall",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "make_call",
+                  "payload": "Nested: { request_id, callee_info: { phoneNumber, displayName, typeCall, avatar, avatarColor, hotline, payload: { customerId } } } hoặc Flat: { request_id, phoneNumber, displayName, customerId, hotlineNumber }",
+                  "response": "{ request_id, success: Bool, reason?: 'MISSING_PHONE_NUMBER' }",
+                  "note": "typeCall == 'app_to_app' → gọi nội bộ VPM; ngược lại → gọi Hotline ra ngoài và bảo toàn suppliedCallerName."
+                }
+              ]
+            }
           },
           "relatedNodeIds": ["ct-quick-call", "autodial-campaign"]
         },

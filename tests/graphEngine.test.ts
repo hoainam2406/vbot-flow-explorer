@@ -130,4 +130,39 @@ describe('graphEngine', () => {
     expect(bridgedMixed.scenarios?.[0].nodeIds).toEqual(['v1', 'v2', 'v3']);
     expect(bridgedMixed.scenarios?.[0].edgeIds).toEqual(['e-direct', 'bridge-v2-v3']);
   });
+
+  it('strips techDetail.miniAppBridge completely in sanitizeForPublic', () => {
+    const manifestWithBridge: AppManifest = {
+      ...manifest,
+      branches: [
+        {
+          id: 'mod-call',
+          label: 'Danh bạ',
+          kind: 'module',
+          audience: 'all',
+          summary: { overview: 'Danh bạ', tech: 'Mini App' },
+          techDetail: {
+            codeRefs: ['Secret.swift'],
+            miniAppBridge: {
+              miniAppId: 'vb-ma-user-contact',
+              embedMode: 'inline_tab',
+              messages: [
+                {
+                  direction: 'miniapp_to_host',
+                  name: 'user_contact_get_local',
+                },
+              ],
+            },
+          } as AppManifest['branches'][number]['techDetail'],
+        },
+      ],
+    };
+
+    const dataset = mergeDataset(manifestWithBridge, [modCall]);
+    const pub = sanitizeForPublic(dataset);
+    const jsonText = JSON.stringify(pub);
+    expect(jsonText).not.toContain('miniAppBridge');
+    expect(jsonText).not.toContain('vb-ma-user-contact');
+    expect(jsonText).not.toContain('user_contact_get_local');
+  });
 });

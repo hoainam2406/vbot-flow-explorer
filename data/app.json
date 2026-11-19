@@ -38,8 +38,54 @@
       ],
       "codeRefs": [
         "VBot/Controller/NewController/Main/NewMainTabBarViewController.swift",
-        "VBot/AppDelegate/AppDelegate.swift"
-      ]
+        "VBot/AppDelegate/AppDelegate.swift",
+        "VBot/Service/MiniAppService.swift"
+      ],
+      "miniAppBridge": {
+        "miniAppId": "VbMaSDK (Global)",
+        "embedMode": "sdk_global",
+        "transport": "WKWebView ScriptMessageHandler 'vbma' ↔ MiniAppService (VbMaDelegate)",
+        "messages": [
+          {
+            "direction": "host_init",
+            "name": "openMiniApp / createMiniAppViewController",
+            "payload": "{ locale, startParam, extraData: { theme_params, themeParams, isAdmin } }",
+            "note": "Host cung cấp apiBaseURL, currentAccessToken, projectCode, uid, source: 'App' qua VbMaDelegate."
+          },
+          {
+            "direction": "miniapp_to_host",
+            "name": "request_mini_app_token",
+            "payload": "{ request_id }",
+            "response": "MiniAppToken (RAM cache TTL 600s, scope apiBaseURL|projectCode|uid)",
+            "note": "Host chủ động pre-warm sau configure() và refreshHostToken()."
+          },
+          {
+            "direction": "miniapp_to_host",
+            "name": "refreshHostToken",
+            "response": "Token mới + pre-warm lại MiniAppToken",
+            "note": "SDK tự gọi khi API Mini App trả 401 (BaseService.reLoginWithToken)."
+          },
+          {
+            "direction": "miniapp_to_host",
+            "name": "check_permissions",
+            "payload": "{ module, actions[] }",
+            "response": "{ [action]: Bool }",
+            "note": "Map qua VPMRoleService (VD 'CRM' -> 'CUSTOMER', 'VIEW' -> 'SHOW')."
+          },
+          {
+            "direction": "miniapp_to_host",
+            "name": "get_session_info",
+            "payload": "{ request_id }",
+            "response": "{ request_id, success, session_id, socket_url, isAdmin }"
+          },
+          {
+            "direction": "miniapp_to_host",
+            "name": "make_call",
+            "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall, avatar, hotline }",
+            "response": "{ request_id, success, reason? }"
+          }
+        ]
+      }
     }
   },
   "branches": [
@@ -229,7 +275,56 @@
             ],
             "codeRefs": [
               "VBot/Service/AutodialManager.swift"
-            ]
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-auto-call-campaign",
+              "embedMode": "modal",
+              "transport": "onHostActionRequested → AutodialManager.handleAction / emitMiniAppEvent",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "start_autodial",
+                  "payload": "{ autoDialId, hotline, campaignName? }",
+                  "response": "{ request_id, success, state, totalCalled, currentPhone, ... }",
+                  "note": "Từ chối nếu đang có cuộc gọi active; mở WebSocket Autodial."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "pause_autodial",
+                  "response": "State snapshot (state: 'paused')",
+                  "note": "Hoàn tất cuộc gọi hiện tại rồi dừng quay số mới."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "resume_autodial",
+                  "response": "State snapshot",
+                  "note": "Tiếp tục lấy số điện thoại kế tiếp."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "stop_autodial",
+                  "response": "State snapshot (state: 'stopped')",
+                  "note": "Đóng WebSocket và kết thúc phiên chiến dịch."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "get_autodial_state",
+                  "response": "{ state, currentAutoDialId, totalCalled, currentPhone, errorMessage? }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "autodial_finished",
+                  "payload": "{ autoDialId, campaignName }",
+                  "note": "Đẩy về Mini App khi chiến dịch hết số."
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "autodial_error",
+                  "payload": "{ autoDialId, message }",
+                  "note": "Đẩy về Mini App khi gặp lỗi kết nối/chiến dịch."
+                }
+              ]
+            }
           },
           "relatedNodeIds": ["call-out-start"]
         },
@@ -275,7 +370,32 @@
               "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
               "VBot/Service/MiniAppService.swift",
               "VBot/Service/MiniAppCategoryName.swift"
-            ]
+            ],
+            "miniAppBridge": {
+              "miniAppId": "VbMaSDK (Global Hub)",
+              "embedMode": "sdk_global",
+              "transport": "FeaturesViewControllerV2 → MiniAppService.fetchFilteredGlobalMiniApps / openMiniApp",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "openMiniApp(id, locale, startParam?, extraData)",
+                  "payload": "{ theme_params, themeParams, isAdmin }",
+                  "note": "Tự gắn instanceKey vào MiniAppActiveTracker và xóa khi onClose. Lọc ẩn hiddenApps (vb-ma-user-contact, vb-ma-2fa-setting), adminOnlyApps và memberAppPermissions trước khi hiển thị."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "check_permissions",
+                  "payload": "{ module, actions[] }",
+                  "response": "{ [action]: Bool }"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "get_session_info",
+                  "payload": "{ request_id }",
+                  "response": "{ session_id, socket_url, isAdmin }"
+                }
+              ]
+            }
           }
         },
         {
@@ -311,8 +431,29 @@
             ],
             "codeRefs": [
               "VBot/Service/MiniAppMonitoringCoordinator.swift",
-              "VBot/Service/VbMonitoringCallHelper.swift"
-            ]
+              "VBot/Service/VbMonitoringCallHelper.swift",
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-monitoring",
+              "embedMode": "modal",
+              "transport": "VbMaDelegate.onMonitorCall ↔ MiniAppService.sendMonitorCallStateChanged",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "monitor_call",
+                  "payload": "{ request_id, action: 'listen'|'capture'|'capture_bot'|'whisper', transId, hotline?, agentName?, customerPhone? }",
+                  "response": "{ request_id, action, transId, status: 'CONNECTING'|'CALL_BUSY'|'INVALID_ACTION'|'PERMISSION_DENIED' }",
+                  "note": "Kiểm tra quyền Admin (bản Release), khóa slot nguyên tử, kiểm tra quyền Micro rồi quay SIP 1#/2#/4#/5#<transId>."
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "monitor_call_state_changed",
+                  "payload": "{ request_id, state, reason? }",
+                  "note": "NewCallViewController & VPMAppService đẩy cập nhật trạng thái kết nối/ngắt về Mini App."
+                }
+              ]
+            }
           }
         }
       ],
@@ -337,7 +478,44 @@
             "codeRefs": [
               "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift",
               "VBot/Service/PlayerManager.swift"
-            ]
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-history-call",
+              "embedMode": "inline_tab",
+              "transport": "UserHistoryCallViewController (embedded VbMaViewController) ↔ VbMaDelegate",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController",
+                  "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "filter_changed",
+                  "payload": "{ type: 'all' | 'missed' }",
+                  "note": "Phát mỗi khi người dùng đổi UISegmentedControl native trên thanh tiêu đề."
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "payload": "{ reason: 'call_ended' | 'tab_activated', force: Bool }",
+                  "note": "Dùng cờ callEndedRefreshPending để gom lệnh refresh khi vừa tắt màn hình gọi và chỉ phát khi tab Gần đây hiển thị trở lại; tự áp dụng applyPendingBundleUpdate()."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "make_call",
+                  "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall }",
+                  "response": "{ request_id, success }",
+                  "note": "Gọi lại trực tiếp từ nhật ký cuộc gọi."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "check_permissions",
+                  "payload": "{ module: 'CALL', actions: ['VIEW', 'RECORDING'] }",
+                  "response": "{ [action]: Bool }"
+                }
+              ]
+            }
           }
         },
         {

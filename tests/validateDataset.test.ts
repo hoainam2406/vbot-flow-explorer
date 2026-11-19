@@ -75,4 +75,66 @@ describe('validateDataset', () => {
     };
     expect(validateDataset(validManifest, [cleanModule])).toEqual([]);
   });
+
+  it('validates techDetail.miniAppBridge schema and rejects invalid bridge metadata', () => {
+    const withValidBridge = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Mini App Node',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'Bước 1' },
+              techDetail: {
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-user-contact',
+                  embedMode: 'inline_tab',
+                  transport: 'VbMaDelegate.onHostActionRequested',
+                  messages: [
+                    {
+                      direction: 'miniapp_to_host',
+                      name: 'user_contact_get_local',
+                      payload: '{ request_id }',
+                      response: '{ success, contacts[] }',
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [withValidBridge])).toEqual([]);
+
+    const withInvalidBridge = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Bad Bridge',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'Bad' },
+              techDetail: {
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-test',
+                  embedMode: 'invalid_mode',
+                  messages: [],
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [withInvalidBridge]).length).toBeGreaterThan(0);
+  });
 });

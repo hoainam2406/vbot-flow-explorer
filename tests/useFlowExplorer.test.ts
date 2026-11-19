@@ -134,4 +134,48 @@ describe('createFlowExplorerState', () => {
       'b2-1',
     ]);
   });
+
+  it('searches miniAppBridge.miniAppId and bridge messages in tech mode only', () => {
+    const bridgeDataset: MergedFlowDataset = {
+      ...sampleDataset,
+      subtreesByParentId: {
+        ...sampleDataset.subtreesByParentId,
+        b1: {
+          ...sampleDataset.subtreesByParentId.b1,
+          nodes: [
+            {
+              id: 'b1-1',
+              label: 'B1.1',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: '1.1' },
+              techDetail: {
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-2fa-setting',
+                  embedMode: 'modal',
+                  messages: [
+                    {
+                      direction: 'host_to_miniapp',
+                      name: 'setup_2fa',
+                      payload: '{ is_enable, timestamp }',
+                    },
+                  ],
+                },
+              } as MergedFlowDataset['rootNode']['techDetail'],
+            },
+          ],
+        },
+      },
+    };
+
+    expect(searchFlowNodes(bridgeDataset, 'vb-ma-2fa-setting', 'overview')).toEqual([]);
+    expect(searchFlowNodes(bridgeDataset, 'setup_2fa', 'overview')).toEqual([]);
+
+    expect(searchFlowNodes(bridgeDataset, 'vb-ma-2fa-setting', 'tech').map((h) => h.node.id)).toEqual([
+      'b1-1',
+    ]);
+    expect(searchFlowNodes(bridgeDataset, 'setup_2fa', 'tech').map((h) => h.node.id)).toEqual([
+      'b1-1',
+    ]);
+  });
 });

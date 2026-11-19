@@ -25,6 +25,12 @@ export function searchFlowNodes(
             n.summary.tech ?? '',
             ...(n.techDetail?.apisOrEvents ?? []),
             ...(n.techDetail?.codeRefs ?? []),
+            n.techDetail?.miniAppBridge?.miniAppId ?? '',
+            ...(n.techDetail?.miniAppBridge?.messages.flatMap((m) => [
+              m.name,
+              m.payload ?? '',
+              m.note ?? '',
+            ]) ?? []),
           ]
         : [];
 

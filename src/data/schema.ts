@@ -20,12 +20,28 @@ export const MediaItemSchema = z.object({
   audience: AudienceScopeSchema.optional(),
 });
 
+export const BridgeMessageSchema = z.object({
+  direction: z.enum(['host_init', 'host_to_miniapp', 'miniapp_to_host']),
+  name: z.string().min(1),
+  payload: z.string().optional(),
+  response: z.string().optional(),
+  note: z.string().optional(),
+});
+
+export const MiniAppBridgeSchema = z.object({
+  miniAppId: z.string().min(1),
+  embedMode: z.enum(['inline_tab', 'modal', 'sdk_global']),
+  transport: z.string().optional(),
+  messages: z.array(BridgeMessageSchema).min(1),
+});
+
 export const TechDetailSchema = z.object({
   inputs: z.array(z.string()).optional(),
   outputs: z.array(z.string()).optional(),
   apisOrEvents: z.array(z.string()).optional(),
   edgeCases: z.array(z.string()).optional(),
   codeRefs: z.array(z.string()).optional(),
+  miniAppBridge: MiniAppBridgeSchema.optional(),
 });
 
 export const FlowNodeDataSchema = z.object({
@@ -92,6 +108,8 @@ export const AppManifestSchema = z.object({
 export type NodeKind = z.infer<typeof NodeKindSchema>;
 export type AudienceScope = z.infer<typeof AudienceScopeSchema>;
 export type MediaItem = z.infer<typeof MediaItemSchema>;
+export type BridgeMessage = z.infer<typeof BridgeMessageSchema>;
+export type MiniAppBridge = z.infer<typeof MiniAppBridgeSchema>;
 export type TechDetail = z.infer<typeof TechDetailSchema>;
 export type FlowNodeData = z.infer<typeof FlowNodeDataSchema>;
 export type FlowEdgeData = z.infer<typeof FlowEdgeDataSchema>;

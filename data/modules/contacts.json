@@ -36,7 +36,84 @@
               "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "VBot/Service/Database/UserContactDatabaseHelper.swift"
-            ]
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "UserContactsMiniAppViewController ↔ UserContactMiniAppBridgeHelper (onHostActionRequested)",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController",
+                  "payload": "{ id: 'vb-ma-user-contact', locale: 'vi', startParam: 'embedded', extraData: { theme_params, themeParams } }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }",
+                  "note": "Gọi khi kích hoạt tab hoặc app quay lại foreground sau applyPendingBundleUpdate()."
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "theme_changed",
+                  "payload": "{ theme_params, theme: 'light' | 'dark' }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "toggle_actions_menu",
+                  "payload": "{}",
+                  "note": "Bấm nút '+' trên UINavigationBar native của Host để bật/tắt Popover menu trong Mini App."
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "user_contacts_updated",
+                  "payload": "{ reason: 'local_db_changed' }",
+                  "note": "Phát khi SQLite thay đổi từ Native; bỏ qua nếu source == 'miniapp_bridge' để chống vòng lặp."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_get_local",
+                  "payload": "{ request_id }",
+                  "response": "{ request_id, success, uid, permissionStatus, hasImportedDevice, contacts[] }",
+                  "note": "Đọc danh bạ SQLite tách biệt theo uid."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_refresh_server",
+                  "payload": "{ request_id }",
+                  "response": "{ uid, permissionStatus, hasImportedDevice, contacts[] }",
+                  "note": "Gọi UserContactService.loadContacts tải Server vào SQLite rồi trả danh sách mới."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_import_device",
+                  "payload": "{ request_id, requestPermission?: Bool }",
+                  "response": "{ granted: Bool, permissionStatus, hasImportedDevice, contacts[] }",
+                  "note": "Đọc danh bạ iPhone (CNContactStore) và upsert vào SQLite."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_delete_local",
+                  "payload": "{ request_id, syncedIds?: Int64[], unsyncedLocalKeys?: String[] }",
+                  "response": "{ deletedCount, contacts[], ... }",
+                  "note": "Xóa local SQLite và bắn notification gắn source: 'miniapp_bridge'."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_open_settings",
+                  "payload": "{ request_id }",
+                  "response": "{ request_id, success: true }",
+                  "note": "Mở màn hình Cài đặt quyền iOS (openSettingsURLString)."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "make_call",
+                  "payload": "{ request_id, callee_info | phoneNumber, displayName }",
+                  "response": "{ request_id, success }",
+                  "note": "Gọi nhanh từ dòng liên hệ giữ nguyên tên hiển thị."
+                }
+              ]
+            }
           }
         },
         {
@@ -78,7 +155,36 @@
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "VBot/Controller/NewController/ContactV2/ContactV2ViewController.swift"
-            ]
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-contact-forward",
+              "embedMode": "inline_tab",
+              "transport": "ContactForwardViewController (embedded + modal 'add') ↔ VbMaDelegate",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController (Tab & Modal)",
+                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native (Admin hoặc CRM:CREATE): { startParam: 'add', onClose → refreshData() }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }",
+                  "note": "Gọi khi kích hoạt tab, nhận reloadContactV2Noti hoặc đóng modal thêm mới."
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "theme_changed",
+                  "payload": "{ theme_params, theme: 'light' | 'dark' }"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "check_permissions / make_call",
+                  "payload": "{ module: 'CRM', actions } / { phoneNumber, displayName }",
+                  "response": "{ [action]: Bool } / { success }"
+                }
+              ]
+            }
           }
         }
       ],
@@ -109,7 +215,35 @@
             }
           ],
           "techDetail": {
-            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"]
+            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "UserContactsMiniAppViewController (UINavigationBar + VbMaViewController)",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController",
+                  "payload": "{ id: 'vb-ma-user-contact', locale: 'vi', startParam: 'embedded', extraData: { theme_params, themeParams } }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "theme_changed",
+                  "payload": "{ theme_params, theme: 'light' | 'dark' }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "toggle_actions_menu",
+                  "payload": "{}",
+                  "note": "Bấm nút '+' trên thanh điều hướng native để bật/tắt menu trong Mini App."
+                }
+              ]
+            }
           }
         },
         {
@@ -125,7 +259,50 @@
             "codeRefs": [
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "VBot/Service/UserContactService.swift"
-            ]
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.handleAction",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_get_local",
+                  "payload": "{ request_id }",
+                  "response": "{ uid, permissionStatus, hasImportedDevice, contacts[] }"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_refresh_server",
+                  "payload": "{ request_id }",
+                  "response": "{ uid, permissionStatus, hasImportedDevice, contacts[] }"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_import_device",
+                  "payload": "{ request_id, requestPermission?: Bool }",
+                  "response": "{ granted: Bool, permissionStatus, hasImportedDevice, contacts[] }"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_delete_local",
+                  "payload": "{ request_id, syncedIds?: Int64[], unsyncedLocalKeys?: String[] }",
+                  "response": "{ deletedCount, contacts[] }"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_open_settings",
+                  "payload": "{ request_id }",
+                  "response": "{ request_id, success: true }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "user_contacts_updated",
+                  "payload": "{ reason: 'local_db_changed' }",
+                  "note": "Chống lặp vô hạn bằng userInfo['source'] = 'miniapp_bridge'."
+                }
+              ]
+            }
           }
         },
         {
@@ -277,7 +454,35 @@
             "tech": "Hỗ trợ Popover menu từ nút '+', Swipe trái (Sửa/Đồng bộ/Xoá) và Long-press 0.45s bật Multi-Select Bar (giới hạn 50 mục/lần)."
           },
           "techDetail": {
-            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"]
+            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "UserContactsMiniAppViewController (UINavigationBar + VbMaViewController)",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController",
+                  "payload": "{ id: 'vb-ma-user-contact', locale: 'vi', startParam: 'embedded', extraData: { theme_params, themeParams } }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "theme_changed",
+                  "payload": "{ theme_params, theme: 'light' | 'dark' }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "toggle_actions_menu",
+                  "payload": "{}",
+                  "note": "Bấm nút '+' trên thanh điều hướng native để bật/tắt menu trong Mini App."
+                }
+              ]
+            }
           }
         },
         {
@@ -358,7 +563,36 @@
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "VBot/Controller/NewController/ContactV2/ContactV2ViewController.swift"
-            ]
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-contact-forward",
+              "embedMode": "inline_tab",
+              "transport": "ContactForwardViewController (embedded + modal 'add') ↔ VbMaDelegate",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController (Tab & Modal)",
+                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native (Admin hoặc CRM:CREATE): { startParam: 'add', onClose → refreshData() }"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }",
+                  "note": "Gọi khi kích hoạt tab, nhận reloadContactV2Noti hoặc đóng modal thêm mới."
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "theme_changed",
+                  "payload": "{ theme_params, theme: 'light' | 'dark' }"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "check_permissions / make_call",
+                  "payload": "{ module: 'CRM', actions } / { phoneNumber, displayName }",
+                  "response": "{ [action]: Bool } / { success }"
+                }
+              ]
+            }
           }
         },
         {

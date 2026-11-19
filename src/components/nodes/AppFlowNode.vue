@@ -52,8 +52,13 @@ const KIND_STYLE_MAP: Record<NodeKind, { label: string; card: string; badge: str
   },
 };
 
+const enableTechMode = __ENABLE_TECH_MODE__;
 const kindMeta = computed(() => KIND_STYLE_MAP[props.data.kind]);
-const isTechNode = computed(() => __ENABLE_TECH_MODE__ && props.data.audience === 'tech');
+const isTechNode = computed(() => enableTechMode && props.data.audience === 'tech');
+const hasMiniAppBridge = computed(() => {
+  if (!__ENABLE_TECH_MODE__ || explorer.audienceMode.value !== 'tech') return false;
+  return Boolean(props.data.techDetail?.miniAppBridge);
+});
 
 const visibleMedia = computed(() => getVisibleMedia(props.data, explorer.audienceMode.value));
 const firstMedia = computed(() => visibleMedia.value[0] ?? null);
@@ -131,6 +136,12 @@ const onToggleBranch = () => {
           class="inline-flex shrink-0 items-center rounded-md border border-slate-300 bg-white/90 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
         >
           Kỹ thuật
+        </span>
+        <span
+          v-if="enableTechMode && hasMiniAppBridge"
+          class="inline-flex shrink-0 items-center rounded-md border border-cyan-300 bg-cyan-50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800"
+        >
+          Mini App
         </span>
       </div>
 
