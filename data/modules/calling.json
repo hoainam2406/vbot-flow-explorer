@@ -51,10 +51,10 @@
                   "LinphoneManager.kt đã comment out 100%, chạy thuần PJSIP (org.pjsip.pjsua2)"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/VBotRepository.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotRepository.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
                 ]
               }
             }
@@ -83,10 +83,10 @@
                   "VBotPhone.startOutgoingCall (PJSIP INVITE)"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/dialpad/NumberPadActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UtilsKotlin.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/VBotPhone.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/NumberPadActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UtilsKotlin.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotPhone.kt"
                 ]
               }
             }
@@ -124,9 +124,9 @@
                   "WebSocket CALL_TRANSFER & FCM type == \"10\""
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardDTMFHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/TransferCallBottomSheet.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/CallForwardDTMFHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallForwardBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/TransferCallBottomSheet.kt"
                 ]
               }
             }
@@ -134,27 +134,29 @@
         },
         {
           "id": "call-controls",
-          "label": "Điều khiển trong cuộc gọi & Khảo sát",
+          "label": "Điều khiển trong cuộc gọi & Trạng thái kết nối",
           "kind": "module",
           "audience": "all",
           "summary": {
-            "overview": "Các thao tác khi đang nghe máy: tắt tiếng, bật loa ngoài, giữ máy, bàn phím số, thu nhỏ cửa sổ gọi và chuyển khách sang khảo sát chất lượng.",
-            "tech": "iOS dùng VPMAppService+CallFeatures, PipCallViewController, CallSurveyHelper (#3); Android dùng NewCallActivity.enterPipMode(), AudioManager, khảo sát #3 (cooldown 3s) và hiển thị mã SIP khi kết thúc."
+            "overview": "Các thao tác khi đang nghe máy: tắt tiếng, bật loa ngoài, giữ máy (iOS), bàn phím số, thu nhỏ cửa sổ gọi (PiP) và tự động khóa mờ nút tính năng trước khi cuộc gọi kết nối.",
+            "tech": "iOS dùng VPMAppService+CallFeatures, PipCallViewController, CallSurveyHelper.canTriggerCallFunc (alpha 0.45); Android dùng NewCallActivity.enterPipMode(), AudioManager, CallPipHelper.resolveCallFeatureVisibility (DISABLED_FEATURE_ALPHA = 0.45f) và SipCodeRepository khi ngắt máy (cả 2 HĐH chưa gắn nút Khảo sát #3 trên nhánh Nam-dev)."
           },
           "techDetail": {
-            "platformDiffNote": "Android chưa hỗ trợ Hold (VBotCall.toggleHold() đã comment out), PiP dùng hệ thống Android Picture-in-Picture (CallBubbleService đã tắt), và có thêm luồng hiển thị kết quả SIP Code khi ngắt máy.",
+            "platformDiffNote": "1) Cả iOS và Android làm mờ/khóa nút tính năng ở alpha 0.45 khi chưa kết nối và đều CHƯA gắn nút Khảo sát DTMF #3 lên UI trên nhánh Nam-dev (iOS chỉ mới có CallSurveyHelper). 2) Android dùng native in-call actions (ngắt bridge Mini App trong cuộc gọi), chưa có Hold (VBotCall.toggleHold() đã comment out), PiP dùng native Android Picture-in-Picture và có thêm hiển thị mã SIP khi ngắt máy.",
             "byPlatform": {
               "android": {
-                "summary": "NewCallActivity xử lý PiP tỷ lệ 2:3 (enterPipMode), Mute qua AudioManager.isMicrophoneMute, Survey DTMF #3 (SURVEY_COOLDOWN_MS = 3000L) và SipCodeRepository + InAppTopIndicatorHelper báo lỗi SIP khi ngắt máy.",
+                "summary": "NewCallActivity xử lý PiP tỷ lệ 2:3 (enterPipMode), Mute qua AudioManager.isMicrophoneMute, khóa nút native khi chưa kết nối (DISABLED_FEATURE_ALPHA = 0.45f) và SipCodeRepository + InAppTopIndicatorHelper báo lỗi SIP khi ngắt máy (chưa gắn nút Khảo sát #3 trên Nam-dev).",
                 "edgeCases": [
                   "VBotCall.toggleHold() đã comment out — Android hiện chưa có nút Hold",
-                  "CallBubbleService.kt đã comment out — dùng Android native PiP"
+                  "CallBubbleService.kt đã comment out — dùng Android native PiP",
+                  "Trên nhánh Nam-dev, thao tác trong cuộc gọi dùng native actions (không mở Mini App in-call)"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/sip/VBotCall.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sipcode/SipCodeRepository.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/common/InAppTopIndicatorHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/sip/VBotCall.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/SipCodeRepository.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/InAppTopIndicatorHelper.kt"
                 ]
               }
             }
@@ -208,9 +210,9 @@
                   "Nếu transferKind != NONE, hẹn 350ms gọi GET api/User/getInfoCall2 làm giàu thông tin chuyển tiếp"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/IncomingTransferDisplayHelper.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/VBotPhone.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/IncomingTransferDisplayHelper.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotPhone.kt"
                 ]
               }
             }
@@ -272,10 +274,10 @@
               "App ở foreground & mở khóa -> kênh ưu tiên thấp + onShowCallVC(\"START\"); khóa máy/background -> IMPORTANCE_HIGH + fullScreenIntent"
             ],
             "codeRefs": [
-              "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/VBotRepository.kt",
-              "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/CallService.kt",
-              "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/sip/SipManager.kt",
-              "app/src/main/java/com/vpmedia/vbot/ui/permission/PermissionActivity.kt"
+              "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotRepository.kt",
+              "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/service/CallService.kt",
+              "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/sip/SipManager.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/permission/PermissionActivity.kt"
             ]
           }
         },
@@ -311,8 +313,8 @@
                   "NotificationBroadcastReceiver (Decline)"
                 ],
                 "codeRefs": [
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/VBotRepository.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotRepository.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
                 ]
               }
             }
@@ -346,8 +348,8 @@
                   "Không có timer retry 0.4s: khi lỗi CRM chỉ reset lastCrmLookupKey = \"\" để lần getInfoCall2 hoặc đổi state tiếp theo tự tra lại"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
                 ]
               }
             }
@@ -421,10 +423,10 @@
                   "CallPipHelper.resolveCallerNameWithPriority: CRM > SQLite > Push Name > masked Phone"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/sip/PJCall.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/sip/VBotCall.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/sip/PJCall.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/sip/VBotCall.kt"
                 ]
               }
             }
@@ -512,9 +514,9 @@
                   "CallModel.miniAppDisplayName chỉ gán khi gọi từ Mini App hoặc Autodial, không gán khi bấm từ Dialpad / Danh bạ native"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/dialpad/NumberPadActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UtilsKotlin.kt",
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/NumberPadActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UtilsKotlin.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
             },
@@ -567,8 +569,8 @@
                 "apisOrEvents": ["GET api/Hotline/getAllForCallByProject"],
                 "outputs": ["SIP target string: \"$hotline*$idProject*$phone\" hoặc \"$idProject*$phone\""],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/ChooseHotlineCallBottomSheet.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/hotline/ChooseHotlineCallBottomSheet.kt"
                 ]
               }
             }
@@ -602,9 +604,9 @@
                   "Gọi từ Danh bạ cá nhân native hoặc Dialpad trên Android không gán CallModel.miniAppDisplayName"
                 ],
                 "codeRefs": [
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/model/CallModel.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/pojo/response/CallModel.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
             }
@@ -630,10 +632,10 @@
               "android": {
                 "summary": "VBotPhone.startOutgoingCall khởi tạo phiên SIP PJSIP (PJAccount/PJCall), bật CallService foreground và mở NewCallActivity.",
                 "codeRefs": [
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/VBotPhone.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/sip/PJAccount.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/sip/PJCall.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotPhone.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/sip/PJAccount.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/sip/PJCall.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
                 ]
               }
             }
@@ -682,10 +684,10 @@
               "android": {
                 "summary": "TransferCallBottomSheet cho phép chọn Thành viên, Danh bạ chuyển tiếp V2 (ContactV2Manager) hoặc Bàn phím số (ForwardKeyboardBottomSheet) để điều phối sang CallForwardBottomSheet.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/TransferCallBottomSheet.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/ForwardKeyboardBottomSheet.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/ContactV2Manager.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/TransferCallBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallForwardBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/ForwardKeyboardBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/ContactV2Manager.kt"
                 ]
               }
             }
@@ -750,8 +752,8 @@
                   "#1<projectId>*<ext> / #1<hotline>*<phone> / #1<phone>"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardDTMFHelper.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/VBotPhone.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/CallForwardDTMFHelper.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotPhone.kt"
                 ]
               }
             }
@@ -793,8 +795,8 @@
                 "summary": "CallForwardBottomSheet phát DTMF *2 qua CallForwardDTMFHelper / vBotPhone.sendDTMF và hiển thị trạng thái chờ người nhận trả lời.",
                 "apisOrEvents": ["vBotPhone.sendDTMF(\"*2...\")"],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardDTMFHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallForwardBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/CallForwardDTMFHelper.kt"
                 ]
               }
             }
@@ -820,9 +822,9 @@
                   "Timer poll 1000ms trên CallForwardBottomSheet"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardDTMFHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallForwardBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/CallForwardDTMFHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt"
                 ]
               }
             }
@@ -905,7 +907,7 @@
       ]
     },
     "call-controls": {
-      "title": "Điều khiển trong cuộc gọi & Khảo sát",
+      "title": "Điều khiển trong cuộc gọi & Trạng thái kết nối",
       "layoutHint": "tree",
       "direction": "LR",
       "entryNodeIds": ["call-ctrl-pip", "call-ctrl-audio", "call-ctrl-survey", "call-ctrl-sip-code"],
@@ -932,8 +934,8 @@
                   "CallBubbleService.kt (bong bóng overlay kiểu cũ) đã comment out 100%"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
                 ]
               }
             }
@@ -945,24 +947,25 @@
           "kind": "process",
           "audience": "all",
           "summary": {
-            "overview": "Bật/tắt micro, chuyển loa ngoài/Bluetooth, tạm giữ cuộc gọi (Hold) và bấm phím số tương tác tổng đài tự động (IVR).",
-            "tech": "iOS hỗ trợ đầy đủ Mute, Speaker, Hold & DTMF qua VPMAppService+CallFeatures; Android dùng AudioManager.isMicrophoneMute + vBotPhone.sendDTMF nhưng hiện chưa có nút Hold."
+            "overview": "Bật/tắt micro, chuyển loa ngoài/Bluetooth, tạm giữ cuộc gọi (Hold trên iOS) và bấm phím số tương tác tổng đài tự động (IVR).",
+            "tech": "iOS hỗ trợ đầy đủ Mute, Speaker, Hold & DTMF qua VPMAppService+CallFeatures; Android dùng AudioManager.isMicrophoneMute + vBotPhone.sendDTMF + native in-call actions (chưa có nút Hold)."
           },
           "techDetail": {
-            "platformDiffNote": "Chênh lệch tính năng: iOS có nút Hold (giữ máy); Android đã comment out VBotCall.toggleHold() nên không hiển thị nút Hold trên NewCallActivity.",
+            "platformDiffNote": "Chênh lệch tính năng: iOS có nút Hold (giữ máy); Android đã comment out VBotCall.toggleHold() nên không hiển thị nút Hold trên NewCallActivity và dùng các nút thao tác native thay cho Mini App bridge trong cuộc gọi.",
             "codeRefs": [
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallFeatures.swift",
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallState.swift"
             ],
             "byPlatform": {
               "android": {
-                "summary": "Điều chỉnh mic qua OS AudioManager.isMicrophoneMute, phát DTMF IVR qua vBotPhone.sendDTMF và khóa nút khi chưa ACTIVE.",
+                "summary": "Điều chỉnh mic qua OS AudioManager.isMicrophoneMute, phát DTMF IVR qua vBotPhone.sendDTMF và dùng native in-call actions (khóa mờ khi chưa kết nối).",
                 "edgeCases": [
-                  "VBotCall.toggleHold() đã comment out trống — Android chưa hỗ trợ Hold trong cuộc gọi"
+                  "VBotCall.toggleHold() đã comment out trống — Android chưa hỗ trợ Hold trong cuộc gọi",
+                  "Trên nhánh Nam-dev, Android ngắt bridge Mini App trong cuộc gọi và dùng các nút native trên NewCallActivity"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/sip/VBotCall.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/sip/VBotCall.kt"
                 ]
               }
             }
@@ -970,23 +973,33 @@
         },
         {
           "id": "call-ctrl-survey",
-          "label": "Chuyển khách vào Khảo sát sau cuộc gọi",
+          "label": "Khóa nút tính năng khi chưa kết nối (alpha 0.45) & Khung Khảo sát",
           "kind": "process",
           "audience": "tech",
           "summary": {
-            "overview": "Cho phép nhân viên bấm nút Khảo sát để chuyển khách hàng sang hệ thống chấm điểm chất lượng dịch vụ.",
-            "tech": "iOS CallSurveyHelper phát tuần tự DTMF #3 (interToneDelay 0.3s); Android gọi showConfirmCallSurveyDialog() và phát DTMF #3 với chống spam SURVEY_COOLDOWN_MS = 3000L."
+            "overview": "Khi cuộc gọi chưa kết nối (đang đổ chuông), toàn bộ nút tính năng (Tag, Ghi chú, Chuyển tiếp...) bị làm mờ và khóa bấm để tránh thao tác nhầm; phần Khảo sát DTMF #3 mới dừng ở lớp helper trên iOS và chưa gắn lên UI ở nhánh Nam-dev.",
+            "tech": "iOS dùng CallSurveyHelper.canTriggerCallFunc (alpha = 0.45 khi !isCallConnected) tại ChildCallFuncViewController & NewCallViewController; Android dùng CallPipHelper.resolveCallFeatureVisibility (DISABLED_FEATURE_ALPHA = 0.45f, areFeaturesEnabled = isConnected)."
           },
           "techDetail": {
-            "platformDiffNote": "Cả hai nền tảng đều dùng DTMF #3 cho khảo sát sau cuộc gọi: iOS cấu hình interToneDelay 0.3s và khóa gửi 1 lần/cuộc gọi; Android bổ sung hộp thoại xác nhận và cooldown 3000ms.",
-            "apisOrEvents": ["DTMF sequence: #3 (interToneDelay = 0.3s)"],
-            "codeRefs": ["VBot/Service/CallSurveyHelper.swift"],
+            "platformDiffNote": "Trên nhánh Nam-dev của cả iOS lẫn Android, nút Khảo sát (#3) CHƯA được gắn lên giao diện (iOS chỉ mới chuẩn bị sẵn helper CallSurveyHelper.dtmfSequence = \"#3\", còn Android chưa có showConfirmCallSurveyDialog / DTMF #3). Cả hai HĐH đều đồng bộ khóa mờ các nút chức năng tại alpha 0.45 khi chưa kết nối.",
+            "apisOrEvents": [
+              "CallSurveyHelper.canTriggerCallFunc (alpha = 0.45)",
+              "CallSurveyHelper.dtmfSequence = \"#3\" (chưa gắn vào UI trên nhánh Nam-dev)"
+            ],
+            "codeRefs": [
+              "VBot/Service/CallSurveyHelper.swift",
+              "VBot/Controller/NewController/CallVC/ChildCallFuncViewController.swift",
+              "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
+            ],
             "byPlatform": {
               "android": {
-                "summary": "showConfirmCallSurveyDialog() trên NewCallActivity phát DTMF #3 qua vBotPhone.sendDTMF với SURVEY_COOLDOWN_MS = 3000L.",
-                "apisOrEvents": ["vBotPhone.sendDTMF(\"#3\") (SURVEY_COOLDOWN_MS = 3000L)"],
+                "summary": "CallPipHelper.resolveCallFeatureVisibility sử dụng DISABLED_FEATURE_ALPHA = 0.45f / ENABLED_FEATURE_ALPHA = 1.0f (areFeaturesEnabled = isConnected), dùng native in-call actions trên NewCallActivity và chưa gắn nút Khảo sát DTMF #3 trên nhánh Nam-dev.",
+                "apisOrEvents": [
+                  "CallPipHelper.resolveCallFeatureVisibility (DISABLED_FEATURE_ALPHA = 0.45f)"
+                ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
                 ]
               }
             }
@@ -1014,10 +1027,10 @@
               "Foreground hiện TopCapsuleOverlayHost 2000ms; background đẩy notification vbot_sip_call_result"
             ],
             "codeRefs": [
-              "app/src/main/java/com/vpmedia/vbot/sipcode/SipCodeRepository.kt",
-              "app/src/main/java/com/vpmedia/vbot/ui/common/InAppTopIndicatorHelper.kt",
-              "app/src/main/java/com/vpmedia/vbot/ui/common/TopCapsuleOverlayHost.kt",
-              "app/src/main/java/com/vpmedia/vbot/utils/firebase/SipCallResultNotificationHelper.kt"
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/SipCodeRepository.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/InAppTopIndicatorHelper.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/TopCapsuleOverlayHost.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/SipCallResultNotificationHelper.kt"
             ]
           }
         }

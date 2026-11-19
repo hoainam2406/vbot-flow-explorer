@@ -3,7 +3,7 @@
   "app": {
     "name": "VBot",
     "tagline": "Ứng dụng tổng đài đa kênh, gọi thoại SIP/CallKit, Mini App & CRM trên di động",
-    "version": "iOS & Android Map 2.0"
+    "version": "iOS & Android Map 2.0 (Nam-dev)"
   },
   "rootNode": {
     "id": "vbot-app",
@@ -350,7 +350,7 @@
             ]
           },
           "android": {
-            "summary": "FeatureFragment (llConsoleQuickBar + Realm FeatureView Gợi ý/Yêu thích) + VbUserStateHolder (StateFlow + ProcessLifecycleOwner) + VbDeviceInboundHolder + MiniAppHelper.onMonitorCall (synchronized monitorLock).",
+            "summary": "FeatureFragment (llConsoleQuickBar + Realm FeatureView Gợi ý/Yêu thích) + VbUserStateHolder (StateFlow/SharedFlow + UPDATE_STATE) + VbDeviceInboundHolder + MiniAppHelper.onMonitorCall (synchronized monitorLock).",
             "codeRefs": [
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
@@ -669,7 +669,7 @@
             "tech": "FeaturesViewControllerV2 gọi VbMaSDK.fetchGlobalMiniApps, phân nhóm theo MiniAppCategoryName và ẩn các Mini App nhúng nội tuyến như Danh bạ hay Cài đặt 2FA khỏi danh sách chung."
           },
           "techDetail": {
-            "platformDiffNote": "Android lọc thêm inCallOnlyMiniApps, lưu Gợi ý & Yêu thích (kéo-thả MyItemTouchHelperCallback) vào Realm FeatureView, còn VbMaSDK.activeBridge là biến toàn cục đơn nên không có MiniAppActiveTracker theo từng instanceKey như iOS.",
+            "platformDiffNote": "Cả iOS và Android dùng chung danh sách 7 adminOnlyApps (bao gồm vb-ma-call-automation-config, không còn vb-ma-blacklist), nhưng trên Android Nam-dev thì vb-ma-user-history-call & vb-ma-crm luôn hiển thị cho mọi Member (iOS lọc theo quyền .call / .customer). Ngoài ra Android lọc thêm inCallOnlyMiniApps, lưu Gợi ý & Yêu thích (MyItemTouchHelperCallback) vào Realm FeatureView và dùng VbMaSDK.activeBridge toàn cục thay cho MiniAppActiveTracker theo instanceKey.",
             "codeRefs": [
               "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
               "VBot/Service/MiniAppService.swift",
@@ -677,7 +677,7 @@
             ],
             "byPlatform": {
               "ios": {
-                "summary": "FeaturesViewControllerV2 gọi MiniAppService.fetchFilteredGlobalMiniApps, theo dõi active instance qua MiniAppActiveTracker.",
+                "summary": "FeaturesViewControllerV2 gọi MiniAppService.fetchFilteredGlobalMiniApps, lọc theo 7 adminOnlyApps + memberAppPermissions (gồm vb-ma-user-history-call: .call, vb-ma-crm: .customer, vb-ma-monitoring: .rightNow) và theo dõi qua MiniAppActiveTracker.",
                 "codeRefs": [
                   "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
                   "VBot/Service/MiniAppService.swift",
@@ -685,7 +685,7 @@
                 ]
               },
               "android": {
-                "summary": "FeatureFragment gọi song song MiniAppHelper.fetchGlobalMiniAppsResult() và GetAllPermissionMemberViewModel, lọc bằng MiniAppHelper.filterMiniApps() (loại isHidden, vb-ma-user-contact, inCallOnlyMiniApps, adminOnlyApps, memberAppPermissions) và đồng bộ Realm FeatureView.",
+                "summary": "FeatureFragment gọi song song MiniAppHelper.fetchGlobalMiniAppsResult() và GetAllPermissionMemberViewModel, lọc bằng MiniAppHelper.filterMiniApps() (loại isHidden, vb-ma-user-contact, inCallOnlyMiniApps, 7 adminOnlyApps, memberAppPermissions — nhưng giữ vb-ma-user-history-call & vb-ma-crm luôn hiển thị cho mọi Member) và đồng bộ Realm FeatureView.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
@@ -776,7 +776,7 @@
                 ]
               },
               "android": {
-                "summary": "Quick bar (llConsoleQuickBar) trong FeatureFragment + UserStatusAndDeviceBS; VbUserStateHolder dùng StateFlow + ProcessLifecycleOwner + WebSocket vbot.state/UPDATE_STATE; VbDeviceInboundHolder lưu Realm InforUser.deviceInbounds.",
+                "summary": "Quick bar (llConsoleQuickBar) trong FeatureFragment + UserStatusAndDeviceBS; VbUserStateHolder dùng MutableStateFlow/SharedFlow (dedup 3s / echo 4s) + WebSocket module USER / UPDATE_STATE (state 1..6); VbDeviceInboundHolder lưu Realm InforUser.deviceInbounds.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/user_status_device/UserStatusAndDeviceBS.kt",
@@ -1035,11 +1035,11 @@
                 ]
               },
               "android": {
-                "summary": "ProjectActivity gọi selectProject() xong sẽ MiniAppHelper.invalidateSession(), xóa Realm History/Permission/Hotline/Project, VbUserStateHolder.onProjectChanged() và finishAffinity() khởi chạy lại MainActivity; quản lý hotline qua ListHotlineActivity & ChooseHotlineDefaultBottomSheet.",
+                "summary": "ProjectActivity gọi selectProject() xong sẽ MiniAppHelper.invalidateSession(), xóa Realm History/Permission/Hotline/Project và finishAffinity() khởi chạy lại MainActivity; quản lý hotline qua ListHotlineActivity & ChooseHotlineDefaultBottomsheet.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/ProjectActivity.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/hotline/ListHotlineActivity.kt",
-                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/hotline/ChooseHotlineDefaultBottomSheet.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/hotline/ChooseHotlineDefaultBottomsheet.kt"
                 ]
               }
             }

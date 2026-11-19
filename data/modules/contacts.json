@@ -48,10 +48,10 @@
                   "Mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS KHÔNG gắn FLAG_ACTIVITY_NEW_TASK để Back quay thẳng về app"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt"
                 ]
               }
             },
@@ -227,9 +227,9 @@
               "android": {
                 "summary": "UserContactManager.kt đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI, dùng UserContactBatchHelper xử lý batch sync/merge và tôn trọng cờ has_prompted_read_contacts.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/pojo/response/UserContactModels.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt"
                 ]
               }
             }
@@ -250,9 +250,9 @@
               "android": {
                 "summary": "MainActivity.ivAddContact -> UserContactsFragment.onPlusButtonClicked() bật menu '+' trong Mini App; gọi nhanh đi qua MiniAppHelper.makeDirectCall.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
             }
@@ -281,11 +281,11 @@
                   "ContactV2Fragment.kt là màn hình legacy đã thay bằng ContactForwardFragment, nhưng SQLite vbot_contact_v2.db vẫn dùng trong CallForwardBottomSheet"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/ContactV2DatabaseHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/ContactV2Manager.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/ContactV2DatabaseHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/ContactV2Manager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallForwardBottomSheet.kt"
                 ]
               }
             },
@@ -370,10 +370,10 @@
               "android": {
                 "summary": "UserContactsFragment + UserContactMiniAppBridgeHelper.kt + UserContactDatabaseHelper.kt (SQLiteOpenHelper v2) + UserContactManager.kt.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt"
                 ]
               }
             }
@@ -400,8 +400,8 @@
               "android": {
                 "summary": "ContactForwardFragment.kt (Tab 1) + MainActivity.ivAddContact (Admin-only) mở MiniAppHelper.openMiniApp(\"vb-ma-contact-forward\", \"add\").",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
                 ]
               }
             }
@@ -442,8 +442,8 @@
               "android": {
                 "summary": "UserContactsFragment.kt nhúng MiniAppFragment(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData); MainActivity.ivAddContact gọi onPlusButtonClicked() để emit toggle_actions_menu.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
                 ]
               }
             },
@@ -524,9 +524,9 @@
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper.kt xử lý 5 action từ VbMABridge xuống UserContactDatabaseHelper.kt (vbot_user_contact.db v2) & UserContactManager.kt.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt"
                 ]
               }
             },
@@ -638,7 +638,7 @@
               "android": {
                 "summary": "UserContactDatabaseHelper.kt kế thừa SQLiteOpenHelper quản lý vbot_user_contact.db (version 2) với PRIMARY KEY (local_key, uid).",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt"
                 ]
               }
             }
@@ -681,7 +681,7 @@
             "byPlatform": {
               "android": {
                 "summary": "Kiểm tra Manifest.permission.READ_CONTACTS kết hợp cờ has_prompted_read_contacts và số bản ghi trong vbot_user_contact.db.",
-                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"]
+                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"]
               }
             }
           }
@@ -702,8 +702,8 @@
               "android": {
                 "summary": "Giữ nguyên dữ liệu trong UserContactDatabaseHelper (vbot_user_contact.db); chỉ mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS (không gắn FLAG_ACTIVITY_NEW_TASK) khi danh bạ trống và user bấm nút mở Cài đặt.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"
                 ]
               }
             }
@@ -725,8 +725,8 @@
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper xin quyền READ_CONTACTS (coalesced ActivityResultContracts.RequestPermission) rồi UserContactManager đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt"
                 ]
               }
             }
@@ -751,8 +751,8 @@
               "android": {
                 "summary": "UserContactManager.kt + UserContactBatchHelper.kt đồng bộ danh bạ theo batch lên Server và gộp về vbot_user_contact.db.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/pojo/response/UserContactModels.kt"
                 ]
               }
             }
@@ -823,8 +823,8 @@
               "android": {
                 "summary": "MainActivity.ivAddContact gọi UserContactsFragment.onPlusButtonClicked() phát toggle_actions_menu vào MiniAppFragment.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt"
                 ]
               }
             },
@@ -887,8 +887,8 @@
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper.executeDeleteLocal() xoá vbot_user_contact.db và cập nhật recordDeliveredContacts trước reloadFromLocalDB.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt"
                 ]
               }
             }
@@ -908,7 +908,7 @@
             "byPlatform": {
               "android": {
                 "summary": "MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName và khởi chạy CreateCallActivity / VBotPhone.startOutgoingCall (PJSIP).",
-                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"]
+                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"]
               }
             }
           },
@@ -958,9 +958,9 @@
                   "Nút '+' Android chỉ hiện cho Admin (UtilsKotlin.checkAdmin()), không xét CRM:CREATE như iOS"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/ContactV2DatabaseHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/ContactV2DatabaseHelper.kt"
                 ]
               }
             },
@@ -1042,8 +1042,8 @@
               "android": {
                 "summary": "ContactV2Manager truy vấn ContactV2DatabaseHelper (vbot_contact_v2.db, PRIMARY KEY (id, uid, project_code)) phục vụ lọc địa bàn & tìm số khi chuyển tiếp cuộc gọi.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/utils/ContactV2Manager.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/ContactV2DatabaseHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/ContactV2Manager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/ContactV2DatabaseHelper.kt"
                 ]
               }
             }
@@ -1064,8 +1064,8 @@
               "android": {
                 "summary": "Trong cuộc gọi, CallForwardBottomSheet lấy danh bạ V2 từ ContactV2Manager để thực hiện chuyển tiếp DTMF #1.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/ContactV2Manager.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallForwardBottomSheet.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/ContactV2Manager.kt"
                 ]
               }
             }
@@ -1107,8 +1107,8 @@
               "android": {
                 "summary": "UserContactsFragment (Tab 3 trong MainActivity) nhúng MiniAppFragment.newInstance(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData).",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
                 ]
               }
             },
@@ -1158,8 +1158,8 @@
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper.kt nhận \"user_contact_get_local\" qua VbMABridge, đọc UserContactDatabaseHelper.kt (vbot_user_contact.db v2) và kiểm tra quyền READ_CONTACTS.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt"
                 ]
               }
             },
@@ -1215,9 +1215,9 @@
                   "Cờ has_prompted_read_contacts ngăn hỏi lại khi user đã từng có dữ liệu hoặc từ chối"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/pojo/response/UserContactModels.kt"
                 ]
               }
             },
@@ -1268,7 +1268,7 @@
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS không gắn FLAG_ACTIVITY_NEW_TASK.",
                 "edgeCases": ["Bỏ FLAG_ACTIVITY_NEW_TASK giúp nhấn Back từ Cài đặt Android quay về thẳng app VBot"],
-                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"]
+                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"]
               }
             },
             "miniAppBridge": {
@@ -1318,8 +1318,8 @@
               "android": {
                 "summary": "MainActivity.ivAddContact gọi UserContactsFragment.onPlusButtonClicked() emit \"toggle_actions_menu\" xuống MiniAppFragment.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt"
                 ]
               }
             },
@@ -1372,7 +1372,7 @@
             "byPlatform": {
               "android": {
                 "summary": "VbMABridge xử lý request_mini_app_token thông qua MiniAppHelper / DefaultModuleTokenProvider (không prewarm trước).",
-                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"]
+                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"]
               }
             },
             "miniAppBridge": {
@@ -1423,9 +1423,9 @@
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper.kt gọi UserContactManager & UserContactBatchHelper tải Server vào vbot_user_contact.db rồi trả contacts[] mới.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
-                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/pojo/response/UserContactModels.kt"
                 ]
               }
             },
@@ -1504,8 +1504,8 @@
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper.kt xóa syncedIds & unsyncedLocalKeys trong vbot_user_contact.db và gọi recordDeliveredContacts(uid, remainingItems) trước reloadFromLocalDB().",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt"
                 ]
               }
             },
@@ -1560,7 +1560,7 @@
                 "edgeCases": [
                   "Chống LiveData sticky replay lúc mới đăng ký Observer bằng điều kiện bỏ qua lastDeliveredSignature == null"
                 ],
-                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"]
+                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"]
               }
             },
             "miniAppBridge": {
@@ -1657,9 +1657,9 @@
               "android": {
                 "summary": "MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName, mở CreateCallActivity / VBotPhone.startOutgoingCall (PJSIP) và emit \"call_result\" sau ~200ms.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt",
-                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/model/CallModel.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/pojo/response/CallModel.kt"
                 ]
               }
             },
@@ -1763,8 +1763,8 @@
               "android": {
                 "summary": "ContactForwardFragment.kt khởi tạo MiniAppFragment(\"vb-ma-contact-forward\", startParam=\"embedded\", extraData=themeExtraData) bên trong MainActivity.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
                 ]
               }
             },
@@ -1815,8 +1815,8 @@
                   "User thường có CRM:CREATE nhưng không phải Admin sẽ KHÔNG thấy nút '+' trên Android (khác iOS)"
                 ],
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
             },
@@ -1865,8 +1865,8 @@
               "android": {
                 "summary": "ContactForwardFragment / MainActivity phát refresh_data & theme_changed về MiniAppFragment đang nhúng ở Tab 1.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
                 ]
               }
             },
@@ -1914,8 +1914,8 @@
               "android": {
                 "summary": "VbMaHostCallback.onRequestCall -> MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName và trả \"call_result\" sau ~200ms.",
                 "codeRefs": [
-                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt",
-                  "app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt"
                 ]
               }
             },
