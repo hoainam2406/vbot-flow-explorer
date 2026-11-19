@@ -8,6 +8,13 @@ export interface LayoutOptions {
   showCanvasMedia?: boolean;
 }
 
+export interface BoundingRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export type PositionedFlowNodeData = FlowNodeData & {
   estimatedWidth: number;
   estimatedHeight: number;
@@ -115,4 +122,41 @@ export function toVueFlowEdges(
         : { stroke: strokeColor, strokeWidth: 1.7 },
     };
   });
+}
+
+export function computeNodesBounds(
+  nodes: PositionedFlowNode[],
+  targetIds?: ReadonlyArray<string> | ReadonlySet<string> | null,
+): BoundingRect | null {
+  const idSet: ReadonlySet<string> | null = targetIds
+    ? Array.isArray(targetIds)
+      ? new Set(targetIds)
+      : (targetIds as ReadonlySet<string>)
+    : null;
+  const candidates =
+    idSet && idSet.size > 0 ? nodes.filter((node) => idSet.has(node.id)) : nodes;
+  if (candidates.length === 0) return null;
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const node of candidates) {
+    const x1 = node.position.x;
+    const y1 = node.position.y;
+    const x2 = x1 + node.data.estimatedWidth;
+    const y2 = y1 + node.data.estimatedHeight;
+    if (x1 < minX) minX = x1;
+    if (y1 < minY) minY = y1;
+    if (x2 > maxX) maxX = x2;
+    if (y2 > maxY) maxY = y2;
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
 }

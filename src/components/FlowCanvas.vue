@@ -2,6 +2,7 @@
 import { computed, inject, markRaw, nextTick, watch } from 'vue';
 import {
   VueFlow,
+  getTransformForBounds,
   useVueFlow,
   type NodeComponent,
   type NodeTypesObject,
@@ -9,8 +10,12 @@ import {
 import { Background } from '@vue-flow/background';
 import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
-import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
-import { computeDagreLayout, toVueFlowEdges } from '../composables/useGraphLayout';
+import { FLOW_EXPLORER_KEY, getCameraTargetNodeIds } from '../composables/useFlowExplorer';
+import {
+  computeDagreLayout,
+  computeNodesBounds,
+  toVueFlowEdges,
+} from '../composables/useGraphLayout';
 import AppFlowNode from './nodes/AppFlowNode.vue';
 import ScenarioBar from './ScenarioBar.vue';
 
@@ -19,7 +24,7 @@ if (!explorer) {
   throw new Error('FLOW_EXPLORER_KEY must be provided');
 }
 
-const { fitView } = useVueFlow();
+const { dimensions, fitView, setViewport } = useVueFlow();
 
 const nodeTypes: NodeTypesObject = {
   appFlow: markRaw(AppFlowNode) as NodeComponent,
@@ -50,24 +55,51 @@ const layoutEdges = computed(() =>
   ),
 );
 
-const runFitView = async (duration = 350) => {
+const nextFrame = () =>
+  new Promise<void>((resolve) => {
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => resolve());
+    } else {
+      resolve();
+    }
+  });
+
+const runCameraFocus = async (duration = 350) => {
   await nextTick();
+  await nextFrame();
+  const targetIds = getCameraTargetNodeIds(
+    explorer.visibleFlow.value,
+    explorer.cameraTarget.value,
+  );
+  const bounds = computeNodesBounds(layoutNodes.value, targetIds);
+  if (bounds && dimensions.value.width > 0 && dimensions.value.height > 0) {
+    const maxZoom = targetIds ? 1.05 : 1.0;
+    const transform = getTransformForBounds(
+      bounds,
+      dimensions.value.width,
+      dimensions.value.height,
+      0.2,
+      maxZoom,
+      0.18,
+    );
+    await setViewport(transform, { duration });
+    return;
+  }
   await fitView({ padding: 0.22, duration });
 };
 
 watch(
   [
-    () => explorer.visibleFlow.value,
+    () => explorer.cameraTarget.value,
     () => explorer.showCanvasMedia.value,
-    () => explorer.focusRootId.value,
   ],
   () => {
-    void runFitView(350);
+    void runCameraFocus(350);
   },
 );
 
 const onPaneReady = () => {
-  void runFitView(0);
+  void runCameraFocus(0);
 };
 </script>
 

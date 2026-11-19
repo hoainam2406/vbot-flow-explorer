@@ -1,6 +1,6 @@
 // tests/useGraphLayout.test.ts
 import { describe, expect, it } from 'vitest';
-import { computeDagreLayout } from '../src/composables/useGraphLayout';
+import { computeDagreLayout, computeNodesBounds } from '../src/composables/useGraphLayout';
 import type { FlowEdgeData, FlowNodeData } from '../src/data/schema';
 
 describe('computeDagreLayout', () => {
@@ -23,5 +23,37 @@ describe('computeDagreLayout', () => {
 
     expect(compact[1].position.x).toBeGreaterThan(compact[0].position.x);
     expect(withMedia[1].data.estimatedHeight).toBeGreaterThan(compact[1].data.estimatedHeight);
+  });
+
+  it('computes bounding rect for a filtered subset of nodes or all nodes', () => {
+    const nodes: FlowNodeData[] = [
+      { id: 'root', label: 'Root', kind: 'module', audience: 'all', summary: { overview: 'R' } },
+      { id: 'child', label: 'Child', kind: 'action', audience: 'all', summary: { overview: 'C' } },
+    ];
+    const edges: FlowEdgeData[] = [{ id: 'e1', source: 'root', target: 'child' }];
+    const layoutNodes = computeDagreLayout(nodes, edges, { showCanvasMedia: false, direction: 'LR' });
+
+    const childOnly = computeNodesBounds(layoutNodes, ['child']);
+    expect(childOnly).toEqual({
+      x: layoutNodes[1].position.x,
+      y: layoutNodes[1].position.y,
+      width: layoutNodes[1].data.estimatedWidth,
+      height: layoutNodes[1].data.estimatedHeight,
+    });
+
+    const allBounds = computeNodesBounds(layoutNodes, null);
+    expect(allBounds).toEqual({
+      x: layoutNodes[0].position.x,
+      y: Math.min(layoutNodes[0].position.y, layoutNodes[1].position.y),
+      width:
+        layoutNodes[1].position.x +
+        layoutNodes[1].data.estimatedWidth -
+        layoutNodes[0].position.x,
+      height:
+        Math.max(
+          layoutNodes[0].position.y + layoutNodes[0].data.estimatedHeight,
+          layoutNodes[1].position.y + layoutNodes[1].data.estimatedHeight,
+        ) - Math.min(layoutNodes[0].position.y, layoutNodes[1].position.y),
+    });
   });
 });

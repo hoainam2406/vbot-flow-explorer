@@ -5,8 +5,65 @@ import {
   countDescendants,
   findNodeById,
   type ViewMode,
+  type VisibleFlowResult,
 } from '../core/graphEngine';
 import type { FlowNodeData, MediaItem, MergedFlowDataset } from '../data/schema';
+
+export interface CameraTarget {
+  kind: 'all' | 'subtree' | 'node';
+  nodeId?: string;
+  seq: number;
+}
+
+export function getCameraTargetNodeIds(
+  visibleFlow: VisibleFlowResult,
+  target: CameraTarget,
+): string[] | null {
+  if (target.kind === 'all' || !target.nodeId) return null;
+
+  const visibleIds = new Set(visibleFlow.nodes.map((n) => n.id));
+  if (!visibleIds.has(target.nodeId)) return null;
+
+  if (target.kind === 'subtree') {
+    const result: string[] = [target.nodeId];
+    const seen = new Set<string>([target.nodeId]);
+    const isDescendant = (id: string): boolean => {
+      let cursor: string | undefined = visibleFlow.nodeParentMap[id];
+      const guard = new Set<string>();
+      while (cursor && !guard.has(cursor)) {
+        if (cursor === target.nodeId) return true;
+        guard.add(cursor);
+        cursor = visibleFlow.nodeParentMap[cursor];
+      }
+      return false;
+    };
+    for (const node of visibleFlow.nodes) {
+      if (!seen.has(node.id) && isDescendant(node.id)) {
+        seen.add(node.id);
+        result.push(node.id);
+      }
+    }
+    return result;
+  }
+
+  const result: string[] = [];
+  const seen = new Set<string>();
+  const addIfVisible = (id: string | undefined) => {
+    if (id && visibleIds.has(id) && !seen.has(id)) {
+      seen.add(id);
+      result.push(id);
+    }
+  };
+
+  addIfVisible(visibleFlow.nodeParentMap[target.nodeId]);
+  addIfVisible(target.nodeId);
+  for (const node of visibleFlow.nodes) {
+    if (visibleFlow.nodeParentMap[node.id] === target.nodeId) {
+      addIfVisible(node.id);
+    }
+  }
+  return result;
+}
 
 export function buildParentIndex(dataset: MergedFlowDataset): Record<string, string> {
   const parentOf: Record<string, string> = {};
@@ -40,12 +97,27 @@ export function createFlowExplorerState(
   const selectedNodeId = ref<string | null>(null);
   const activeScenarioId = ref<string | null>(null);
   const showCanvasMedia = ref(false);
+  let cameraSeq = 0;
+  const cameraTarget = ref<CameraTarget>({ kind: 'all', seq: 0 });
+
+  const setCameraTarget = (kind: CameraTarget['kind'], nodeId?: string) => {
+    cameraTarget.value = {
+      kind,
+      ...(nodeId ? { nodeId } : {}),
+      seq: ++cameraSeq,
+    };
+  };
 
   const parentIndex = buildParentIndex(dataset);
 
   const setAudienceMode = (next: ViewMode) => {
     audienceMode.value = allowTechMode ? next : 'overview';
     activeScenarioId.value = null;
+    if (cameraTarget.value.kind === 'subtree' && cameraTarget.value.nodeId) {
+      setCameraTarget('subtree', cameraTarget.value.nodeId);
+    } else {
+      setCameraTarget('all');
+    }
   };
 
   const getAncestorChain = (nodeId: string): string[] => {
@@ -63,8 +135,9 @@ export function createFlowExplorerState(
   const toggleExpand = (nodeId: string) => {
     if (!dataset.subtreesByParentId[nodeId]) return;
     const next = new Set(expandedIds.value);
+    const wasExpanded = next.has(nodeId);
 
-    if (next.has(nodeId)) {
+    if (wasExpanded) {
       next.delete(nodeId);
     } else {
       if (accordionMode.value) {
@@ -91,6 +164,16 @@ export function createFlowExplorerState(
     }
     expandedIds.value = next;
     activeScenarioId.value = null;
+
+    if (!wasExpanded) {
+      setCameraTarget('subtree', nodeId);
+    } else if (next.size === 0 && !focusRootId.value) {
+      setCameraTarget('all');
+    } else if (parentIndex[nodeId] && parentIndex[nodeId] !== dataset.rootNode.id) {
+      setCameraTarget('subtree', parentIndex[nodeId]);
+    } else {
+      setCameraTarget('all');
+    }
   };
 
   const jumpToNode = (nodeId: string) => {
@@ -106,6 +189,7 @@ export function createFlowExplorerState(
     if (focusRootId.value && !ancestors.includes(focusRootId.value)) {
       focusRootId.value = null;
     }
+    setCameraTarget('node', nodeId);
   };
 
   const setFocusRoot = (nodeId: string | null) => {
@@ -117,6 +201,7 @@ export function createFlowExplorerState(
       expandedIds.value = next;
     }
     activeScenarioId.value = null;
+    setCameraTarget('all');
   };
 
   const visibleFlow = computed(() =>
@@ -156,6 +241,7 @@ export function createFlowExplorerState(
     selectedNodeId,
     activeScenarioId,
     showCanvasMedia,
+    cameraTarget,
     visibleFlow,
     selectedNode,
     breadcrumbNodes,

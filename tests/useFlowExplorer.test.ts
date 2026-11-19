@@ -1,6 +1,9 @@
 // tests/useFlowExplorer.test.ts
 import { describe, expect, it } from 'vitest';
-import { createFlowExplorerState } from '../src/composables/useFlowExplorer';
+import {
+  createFlowExplorerState,
+  getCameraTargetNodeIds,
+} from '../src/composables/useFlowExplorer';
 import { searchFlowNodes } from '../src/composables/useSearch';
 import type { MergedFlowDataset } from '../src/data/schema';
 
@@ -93,5 +96,42 @@ describe('createFlowExplorerState', () => {
     const techByCode = searchFlowNodes(sampleDataset, 'TwoFactorSessionManager', 'tech');
     expect(techByLabel.map((hit) => hit.node.id)).toEqual(['b1-tech']);
     expect(techByCode.map((hit) => hit.node.id)).toEqual(['b1-tech']);
+  });
+
+  it('tracks camera target for newly expanded branch, collapses back cleanly, and preserves subtree focus on mode switch', () => {
+    const state = createFlowExplorerState(sampleDataset, true);
+    expect(state.cameraTarget.value.kind).toBe('all');
+    expect(getCameraTargetNodeIds(state.visibleFlow.value, state.cameraTarget.value)).toBeNull();
+
+    state.toggleExpand('b1');
+    state.toggleExpand('b1-1');
+    expect(state.cameraTarget.value.kind).toBe('subtree');
+    expect(state.cameraTarget.value.nodeId).toBe('b1-1');
+    expect(getCameraTargetNodeIds(state.visibleFlow.value, state.cameraTarget.value)).toEqual([
+      'b1-1',
+      'b1-1-1',
+    ]);
+
+    const seqBeforeModeSwitch = state.cameraTarget.value.seq;
+    state.setAudienceMode('tech');
+    expect(state.cameraTarget.value.kind).toBe('subtree');
+    expect(state.cameraTarget.value.nodeId).toBe('b1-1');
+    expect(state.cameraTarget.value.seq).toBeGreaterThan(seqBeforeModeSwitch);
+
+    state.toggleExpand('b1-1');
+    expect(state.cameraTarget.value.kind).toBe('subtree');
+    expect(state.cameraTarget.value.nodeId).toBe('b1');
+
+    state.toggleExpand('b1');
+    expect(state.cameraTarget.value.kind).toBe('all');
+    expect(getCameraTargetNodeIds(state.visibleFlow.value, state.cameraTarget.value)).toBeNull();
+
+    state.jumpToNode('b2-1');
+    expect(state.cameraTarget.value.kind).toBe('node');
+    expect(state.cameraTarget.value.nodeId).toBe('b2-1');
+    expect(getCameraTargetNodeIds(state.visibleFlow.value, state.cameraTarget.value)).toEqual([
+      'b2',
+      'b2-1',
+    ]);
   });
 });
