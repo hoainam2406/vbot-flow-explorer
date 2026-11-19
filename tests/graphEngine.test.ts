@@ -246,4 +246,102 @@ describe('graphEngine', () => {
     expect(pubJson).not.toContain('examplePayload');
     expect(pub.subtreesByParentId['mod-call'].nodes[0].relatedNodeIds).toBeUndefined();
   });
+
+  it('filters platform-specific nodes, bridges edges per platform, shows both in compare mode, and strips all platform tech metadata in sanitizeForPublic', () => {
+    const platformSub: SubtreeDefinition = {
+      title: 'Incoming Platform Flow',
+      layoutHint: 'flow',
+      entryNodeIds: ['start'],
+      nodes: [
+        {
+          id: 'start',
+          label: 'Nhận Push',
+          kind: 'external',
+          audience: 'all',
+          summary: { overview: 'Push' },
+        },
+        {
+          id: 'ios-only',
+          label: 'PushKit Retry -1005',
+          kind: 'process',
+          audience: 'tech',
+          platforms: ['ios'],
+          summary: { overview: 'iOS only' },
+        },
+        {
+          id: 'android-only',
+          label: 'FCM FullScreenIntent',
+          kind: 'process',
+          audience: 'tech',
+          platforms: ['android'],
+          summary: { overview: 'Android only' },
+        },
+        {
+          id: 'end',
+          label: 'Đổ chuông',
+          kind: 'action',
+          audience: 'all',
+          summary: { overview: 'Ring' },
+          techDetail: {
+            platformDiffNote: 'Khác cơ chế',
+            byPlatform: {
+              ios: { codeRefs: ['IOS.swift'] },
+              android: { codeRefs: ['Android.kt'] },
+            },
+          },
+        },
+      ],
+      edges: [
+        { id: 'e-s-i', source: 'start', target: 'ios-only', platforms: ['ios'] },
+        { id: 'e-i-e', source: 'ios-only', target: 'end', platforms: ['ios'] },
+        { id: 'e-s-a', source: 'start', target: 'android-only', platforms: ['android'] },
+        { id: 'e-a-e', source: 'android-only', target: 'end', platforms: ['android'] },
+      ],
+    } as SubtreeDefinition;
+
+    const iosView = (filterAndBridgeSubtree as (s: SubtreeDefinition, m: 'overview' | 'tech', p?: 'ios' | 'android' | 'compare') => SubtreeDefinition)(
+      platformSub,
+      'tech',
+      'ios',
+    );
+    expect(iosView.nodes.map((n) => n.id)).toEqual(['start', 'ios-only', 'end']);
+
+    const androidView = (filterAndBridgeSubtree as (s: SubtreeDefinition, m: 'overview' | 'tech', p?: 'ios' | 'android' | 'compare') => SubtreeDefinition)(
+      platformSub,
+      'tech',
+      'android',
+    );
+    expect(androidView.nodes.map((n) => n.id)).toEqual(['start', 'android-only', 'end']);
+
+    const compareView = (filterAndBridgeSubtree as (s: SubtreeDefinition, m: 'overview' | 'tech', p?: 'ios' | 'android' | 'compare') => SubtreeDefinition)(
+      platformSub,
+      'tech',
+      'compare',
+    );
+    expect(compareView.nodes.map((n) => n.id)).toEqual(['start', 'ios-only', 'android-only', 'end']);
+
+    const overviewView = (filterAndBridgeSubtree as (s: SubtreeDefinition, m: 'overview' | 'tech', p?: 'ios' | 'android' | 'compare') => SubtreeDefinition)(
+      platformSub,
+      'overview',
+      'android',
+    );
+    expect(overviewView.nodes.map((n) => n.id)).toEqual(['start', 'end']);
+    expect(overviewView.edges).toHaveLength(1);
+    expect(overviewView.edges[0].source).toBe('start');
+    expect(overviewView.edges[0].target).toBe('end');
+
+    const modPlatform: FlowModuleFile = {
+      schemaVersion: '1.0',
+      moduleId: 'mod-call',
+      subtrees: { 'mod-call': platformSub },
+    };
+    const dataset = mergeDataset(manifest, [modPlatform]);
+    const pubJson = JSON.stringify(sanitizeForPublic(dataset));
+    expect(pubJson).not.toContain('ios-only');
+    expect(pubJson).not.toContain('android-only');
+    expect(pubJson).not.toContain('byPlatform');
+    expect(pubJson).not.toContain('platformDiffNote');
+    expect(pubJson).not.toContain('Android.kt');
+    expect(pubJson).not.toContain('"platforms"');
+  });
 });

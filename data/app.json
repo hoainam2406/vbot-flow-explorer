@@ -3,7 +3,7 @@
   "app": {
     "name": "VBot",
     "tagline": "Ứng dụng tổng đài đa kênh, gọi thoại SIP/CallKit, Mini App & CRM trên di động",
-    "version": "iOS Unified Map 1.0"
+    "version": "iOS & Android Map 2.0"
   },
   "rootNode": {
     "id": "vbot-app",
@@ -31,6 +31,7 @@
       }
     ],
     "techDetail": {
+      "platformDiffNote": "iOS dùng UIKit (NewMainTabBarViewController) + Linphone/PushKit/CallKit + WKWebView ScriptMessageHandler ('vbma'), trong khi Android dùng MainActivity (AHBottomNavigation giữ sống WebView bằng add/show/hide) + PJSIP (vbotphonesdk; LinphoneManager đã comment out 100%) + FCM/FullScreenIntent/ForegroundService + WebView @JavascriptInterface ('VbMABridge').",
       "apisOrEvents": [
         "VBotSocketManager (WebSocket trạng thái & sự kiện tài khoản)",
         "PushKit VoIP + CallKit (nhận & điều khiển cuộc gọi cấp hệ thống)",
@@ -41,15 +42,46 @@
         "VBot/AppDelegate/AppDelegate.swift",
         "VBot/Service/MiniAppService.swift"
       ],
+      "byPlatform": {
+        "ios": {
+          "summary": "Host iOS UIKit (NewMainTabBarViewController 4 tab) + lõi Linphone/CallKit/PushKit + VbMaSDK (WKWebView WKScriptMessageHandler 'vbma', sandbox riêng WKProcessPool/WKWebsiteDataStore).",
+          "codeRefs": [
+            "VBot/Controller/NewController/Main/NewMainTabBarViewController.swift",
+            "VBot/AppDelegate/AppDelegate.swift",
+            "VBot/Service/MiniAppService.swift"
+          ]
+        },
+        "android": {
+          "summary": "Host Android MainActivity (AHBottomNavigation 4 tab dùng add/show/hide để giữ sống MiniAppFragment/WebView) + lõi VoIP PJSIP (vbotphonesdk) + FCM FullScreenIntent + MiniAppHelper (VbMaSDK với @JavascriptInterface VbMABridge).",
+          "apisOrEvents": [
+            "vbotphonesdk (PJSIP + WebSocket + Foreground CallService + FullScreenIntent)",
+            "VbMaSDK / MiniAppHelper (cầu nối @JavascriptInterface 'VbMABridge.post()')"
+          ],
+          "codeRefs": [
+            "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+            "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+            "vb-ma-android-sdk/vbotma-sdk/src/main/java/com/vbot/miniapp/sdk/VbMaSDK.kt",
+            "vb-ma-android-sdk/vbotma-sdk/src/main/java/com/vbot/miniapp/sdk/VbMABridge.kt"
+          ]
+        }
+      },
       "miniAppBridge": {
         "miniAppId": "VbMaSDK (Global)",
         "embedMode": "sdk_global",
         "transport": "WKWebView ScriptMessageHandler 'vbma' ↔ MiniAppService (VbMaDelegate)",
+        "transportByPlatform": {
+          "ios": "WKWebView ScriptMessageHandler 'vbma' ↔ MiniAppService (VbMaDelegate)",
+          "android": "WebView @JavascriptInterface 'VbMABridge.post()' ↔ MiniAppHelper (VbMaSDKDelegate)"
+        },
         "messages": [
           {
             "direction": "host_init",
             "name": "openMiniApp / createMiniAppViewController",
             "hostFn": "MiniAppService.openMiniApp(id:locale:startParam:extraData:) → VbMa.shared.openMiniApp(...) / VbMa.shared.createMiniAppViewController(...)",
+            "hostFnByPlatform": {
+              "ios": "MiniAppService.openMiniApp(id:locale:startParam:extraData:) → VbMa.shared.openMiniApp(...) / createMiniAppViewController(...)",
+              "android": "MiniAppHelper.openMiniApp(...) → VbMaSDK.openMiniApp(...) (MiniAppActivity) / MiniAppFragment.newInstance(...)"
+            },
             "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
             "payload": "{ locale, startParam, extraData: { theme_params, themeParams, isAdmin } }",
             "note": "Host cung cấp apiBaseURL, currentAccessToken, projectCode, uid, source: 'App' qua VbMaDelegate."
@@ -58,32 +90,50 @@
             "direction": "miniapp_to_host",
             "name": "request_mini_app_token",
             "hostFn": "MiniAppService.prewarmMiniAppTokenIfNeeded(force:) / VbMaViewController.userContentController(_:didReceive:) → sendEvent(\"mini_app_token_result\", payload:)",
+            "hostFnByPlatform": {
+              "ios": "MiniAppService.prewarmMiniAppTokenIfNeeded(force:) / VbMaViewController.userContentController(_:didReceive:) → sendEvent(\"mini_app_token_result\")",
+              "android": "VbMABridge.handleRequestMiniAppToken(...) → VbMaMiniAppTokenService.shared.getToken() (GET /api/User/getTokenMiniApp?uid=)"
+            },
             "miniAppFn": "requestMiniAppToken(timeoutMs) → postEvent(\"request_mini_app_token\") + on(\"mini_app_token_result\", cb)",
             "payload": "{ request_id }",
             "response": "MiniAppToken (RAM cache TTL 600s, scope apiBaseURL|projectCode|uid)",
-            "note": "Host chủ động pre-warm sau configure() và refreshHostToken()."
+            "note": "Host iOS chủ động pre-warm sau configure() và refreshHostToken().",
+            "parityNote": "Android KHÔNG có bước prewarm token lúc khởi động (scheduleInCallPrewarm trong MiniAppHelper hiện không có caller) và VbMaMiniAppTokenService chưa có callRefreshTokenAPI()."
           },
           {
             "direction": "miniapp_to_host",
             "name": "refreshHostToken",
             "hostFn": "MiniAppService.refreshHostToken() → BaseService.reLoginWithToken(...) + prewarmMiniAppTokenIfNeeded(force: true)",
+            "hostFnByPlatform": {
+              "ios": "MiniAppService.refreshHostToken() → BaseService.reLoginWithToken(...) + prewarmMiniAppTokenIfNeeded(force: true)",
+              "android": "MiniAppHelper.delegate.refreshHostToken() → API.service.refreshToken(refreshKey).blockingFirst() + syncCallSDKSession(...)"
+            },
             "miniAppFn": "requestMiniAppToken() / requestModuleToken(module, timeoutMs, force: true) (@vbotma/sdk)",
-            "response": "Token mới + pre-warm lại MiniAppToken",
-            "note": "SDK tự gọi khi API Mini App trả 401 (BaseService.reLoginWithToken)."
+            "response": "Token mới + cập nhật session",
+            "note": "SDK tự gọi khi API Mini App trả 401.",
+            "parityNote": "Trên Android nếu HTTP 400/401/403 sẽ xóa credential, invalidate ModuleTokenCache & VbMaSDK.logout(), và ép về Login 1 lần qua sessionExpiredNavigated (AtomicBoolean)."
           },
           {
             "direction": "miniapp_to_host",
             "name": "check_permissions",
             "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → VPMRoleService → VbMaViewController.sendEvent(\"permissions_result\", payload:)",
+            "hostFnByPlatform": {
+              "ios": "MiniAppService.onCheckPermissions(module:actions:) → VPMRoleService → VbMaViewController.sendEvent(\"permissions_result\")",
+              "android": "VbMABridge → MiniAppHelper.onCheckPermissions(...) → MiniAppPermissionHelper.checkPermissionsBatch(...) (Realm RBAC enums)"
+            },
             "miniAppFn": "checkPermission(module, action) / checkPermissions(module, actions) → postEvent(\"check_permissions\") + on(\"permissions_result\", cb)",
             "payload": "{ module, actions[] }",
             "response": "{ [action]: Bool }",
-            "note": "Map qua VPMRoleService (VD 'CRM' -> 'CUSTOMER', 'VIEW' -> 'SHOW')."
+            "note": "Map tên quyền song ngữ về role của Host (VD Admin bypass, 'CRM' -> 'CUSTOMER', 'HIEN_SO_DIEN_THOAI')."
           },
           {
             "direction": "miniapp_to_host",
             "name": "get_session_info",
             "hostFn": "MiniAppService.onHostActionRequested(requestId:action:payload:) [case \"get_session_info\"] → VbMaViewController.sendEvent(\"host_action_result\", payload:)",
+            "hostFnByPlatform": {
+              "ios": "MiniAppService.onHostActionRequested(...) [case \"get_session_info\"] → sendEvent(\"host_action_result\")",
+              "android": "MiniAppHelper.dispatchHostAction(...) → handleGetSessionInfo(requestId) → host_action_result"
+            },
             "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"get_session_info\" }) + on(\"host_action_result\", cb)",
             "payload": "{ request_id }",
             "response": "{ request_id, success, session_id, socket_url, isAdmin }"
@@ -92,9 +142,14 @@
             "direction": "miniapp_to_host",
             "name": "make_call",
             "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
+            "hostFnByPlatform": {
+              "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\")",
+              "android": "MiniAppHelper.onRequestCall(...) → makeDirectCall(...) / ChooseHotlineCallBottomSheet → VBotPhone.startOutgoingCall(to)"
+            },
             "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
             "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall, avatar, hotline }",
-            "response": "{ request_id, success, reason? }"
+            "response": "{ request_id, success, reason? }",
+            "parityNote": "Trên Android, MiniAppHelper.onRequestCall luôn gọi callback(success = true) sau 200ms kể cả khi mới mở ChooseHotlineCallBottomSheet; ngoài ra CallActionBridgeHelper (transfer_call, get_call_context...) chưa được nối vào MiniAppHelper."
           }
         ]
       }
@@ -120,11 +175,30 @@
         }
       ],
       "techDetail": {
+        "platformDiffNote": "iOS dùng Linphone + PushKit + CallKit + HTTP FreeSWITCH Blind Transfer; Android dùng PJSIP (vbotphonesdk) + FCM FullScreenIntent + Foreground CallService + thuần DTMF Transfer và không có nút Hold.",
         "codeRefs": [
           "VBot/Service/VPMAppService.swift",
           "VBot/Linphone+CallKit/CallKitProviderDelegate.swift",
           "VBot/Linphone+CallKit/LinphoneAPI.swift"
-        ]
+        ],
+        "byPlatform": {
+          "ios": {
+            "summary": "Linphone + CallKitProviderDelegate + PushKit + FreeSwitchTransferHelper (ưu tiên CRM > PushKit > SQLite > SĐT).",
+            "codeRefs": [
+              "VBot/Service/VPMAppService.swift",
+              "VBot/Linphone+CallKit/CallKitProviderDelegate.swift",
+              "VBot/Linphone+CallKit/LinphoneAPI.swift"
+            ]
+          },
+          "android": {
+            "summary": "vbotphonesdk (PJSIP + CallService Foreground + Notification.CallStyle/FullScreenIntent) + NewCallActivity (PiP native 2:3) + CallForwardDTMFHelper + SipCodeRepository (ưu tiên miniAppDisplayName > CRM > SQLite > Push > SĐT).",
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+              "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/VBotRepository.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
+            ]
+          }
+        }
       }
     },
     {
@@ -146,11 +220,30 @@
         }
       ],
       "techDetail": {
+        "platformDiffNote": "Cả iOS và Android đều giữ temporaryAccessToken hoàn toàn trong RAM, khóa 429 theo username và khử trùng WebSocket SETUP_2FA 1000ms; Android gom 3 bước Quên mật khẩu trong 1 Fragment (NewForgotPasswordFragment).",
         "codeRefs": [
           "VBot/Controller/NewController/Auth/SignIn/VPMSignInViewController.swift",
           "VBot/Service/TwoFactorSessionManager.swift",
           "VBot/Service/SecurityManager.swift"
-        ]
+        ],
+        "byPlatform": {
+          "ios": {
+            "summary": "VPMSignInViewController / MainSignInViewController + TwoFactorLoginViewController + TwoFactorSessionManager (RAM) + VbTwoFactorSocketHandler + SecurityManager.",
+            "codeRefs": [
+              "VBot/Controller/NewController/Auth/SignIn/VPMSignInViewController.swift",
+              "VBot/Service/TwoFactorSessionManager.swift",
+              "VBot/Service/SecurityManager.swift"
+            ]
+          },
+          "android": {
+            "summary": "SignInFragment / LoginNewActivity + TwoFactorLoginFragment + TwoFactorSessionManager (RAM) + StartupSessionGuard + VbTwoFactorSocketHandler (gắn 3 nguồn socket) + SecurityManager.",
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/login/SignInFragment.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/TwoFactorSessionManager.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/SecurityManager.kt"
+            ]
+          }
+        }
       }
     },
     {
@@ -172,11 +265,30 @@
         }
       ],
       "techDetail": {
+        "platformDiffNote": "Chống vòng lặp user_contacts_updated khác nhau (iOS gắn userInfo['source']='miniapp_bridge', Android so khớp chữ ký computeContactsSignature); nút '+' trên Tab Chuyển tiếp Android chỉ hiện cho Admin (iOS cho cả CRM:CREATE).",
         "codeRefs": [
           "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
           "VBot/Service/Database/UserContactDatabaseHelper.swift",
           "VBot/Controller/NewController/Contact/ContactForwardViewController.swift"
-        ]
+        ],
+        "byPlatform": {
+          "ios": {
+            "summary": "UserContactsMiniAppViewController + UserContactDatabaseHelper (SQLite) + CNContactStore + ContactForwardViewController.",
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
+              "VBot/Service/Database/UserContactDatabaseHelper.swift",
+              "VBot/Controller/NewController/Contact/ContactForwardViewController.swift"
+            ]
+          },
+          "android": {
+            "summary": "UserContactsFragment + UserContactDatabaseHelper (SQLiteOpenHelper vbot_user_contact.db PK (local_key, uid)) + UserContactManager (ContactsContract) + ContactForwardFragment (Mini App) & ContactV2DatabaseHelper (cho chuyển tiếp trong cuộc gọi).",
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/UserContactsFragment.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt"
+            ]
+          }
+        }
       }
     },
     {
@@ -192,7 +304,24 @@
         "codeRefs": [
           "VBot/Service/AutodialManager.swift",
           "VBot/Controller/NewController/CallMarketing/Call/SelectTemplateForCallViewController.swift"
-        ]
+        ],
+        "byPlatform": {
+          "ios": {
+            "summary": "AutodialManager.swift + SelectTemplateForCallViewController + SelectCallTypeViewController.",
+            "codeRefs": [
+              "VBot/Service/AutodialManager.swift",
+              "VBot/Controller/NewController/CallMarketing/Call/SelectTemplateForCallViewController.swift"
+            ]
+          },
+          "android": {
+            "summary": "AutodialManager.kt (OkHttp WebSocket ws/call, reconnect backoff 2s/4s/8s, cooldown 2s) + AutoCallActivity / QueueCallCampaignActivity / AddScriptIVRActivity & các Mini App vb-ma-auto-call-*.",
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/AutodialManager.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/auto_call/AutoCallActivity.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/maketing/campaign/QueueCallCampaignActivity.kt"
+            ]
+          }
+        }
       }
     },
     {
@@ -205,11 +334,30 @@
         "tech": "Màn hình FeaturesViewControllerV2 tải danh sách Mini App từ VbMaSDK, hiển thị FeatureConsoleCapsuleView theo VbUserStateHolder / VbDeviceInboundHolder và điều phối quyền giám sát/nghe lén qua MiniAppMonitoringCoordinator."
       },
       "techDetail": {
+        "platformDiffNote": "Android lưu Gợi ý & Yêu thích (kéo-thả sắp xếp) trong Realm FeatureView; Giám sát trên Android dùng native PiP và hiện chưa emit lại monitor_call_state_changed về JS.",
         "codeRefs": [
           "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
           "VBot/Service/MiniAppService.swift",
           "VBot/Service/MiniAppMonitoringCoordinator.swift"
-        ]
+        ],
+        "byPlatform": {
+          "ios": {
+            "summary": "FeaturesViewControllerV2 + FeatureConsoleCapsuleView + VbUserStateHolder / VbDeviceInboundHolder + MiniAppMonitoringCoordinator.",
+            "codeRefs": [
+              "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
+              "VBot/Service/MiniAppService.swift",
+              "VBot/Service/MiniAppMonitoringCoordinator.swift"
+            ]
+          },
+          "android": {
+            "summary": "FeatureFragment (llConsoleQuickBar + Realm FeatureView Gợi ý/Yêu thích) + VbUserStateHolder (StateFlow + ProcessLifecycleOwner) + VbDeviceInboundHolder + MiniAppHelper.onMonitorCall (synchronized monitorLock).",
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/VbUserStateHolder.kt"
+            ]
+          }
+        }
       }
     },
     {
@@ -222,11 +370,30 @@
         "tech": "Tab Gần đây nhúng Mini App vb-ma-user-history-call kèm bộ lọc native Tất cả/Gọi nhỡ, phát âm thanh ghi âm qua PlayerManager và chuyển đổi dự án/hotline qua qListProjectViewController & SelectHotlineViewController."
       },
       "techDetail": {
+        "platformDiffNote": "Trên Android, CallHistoryFragment hiện KHÔNG truyền theme_params, KHÔNG emit theme_changed và không có Recording Playback Manager như iOS PlayerManager.",
         "codeRefs": [
           "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift",
           "VBot/Service/PlayerManager.swift",
           "VBot/Controller/NewController/Hotline/SelectHotline/SelectHotlineViewController.swift"
-        ]
+        ],
+        "byPlatform": {
+          "ios": {
+            "summary": "UserHistoryCallViewController (embedded + theme_params) + PlayerManager + qListProjectViewController & SelectHotlineViewController.",
+            "codeRefs": [
+              "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift",
+              "VBot/Service/PlayerManager.swift",
+              "VBot/Controller/NewController/Hotline/SelectHotline/SelectHotlineViewController.swift"
+            ]
+          },
+          "android": {
+            "summary": "CallHistoryFragment (tvSelect1/tvSelect2 filter_changed, SearchRecentlyFragment mở full-screen) + ProjectActivity (dọn Realm + invalidateSession khi đổi dự án) + ListHotlineActivity / ChooseHotlineCallBottomSheet.",
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/ProjectActivity.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/hotline/ListHotlineActivity.kt"
+            ]
+          }
+        }
       }
     },
     {
@@ -239,11 +406,30 @@
         "tech": "Bao gồm hộp thư thông báo (ListNotificationViewController), cài đặt chung (qAppSettingViewController), kiểm tra cập nhật App Store theo cooldown 24h (VPMAppUpdater) và đo lường/cấu hình từ xa (TelemetryManager)."
       },
       "techDetail": {
+        "platformDiffNote": "Android hỗ trợ 3 ngôn ngữ (vi, en, my) so với 2 ngôn ngữ trên iOS (vi, en), kiểm tra version qua GET api/config/versionStateNew (Play In-App Update đã comment) và dùng OpenTelemetry SDK + Firebase Remote Config.",
         "codeRefs": [
           "VBot/Controller/NewController/Notification/ListNotificationViewController.swift",
           "VBot/Controller/NewController/Account/qAppSettingViewController.swift",
           "VBot/Service/VPMAppUpdater.swift"
-        ]
+        ],
+        "byPlatform": {
+          "ios": {
+            "summary": "ListNotificationViewController + qAppSettingViewController + LanguageViewController (vi/en) + qAccountSecurityViewController + VPMAppUpdater (iTunes 24h).",
+            "codeRefs": [
+              "VBot/Controller/NewController/Notification/ListNotificationViewController.swift",
+              "VBot/Controller/NewController/Account/qAppSettingViewController.swift",
+              "VBot/Service/VPMAppUpdater.swift"
+            ]
+          },
+          "android": {
+            "summary": "NotificationActivity (3 tab ALL/PROMOTION/OTHER) + SettingActivity + LanguageActivity (vi/en/my) + MainActivity versionStateNew + TelemetryManager (OpenTelemetry SDK + Firebase Remote Config).",
+            "codeRefs": [
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/NotificationActivity.kt",
+              "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/SettingActivity.kt",
+              "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/telemetry/TelemetryManager.kt"
+            ]
+          }
+        }
       }
     }
   ],
@@ -274,6 +460,7 @@
             "tech": "AutodialManager điều khiển máy trạng thái: idle -> connecting -> requesting_next -> calling -> cooldown -> loop (hoặc paused / finished / stopped / error), nhận 5 lệnh Bridge từ Mini App (start/stop/pause/resume/get_autodial_state)."
           },
           "techDetail": {
+            "platformDiffNote": "Cả 2 HĐH giữ nguyên contract 5 action + 2 event (autodial_finished/error). Android dùng OkHttp WebSocket ws/call (ping 10s, backoff 2s/4s/8s) và tạo gọi qua VBotPhone.startOutgoingCall.",
             "apisOrEvents": [
               "start_autodial",
               "stop_autodial",
@@ -288,15 +475,36 @@
             "codeRefs": [
               "VBot/Service/AutodialManager.swift"
             ],
+            "byPlatform": {
+              "ios": {
+                "summary": "AutodialManager.swift (URLSessionWebSocketTask) quản lý state machine idle->connecting->requesting_next->calling->cooldown và tạo gọi qua Linphone.",
+                "codeRefs": ["VBot/Service/AutodialManager.swift"]
+              },
+              "android": {
+                "summary": "AutodialManager.kt mở OkHttp WebSocket ws/call?session_id=... (method vbot.auto.dial, ping 10s, backoff 2s/4s/8s, cooldown 2000ms), gắn CallModel.miniAppDisplayName và mở NewCallActivity + VBotPhone.startOutgoingCall.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/AutodialManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-auto-call-campaign",
               "embedMode": "modal",
               "transport": "onHostActionRequested → AutodialManager.handleAction / emitMiniAppEvent",
+              "transportByPlatform": {
+                "ios": "MiniAppService.onHostActionRequested → AutodialManager.shared.handleAction / emitMiniAppEvent",
+                "android": "MiniAppHelper.dispatchHostAction → AutodialManager.handleAction / VbMaSDK.emitEvent"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "start_autodial",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → start(autoDialId:hotline:campaignName:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → start(...)",
+                    "android": "MiniAppHelper.dispatchHostAction(...) → AutodialManager.handleAction(...) → start(...)"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"start_autodial\", payload }) + on(\"host_action_result\", cb)",
                   "payload": "{ autoDialId, hotline, campaignName? }",
                   "response": "{ request_id, success, state, totalCalled, currentPhone, ... }",
@@ -306,6 +514,10 @@
                   "direction": "miniapp_to_host",
                   "name": "pause_autodial",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → pause()",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.shared.handleAction(...) → pause()",
+                    "android": "AutodialManager.handleAction(...) → pause()"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"pause_autodial\" }) + on(\"host_action_result\", cb)",
                   "response": "State snapshot (state: 'paused')",
                   "note": "Hoàn tất cuộc gọi hiện tại rồi dừng quay số mới."
@@ -314,6 +526,10 @@
                   "direction": "miniapp_to_host",
                   "name": "resume_autodial",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → resume()",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.shared.handleAction(...) → resume()",
+                    "android": "AutodialManager.handleAction(...) → resume()"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"resume_autodial\" }) + on(\"host_action_result\", cb)",
                   "response": "State snapshot",
                   "note": "Tiếp tục lấy số điện thoại kế tiếp."
@@ -322,6 +538,10 @@
                   "direction": "miniapp_to_host",
                   "name": "stop_autodial",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → stop()",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.shared.handleAction(...) → stop()",
+                    "android": "AutodialManager.handleAction(...) → stop()"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"stop_autodial\" }) + on(\"host_action_result\", cb)",
                   "response": "State snapshot (state: 'stopped')",
                   "note": "Đóng WebSocket và kết thúc phiên chiến dịch."
@@ -330,6 +550,10 @@
                   "direction": "miniapp_to_host",
                   "name": "get_autodial_state",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → toStateMap()",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.shared.handleAction(...) → toStateMap()",
+                    "android": "AutodialManager.handleAction(...) → toStateMap()"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"get_autodial_state\" }) + on(\"host_action_result\", cb)",
                   "response": "{ state, currentAutoDialId, totalCalled, currentPhone, errorMessage? }"
                 },
@@ -337,6 +561,10 @@
                   "direction": "host_to_miniapp",
                   "name": "autodial_finished",
                   "hostFn": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent(\"autodial_finished\", data:) → VbMa.shared.emitEvent(...)",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent(\"autodial_finished\", data:)",
+                    "android": "AutodialManager.handleAutoDialFinished() → VbMaSDK.emitEvent(\"autodial_finished\", data)"
+                  },
                   "miniAppFn": "on(\"autodial_finished\", cb) (@vbotma/sdk)",
                   "payload": "{ autoDialId, campaignName }",
                   "note": "Đẩy về Mini App khi chiến dịch hết số."
@@ -345,6 +573,10 @@
                   "direction": "host_to_miniapp",
                   "name": "autodial_error",
                   "hostFn": "AutodialManager.handleAutoDialError(_:) → MiniAppService.shared.emitMiniAppEvent(\"autodial_error\", data:) → VbMa.shared.emitEvent(...)",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.handleAutoDialError(_:) → MiniAppService.shared.emitMiniAppEvent(\"autodial_error\", data:)",
+                    "android": "AutodialManager.handleAutoDialError(msg) → VbMaSDK.emitEvent(\"autodial_error\", data)"
+                  },
                   "miniAppFn": "on(\"autodial_error\", cb) (@vbotma/sdk)",
                   "payload": "{ autoDialId, message }",
                   "note": "Đẩy về Mini App khi gặp lỗi kết nối/chiến dịch."
@@ -369,7 +601,24 @@
               "VBot/Controller/NewController/CallMarketing/Call/SelectTemplateForCallViewController.swift",
               "VBot/Controller/NewController/CallMarketing/CallTemplate/SelectTemplateViewController.swift",
               "VBot/Controller/NewController/CallMarketing/Call/EditCustomFieldViewController.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "SelectCallTypeViewController + SelectTemplateForCallViewController + SelectTemplateViewController + EditCustomFieldViewController.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/CallVC/SelectCallTypeViewController.swift",
+                  "VBot/Controller/NewController/CallMarketing/Call/SelectTemplateForCallViewController.swift"
+                ]
+              },
+              "android": {
+                "summary": "Vận hành qua các Mini App chiến dịch (vb-ma-auto-call-*) lọc theo quyền CHIEN_DICH / CHIEN_DICH_SMS cùng các màn hình native AutoCallActivity, QueueCallCampaignActivity, AddScriptIVRActivity, DetailScriptIVRActivity, InformationCampaignActivity.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/auto_call/AutoCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/maketing/campaign/QueueCallCampaignActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/maketing/call_script/AddScriptIVRActivity.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["call-out-hotline"]
         },
@@ -380,13 +629,24 @@
           "audience": "tech",
           "summary": {
             "overview": "Lá đại diện Mini App Chiến dịch gọi tự động (vb-ma-auto-call-campaign): bấm '+4' để xem 4 bước giao tiếp start/pause/resume/stop_autodial và sự kiện autodial_finished / autodial_error.",
-            "tech": "Mini App điều phối lệnh qua request_host_action -> AutodialManager.shared.handleAction; Host giữ WebSocket & máy trạng thái gọi nối tiếp."
+            "tech": "Mini App điều phối lệnh qua request_host_action -> AutodialManager; Host giữ WebSocket & máy trạng thái gọi nối tiếp."
           },
           "techDetail": {
             "codeRefs": [
               "VBot/Service/AutodialManager.swift",
               "VBot/Service/MiniAppService.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": ["VBot/Service/AutodialManager.swift", "VBot/Service/MiniAppService.swift"]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/AutodialManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["autodial-campaign", "miniapp-list"]
         }
@@ -409,28 +669,60 @@
             "tech": "FeaturesViewControllerV2 gọi VbMaSDK.fetchGlobalMiniApps, phân nhóm theo MiniAppCategoryName và ẩn các Mini App nhúng nội tuyến như Danh bạ hay Cài đặt 2FA khỏi danh sách chung."
           },
           "techDetail": {
+            "platformDiffNote": "Android lọc thêm inCallOnlyMiniApps, lưu Gợi ý & Yêu thích (kéo-thả MyItemTouchHelperCallback) vào Realm FeatureView, còn VbMaSDK.activeBridge là biến toàn cục đơn nên không có MiniAppActiveTracker theo từng instanceKey như iOS.",
             "codeRefs": [
               "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
               "VBot/Service/MiniAppService.swift",
               "VBot/Service/MiniAppCategoryName.swift"
             ],
+            "byPlatform": {
+              "ios": {
+                "summary": "FeaturesViewControllerV2 gọi MiniAppService.fetchFilteredGlobalMiniApps, theo dõi active instance qua MiniAppActiveTracker.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
+                  "VBot/Service/MiniAppService.swift",
+                  "VBot/Service/MiniAppCategoryName.swift"
+                ]
+              },
+              "android": {
+                "summary": "FeatureFragment gọi song song MiniAppHelper.fetchGlobalMiniAppsResult() và GetAllPermissionMemberViewModel, lọc bằng MiniAppHelper.filterMiniApps() (loại isHidden, vb-ma-user-contact, inCallOnlyMiniApps, adminOnlyApps, memberAppPermissions) và đồng bộ Realm FeatureView.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppPermissionHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "VbMaSDK (Global Hub)",
               "embedMode": "sdk_global",
               "transport": "FeaturesViewControllerV2 → MiniAppService.fetchFilteredGlobalMiniApps / openMiniApp",
+              "transportByPlatform": {
+                "ios": "FeaturesViewControllerV2 → MiniAppService.fetchFilteredGlobalMiniApps / openMiniApp",
+                "android": "FeatureFragment → MiniAppHelper.fetchGlobalMiniAppsResult / filterMiniApps / openMiniApp"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "openMiniApp(id, locale, startParam?, extraData)",
                   "hostFn": "FeaturesViewControllerV2 → MiniAppService.fetchFilteredGlobalMiniApps(...) / MiniAppService.openMiniApp(id:locale:startParam:extraData:)",
+                  "hostFnByPlatform": {
+                    "ios": "FeaturesViewControllerV2 → MiniAppService.openMiniApp(id:locale:startParam:extraData:) + MiniAppActiveTracker",
+                    "android": "FeatureFragment → MiniAppHelper.openMiniApp(context, appId, locale, startParam, extraData) → VbMaSDK.openMiniApp(...)"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ theme_params, themeParams, isAdmin }",
-                  "note": "Tự gắn instanceKey vào MiniAppActiveTracker và xóa khi onClose. Lọc ẩn hiddenApps (vb-ma-user-contact, vb-ma-2fa-setting), adminOnlyApps và memberAppPermissions trước khi hiển thị."
+                  "note": "Lọc ẩn hiddenApps, adminOnlyApps và memberAppPermissions trước khi hiển thị.",
+                  "parityNote": "iOS dùng MiniAppActiveTracker gắn instanceKey theo từng appId; Android chỉ giữ 1 activeMiniAppActivityRef và VbMaSDK.activeBridge toàn cục."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "check_permissions",
                   "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → VbMaViewController.sendEvent(\"permissions_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onCheckPermissions(module:actions:) → sendEvent(\"permissions_result\")",
+                    "android": "VbMABridge → MiniAppHelper.onCheckPermissions(...) → MiniAppPermissionHelper.checkPermissionsBatch(...)"
+                  },
                   "miniAppFn": "checkPermission(module, action) / checkPermissions(module, actions) (@vbotma/sdk)",
                   "payload": "{ module, actions[] }",
                   "response": "{ [action]: Bool }"
@@ -439,6 +731,10 @@
                   "direction": "miniapp_to_host",
                   "name": "get_session_info",
                   "hostFn": "MiniAppService.onHostActionRequested(requestId:action:payload:) [case \"get_session_info\"] → sendEvent(\"host_action_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onHostActionRequested(...) [case \"get_session_info\"] → sendEvent(\"host_action_result\")",
+                    "android": "MiniAppHelper.dispatchHostAction(...) → handleGetSessionInfo(requestId)"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"get_session_info\" }) + on(\"host_action_result\", cb)",
                   "payload": "{ request_id }",
                   "response": "{ session_id, socket_url, isAdmin }"
@@ -469,7 +765,26 @@
               "VBot/Controller/NewController/Features/V2/FeatureConsoleCapsuleView.swift",
               "VBot/Service/VbUserStateHolder.swift",
               "VBot/Service/VbDeviceInboundHolder.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "FeatureConsoleCapsuleView lắng nghe Notification từ VbUserStateHolder & VbDeviceInboundHolder.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/Features/V2/FeatureConsoleCapsuleView.swift",
+                  "VBot/Service/VbUserStateHolder.swift",
+                  "VBot/Service/VbDeviceInboundHolder.swift"
+                ]
+              },
+              "android": {
+                "summary": "Quick bar (llConsoleQuickBar) trong FeatureFragment + UserStatusAndDeviceBS; VbUserStateHolder dùng StateFlow + ProcessLifecycleOwner + WebSocket vbot.state/UPDATE_STATE; VbDeviceInboundHolder lưu Realm InforUser.deviceInbounds.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/user_status_device/UserStatusAndDeviceBS.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/VbUserStateHolder.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/VbDeviceInboundHolder.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -482,24 +797,51 @@
             "tech": "MiniAppMonitoringCoordinator dùng NSRecursiveLock quản lý slot giữ chỗ nguyên tử (tryAcquireMonitoringSlot), kiểm tra CXCallObserver tránh đụng độ cuộc gọi hệ thống đang hoạt động và dọn cờ stale khi cuộc gọi kết thúc."
           },
           "techDetail": {
+            "platformDiffNote": "Cả 2 HĐH đều khóa slot nguyên tử và quay SIP 1#/2#/4#/5#<transId> (Android 'listen' không cần quyền RECORD_AUDIO); nhưng Android CHƯA gọi VbMABridge.sendMonitorCallStateChanged về JS khi trạng thái SIP đổi và dùng PiP của NewCallActivity.",
             "edgeCases": [
-              "Chặn giữ 2 cuộc gọi giám sát cùng lúc hoặc đè lên cuộc gọi CallKit hiện hành",
-              "Tự cleanup trạng thái stale nếu _isSlotHeld kẹt khi không còn cuộc gọi thực tế"
+              "Chặn giữ 2 cuộc gọi giám sát cùng lúc hoặc đè lên cuộc gọi hệ thống hiện hành",
+              "Tự cleanup trạng thái stale nếu slot bị kẹt khi không còn cuộc gọi thực tế"
             ],
             "codeRefs": [
               "VBot/Service/MiniAppMonitoringCoordinator.swift",
               "VBot/Service/VbMonitoringCallHelper.swift",
               "VBot/Service/MiniAppService.swift"
             ],
+            "byPlatform": {
+              "ios": {
+                "summary": "MiniAppMonitoringCoordinator (NSRecursiveLock + CXCallObserver) + VPMAppService.startMonitoringCall + NewCallViewController emit monitor_call_state_changed.",
+                "codeRefs": [
+                  "VBot/Service/MiniAppMonitoringCoordinator.swift",
+                  "VBot/Service/VbMonitoringCallHelper.swift",
+                  "VBot/Service/MiniAppService.swift"
+                ]
+              },
+              "android": {
+                "summary": "MiniAppHelper.onMonitorCall dùng synchronized(monitorLock) + isMonitoringPendingSetup, kiểm tra quyền RECORD_AUDIO (trừ listen), mở NewCallActivity (PiP native), lưu VbMaCallStateManager; chỉ cập nhật native mà chưa emit monitor_call_state_changed.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
+                  "vb-ma-android-sdk/vbotma-sdk/src/main/java/com/vbot/miniapp/sdk/VbMABridge.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-monitoring",
               "embedMode": "modal",
               "transport": "VbMaDelegate.onMonitorCall ↔ MiniAppService.sendMonitorCallStateChanged",
+              "transportByPlatform": {
+                "ios": "VbMaDelegate.onMonitorCall ↔ MiniAppService.sendMonitorCallStateChanged",
+                "android": "VbMaSDKDelegate.onMonitorCall (MiniAppHelper) → VbMABridge.monitor_call_result"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "monitor_call",
                   "hostFn": "MiniAppService.onMonitorCall(requestId:action:transId:payload:) → MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot → VPMAppService.startMonitoringCall(...) → sendEvent(\"monitor_call_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onMonitorCall(...) → tryAcquireMonitoringSlot → VPMAppService.startMonitoringCall → sendEvent(\"monitor_call_result\")",
+                    "android": "MiniAppHelper.onMonitorCall(...) → tryAcquireMonitoringSlot (synchronized monitorLock) → startMonitoringSipCall → VbMABridge.monitor_call_result"
+                  },
                   "miniAppFn": "postEvent(\"monitor_call\", { request_id, action, transId, ... }) + on(\"monitor_call_result\", cb)",
                   "payload": "{ request_id, action: 'listen'|'capture'|'capture_bot'|'whisper', transId, hotline?, agentName?, customerPhone? }",
                   "response": "{ request_id, action, transId, status: 'CONNECTING'|'CALL_BUSY'|'INVALID_ACTION'|'PERMISSION_DENIED' }",
@@ -509,9 +851,13 @@
                   "direction": "host_to_miniapp",
                   "name": "monitor_call_state_changed",
                   "hostFn": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:) → emitMiniAppEvent(\"monitor_call_state_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(...) → emitMiniAppEvent(\"monitor_call_state_changed\")"
+                  },
                   "miniAppFn": "on(\"monitor_call_state_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ request_id, state, reason? }",
-                  "note": "NewCallViewController & VPMAppService đẩy cập nhật trạng thái kết nối/ngắt về Mini App."
+                  "note": "NewCallViewController & VPMAppService đẩy cập nhật trạng thái kết nối/ngắt về Mini App.",
+                  "parityNote": "VbMABridge.sendMonitorCallStateChanged đã khai báo trong vb-ma-android-sdk nhưng CHƯA ĐƯỢC GỌI ở bất kỳ đâu trong VBot-Android (chỉ cập nhật VbMaCallStateManager phía native)."
                 }
               ]
             }
@@ -527,10 +873,25 @@
             "tech": "MiniAppService.onMonitorCall kết hợp MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot trước khi quay SIP 1#/2#/4#/5#<transId>."
           },
           "techDetail": {
+            "platformDiffNote": "Android chưa emit monitor_call_state_changed về JS dù SDK Android đã khai báo sẵn method.",
             "codeRefs": [
               "VBot/Service/MiniAppService.swift",
               "VBot/Service/MiniAppMonitoringCoordinator.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift",
+                  "VBot/Service/MiniAppMonitoringCoordinator.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "vb-ma-android-sdk/vbotma-sdk/src/main/java/com/vbot/miniapp/sdk/VbMABridge.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["monitoring-whisper", "miniapp-list"]
         }
@@ -553,42 +914,81 @@
             "tech": "UserHistoryCallViewController nhúng Mini App vb-ma-user-history-call, kết hợp UISegmentedControl native (Tất cả / Gọi nhỡ), cơ chế refresh trễ khi cuộc gọi vừa kết thúc và PlayerManager để phát âm thanh."
           },
           "techDetail": {
+            "platformDiffNote": "Android CallHistoryFragment KHÔNG truyền theme_params khi tạo MiniAppFragment, KHÔNG emit theme_changed, và không có Recording Playback Manager bản địa tương đương iOS PlayerManager; SearchRecentlyFragment trên Android cũng mở vb-ma-user-history-call full-screen.",
             "codeRefs": [
               "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift",
               "VBot/Service/PlayerManager.swift"
             ],
+            "byPlatform": {
+              "ios": {
+                "summary": "UserHistoryCallViewController nhúng VbMaViewController (có theme_params), đổi UISegmentedControl emit filter_changed, cờ callEndedRefreshPending và PlayerManager phát âm thanh.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift",
+                  "VBot/Service/PlayerManager.swift"
+                ]
+              },
+              "android": {
+                "summary": "CallHistoryFragment nhúng MiniAppFragment, dùng tvSelect1/tvSelect2 emit filter_changed, NewCallActivity.destroy() đánh dấu pendingCallEndedRefresh và tiêu thụ tại MainActivity.onResume() hoặc onTabActivated(). Chưa có PlayerManager hay theme_changed.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/SearchRecentlyFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-history-call",
               "embedMode": "inline_tab",
               "transport": "UserHistoryCallViewController (embedded VbMaViewController) ↔ VbMaDelegate",
+              "transportByPlatform": {
+                "ios": "UserHistoryCallViewController (embedded VbMaViewController) ↔ VbMaDelegate",
+                "android": "CallHistoryFragment (MiniAppFragment) ↔ MiniAppHelper (VbMaSDKDelegate)"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController",
                   "hostFn": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                    "android": "CallHistoryFragment → MiniAppFragment.newInstance(appId = \"vb-ma-user-history-call\", startParam = \"embedded\")"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
-                  "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }"
+                  "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }",
+                  "parityNote": "Android không truyền theme_params vào extraData khi tạo MiniAppFragment và không emit theme_changed."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "filter_changed",
                   "hostFn": "UserHistoryCallViewController.handleSegmentChange(_:) → miniAppVC?.emitEvent(\"filter_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserHistoryCallViewController.handleSegmentChange(_:) → miniAppVC?.emitEvent(\"filter_changed\", data:)",
+                    "android": "CallHistoryFragment tvSelect1/tvSelect2 click → miniAppFragment.emitEvent(\"filter_changed\", mapOf(\"type\" to ...))"
+                  },
                   "miniAppFn": "on(\"filter_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ type: 'all' | 'missed' }",
-                  "note": "Phát mỗi khi người dùng đổi UISegmentedControl native trên thanh tiêu đề."
+                  "note": "Phát mỗi khi người dùng đổi bộ lọc Tất cả / Cuộc gọi nhỡ trên thanh tiêu đề native."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
                   "hostFn": "UserHistoryCallViewController.onTabActivated() / markCallEndedRefreshPending() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserHistoryCallViewController.onTabActivated() / markCallEndedRefreshPending() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                    "android": "CallHistoryFragment.onTabActivated() / refreshPendingCallEndedData() (từ MainActivity.onResume) → miniAppFragment.emitEvent(\"refresh_data\", ...)"
+                  },
                   "miniAppFn": "on(\"refresh_data\", cb) (@vbotma/sdk)",
                   "payload": "{ reason: 'call_ended' | 'tab_activated', force: Bool }",
-                  "note": "Dùng cờ callEndedRefreshPending để gom lệnh refresh khi vừa tắt màn hình gọi và chỉ phát khi tab Gần đây hiển thị trở lại; tự áp dụng applyPendingBundleUpdate()."
+                  "note": "Gom cờ pending sau khi cuộc gọi kết thúc và áp dụng pending bundle update trước khi emit."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "make_call",
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...)",
+                    "android": "MiniAppHelper.onRequestCall(...) → makeDirectCall(...) / ChooseHotlineCallBottomSheet → VBotPhone.startOutgoingCall"
+                  },
                   "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
                   "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall }",
                   "response": "{ request_id, success }",
@@ -598,6 +998,10 @@
                   "direction": "miniapp_to_host",
                   "name": "check_permissions",
                   "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → sendEvent(\"permissions_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onCheckPermissions(module:actions:) → VPMRoleService",
+                    "android": "MiniAppHelper.onCheckPermissions(...) → MiniAppPermissionHelper.checkPermissionsBatch(...)"
+                  },
                   "miniAppFn": "checkPermissions(\"CALL\", [\"VIEW\", \"RECORDING\"]) (@vbotma/sdk)",
                   "payload": "{ module: 'CALL', actions: ['VIEW', 'RECORDING'] }",
                   "response": "{ [action]: Bool }"
@@ -620,7 +1024,25 @@
               "VBot/Controller/NewController/Main/NewMainTabBarViewController.swift",
               "VBot/Controller/NewController/Hotline/SelectHotline/SelectHotlineViewController.swift",
               "VBot/Controller/NewController/ProjectAccount/qListProjectViewController.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "NewMainTabBarViewController + qListProjectViewController (phát Notifications.projectDidChange) + SelectHotlineViewController.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/Main/NewMainTabBarViewController.swift",
+                  "VBot/Controller/NewController/Hotline/SelectHotline/SelectHotlineViewController.swift",
+                  "VBot/Controller/NewController/ProjectAccount/qListProjectViewController.swift"
+                ]
+              },
+              "android": {
+                "summary": "ProjectActivity gọi selectProject() xong sẽ MiniAppHelper.invalidateSession(), xóa Realm History/Permission/Hotline/Project, VbUserStateHolder.onProjectChanged() và finishAffinity() khởi chạy lại MainActivity; quản lý hotline qua ListHotlineActivity & ChooseHotlineDefaultBottomSheet.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/ProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/hotline/ListHotlineActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/hotline/ChooseHotlineDefaultBottomSheet.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -630,12 +1052,24 @@
           "audience": "tech",
           "summary": {
             "overview": "Lá đại diện Mini App Lịch sử cuộc gọi (vb-ma-user-history-call) nhúng trong Tab Gần đây: bấm '+4' để xem luồng đổi tab filter_changed, refresh_data sau khi tắt cuộc gọi và gọi lại make_call.",
-            "tech": "UserHistoryCallViewController giữ UISegmentedControl native để emit filter_changed và gom cờ callEndedRefreshPending cho refresh_data."
+            "tech": "UserHistoryCallViewController (iOS) và CallHistoryFragment (Android) điều phối filter_changed & refresh_data."
           },
           "techDetail": {
+            "platformDiffNote": "Android CallHistoryFragment chưa truyền theme_params/emit theme_changed và chưa có native Recording Playback Manager.",
             "codeRefs": [
               "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/SearchRecentlyFragment.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["call-history-recording", "miniapp-list"]
         }
@@ -662,7 +1096,26 @@
               "VBot/Controller/NewController/Notification/ListNotificationViewController.swift",
               "VBot/Controller/NewController/Notification/ByIdNotificationViewController.swift",
               "VBot/AppDelegate/Noti+AppDelegate.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "Đồng bộ deviceToken APNs & pushKitToken khi mở tab chính; ListNotificationViewController & ByIdNotificationViewController.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/Notification/ListNotificationViewController.swift",
+                  "VBot/Controller/NewController/Notification/ByIdNotificationViewController.swift",
+                  "VBot/AppDelegate/Noti+AppDelegate.swift"
+                ]
+              },
+              "android": {
+                "summary": "FirebaseService.onNewToken lưu token tiền tố 'android-' và gửi POST api/User/UpdateNotifyToken (MainActivity.updateNotifyToken); NotificationActivity gồm 3 tab ALL/PROMOTION/OTHER; ShowNotificationActivity điều hướng theo type.",
+                "apisOrEvents": ["POST api/User/UpdateNotifyToken", "GET api/User/getAllNotification"],
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/firebase/FirebaseService.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/NotificationActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/ShowNotificationActivity.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -675,11 +1128,30 @@
             "tech": "Cụm màn hình Account quản lý qua qAppSettingViewController, LanguageViewController (phát Notification PreferredLanguageDidChange cập nhật toàn tab), và qAccountSecurityViewController."
           },
           "techDetail": {
+            "platformDiffNote": "Android LanguageActivity hỗ trợ 3 ngôn ngữ (vi, en, my) so với 2 (vi, en) trên iOS; cả 2 HĐH hiện đều đang tạm comment nút mở Cài đặt 2FA trong UI.",
             "codeRefs": [
               "VBot/Controller/NewController/Account/qAppSettingViewController.swift",
               "VBot/Controller/NewController/Account/LanguageViewController.swift",
               "VBot/Controller/NewController/Account/Sercurity/qAccountSecurityViewController.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "qAppSettingViewController + LanguageViewController (vi/en, Notification PreferredLanguageDidChange) + qAccountSecurityViewController.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/Account/qAppSettingViewController.swift",
+                  "VBot/Controller/NewController/Account/LanguageViewController.swift",
+                  "VBot/Controller/NewController/Account/Sercurity/qAccountSecurityViewController.swift"
+                ]
+              },
+              "android": {
+                "summary": "NewAccountFragment + MenuActivity + SettingActivity (ChangePasswordActivity, NightModeBottomSheet, shareAllLogFiles; 2FA rows đang comment out) + LanguageActivity (vi/en/my qua LocalizationActivity + POST api/User/ChangeLanguage).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/SettingActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/LanguageActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/TwoFactorSettingsActivity.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -692,10 +1164,32 @@
             "tech": "VPMAppUpdater kiểm tra iTunes Lookup với cooldown 24 giờ từ applicationDidBecomeActive; TelemetryManager ghi nhận log và cấu hình từ xa."
           },
           "techDetail": {
+            "platformDiffNote": "iOS dùng VPMAppUpdater (iTunes Lookup cooldown 24h), Android dùng MainActivity gọi api/config/versionStateNew?platform=VersionAndroid (CheckForUpdateActivity Play In-App Update đã comment 100%) và TelemetryManager dùng OpenTelemetry SDK + Firebase Remote Config + upload CSV api/Extend/AddLogs.",
             "codeRefs": [
               "VBot/Service/VPMAppUpdater.swift",
               "VBot/Service/TelemetryManager.swift"
-            ]
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "VPMAppUpdater (iTunes Lookup, cooldown 24h) + TelemetryManager.",
+                "codeRefs": [
+                  "VBot/Service/VPMAppUpdater.swift",
+                  "VBot/Service/TelemetryManager.swift"
+                ]
+              },
+              "android": {
+                "summary": "MainActivity (bản release delay 2.5s gọi GET api/config/versionStateNew?platform=VersionAndroid, mở Play Store); TelemetryManager dùng OpenTelemetry SDK (OTLP + LoggingSpanExporter) + TelemetryTimberTree + Firebase Remote Config realtime + MainActivity.checkLog() upload CSV.",
+                "apisOrEvents": [
+                  "GET api/config/versionStateNew?platform=VersionAndroid",
+                  "POST api/Extend/AddLogs"
+                ],
+                "codeRefs": [
+                  "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/telemetry/TelemetryManager.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/CheckForUpdateActivity.kt"
+                ]
+              }
+            }
           }
         }
       ],
@@ -713,23 +1207,36 @@
           "kind": "action",
           "audience": "tech",
           "summary": {
-            "overview": "Host iOS nhúng Mini App vb-ma-user-history-call vào Tab Lịch sử và giữ FloatingDialPad phía trên.",
-            "tech": "UserHistoryCallViewController.loadMiniApp() gọi VbMa.shared.createMiniAppViewController(id: 'vb-ma-user-history-call', startParam: 'embedded')."
+            "overview": "Host nhúng Mini App vb-ma-user-history-call vào Tab Lịch sử và giữ FloatingDialPad phía trên.",
+            "tech": "iOS gọi createMiniAppViewController(id:startParam: 'embedded', extraData: theme_params); Android dùng MiniAppFragment.newInstance()."
           },
           "techDetail": {
+            "platformDiffNote": "Android CallHistoryFragment KHÔNG truyền MiniAppThemeParams vào extraData khi tạo MiniAppFragment.",
             "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-history-call",
               "embedMode": "inline_tab",
-              "transport": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController",
+              "transportByPlatform": {
+                "ios": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController",
+                "android": "CallHistoryFragment → MiniAppFragment.newInstance(appId = \"vb-ma-user-history-call\", startParam = \"embedded\")"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController",
                   "hostFn": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                    "android": "CallHistoryFragment → MiniAppFragment.newInstance(appId = \"vb-ma-user-history-call\", startParam = \"embedded\")"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }",
-                  "examplePayload": "{\n  \"id\": \"vb-ma-user-history-call\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": { \"bg_color\": \"#FFFFFF\" }\n  }\n}"
+                  "examplePayload": "{\n  \"id\": \"vb-ma-user-history-call\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": { \"bg_color\": \"#FFFFFF\" }\n  }\n}",
+                  "parityNote": "Android CallHistoryFragment không truyền theme_params và không emit theme_changed."
                 }
               ]
             }
@@ -741,20 +1248,31 @@
           "kind": "process",
           "audience": "tech",
           "summary": {
-            "overview": "Khi user bấm nút lọc Tất cả / Cuộc gọi nhỡ trên thanh tiêu đề iOS, Host đẩy sự kiện vào Mini App để đổi bộ lọc tức thì.",
-            "tech": "handleSegmentChange(_:) gọi miniAppVC?.emitEvent('filter_changed', data: ['type': 'all' | 'missed'])."
+            "overview": "Khi user bấm nút lọc Tất cả / Cuộc gọi nhỡ trên thanh tiêu đề native, Host đẩy sự kiện vào Mini App để đổi bộ lọc tức thì.",
+            "tech": "iOS UISegmentedControl / Android tvSelect1-tvSelect2 emit 'filter_changed' với { type: 'all' | 'missed' }."
           },
           "techDetail": {
             "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-history-call",
               "embedMode": "inline_tab",
-              "transport": "UISegmentedControl → emitEvent('filter_changed')",
+              "transportByPlatform": {
+                "ios": "UISegmentedControl → emitEvent('filter_changed')",
+                "android": "CallHistoryFragment tvSelect1/tvSelect2 → emitEvent('filter_changed')"
+              },
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "filter_changed",
                   "hostFn": "UserHistoryCallViewController.handleSegmentChange(_:) → miniAppVC?.emitEvent(\"filter_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserHistoryCallViewController.handleSegmentChange(_:) → miniAppVC?.emitEvent(\"filter_changed\", data:)",
+                    "android": "CallHistoryFragment tvSelect1/tvSelect2 → miniAppFragment.emitEvent(\"filter_changed\", mapOf(\"type\" to ...))"
+                  },
                   "miniAppFn": "on(\"filter_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ type: 'all' | 'missed' }",
                   "examplePayload": "{\n  \"type\": \"missed\"\n}"
@@ -770,10 +1288,19 @@
           "audience": "tech",
           "summary": {
             "overview": "Khi một cuộc gọi vừa kết thúc, Host đánh dấu cờ chờ để tự làm mới nhật ký ngay khi Tab Gần đây hiện lên.",
-            "tech": "markCallEndedRefreshPending() đặt callEndedRefreshPending = true; onTabActivated() gọi applyPendingBundleUpdate() rồi emitEvent('refresh_data', { reason: 'call_ended', force: true })."
+            "tech": "Cả iOS và Android dùng cơ chế pending flag (callEndedRefreshPending / pendingCallEndedRefresh) khi tắt màn hình gọi và tiêu thụ tại onTabActivated / MainActivity.onResume."
           },
           "techDetail": {
             "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"] },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-history-call",
               "embedMode": "inline_tab",
@@ -783,6 +1310,10 @@
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
                   "hostFn": "UserHistoryCallViewController.onTabActivated() / markCallEndedRefreshPending() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserHistoryCallViewController.onTabActivated() / markCallEndedRefreshPending() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                    "android": "CallHistoryFragment.onTabActivated() / refreshPendingCallEndedData() (NewCallActivity.destroy() đánh dấu)"
+                  },
                   "miniAppFn": "on(\"refresh_data\", cb) (@vbotma/sdk)",
                   "payload": "{ reason: 'call_ended' | 'tab_activated', force: Bool }",
                   "examplePayload": "{\n  \"reason\": \"call_ended\",\n  \"force\": true\n}"
@@ -798,10 +1329,15 @@
           "audience": "tech",
           "summary": {
             "overview": "Trong nhật ký cuộc gọi, Mini App hỏi quyền nghe ghi âm và bấm gọi lại số cũ qua Host App.",
-            "tech": "checkPermissions('CALL', ['VIEW', 'RECORDING']) kiểm tra quyền qua VPMRoleService; makeCall() kích hoạt gọi ra giữ nguyên tên người liên hệ."
+            "tech": "checkPermissions('CALL', ['VIEW', 'RECORDING']) kiểm tra quyền; makeCall() kích hoạt gọi ra qua Host."
           },
           "techDetail": {
+            "platformDiffNote": "Android không có native recording playback manager (iOS dùng PlayerManager).",
             "codeRefs": ["VBot/Service/MiniAppService.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Service/MiniAppService.swift", "VBot/Service/PlayerManager.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-history-call",
               "embedMode": "inline_tab",
@@ -811,6 +1347,10 @@
                   "direction": "miniapp_to_host",
                   "name": "check_permissions",
                   "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → sendEvent(\"permissions_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onCheckPermissions(module:actions:) → VPMRoleService",
+                    "android": "MiniAppHelper.onCheckPermissions(...) → MiniAppPermissionHelper.checkPermissionsBatch(...)"
+                  },
                   "miniAppFn": "checkPermissions(\"CALL\", [\"VIEW\", \"RECORDING\"]) (@vbotma/sdk)",
                   "payload": "{ module: 'CALL', actions: ['VIEW', 'RECORDING'] }",
                   "response": "{ VIEW: Bool, RECORDING: Bool }",
@@ -821,6 +1361,10 @@
                   "direction": "miniapp_to_host",
                   "name": "make_call",
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...)",
+                    "android": "MiniAppHelper.onRequestCall(...) → makeDirectCall(...) → VBotPhone.startOutgoingCall"
+                  },
                   "miniAppFn": "makeCall(params) (@vbotma/sdk)",
                   "payload": "{ request_id, phoneNumber, displayName }",
                   "response": "{ request_id, success }",
@@ -842,7 +1386,7 @@
         {
           "id": "sc-mahc-filter",
           "name": "VD: Lọc Cuộc gọi nhỡ từ thanh Native",
-          "description": "Chọn tab Cuộc gọi nhỡ trên thanh UISegmentedControl iOS → Host emit filter_changed({ type: 'missed' }).",
+          "description": "Chọn tab Cuộc gọi nhỡ trên thanh lọc native (UISegmentedControl iOS / tvSelect2 Android) → Host emit filter_changed({ type: 'missed' }).",
           "audience": "tech",
           "nodeIds": ["mahc-init", "mahc-filter"],
           "edgeIds": ["e-mahc-1"]
@@ -870,19 +1414,27 @@
           "audience": "tech",
           "summary": {
             "overview": "Nhân viên chọn Hotline và bấm Bắt đầu chiến dịch trên Mini App; lệnh start_autodial kích hoạt WebSocket quay số trên Host.",
-            "tech": "AutodialManager.shared.handleAction('start_autodial') kiểm tra không có cuộc gọi active khác rồi chuyển idle -> connecting -> requesting_next."
+            "tech": "AutodialManager.handleAction('start_autodial') kiểm tra không có cuộc gọi active rồi kết nối WebSocket (Android: OkHttp ws/call method vbot.auto.dial)."
           },
           "techDetail": {
             "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Service/AutodialManager.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/AutodialManager.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-auto-call-campaign",
               "embedMode": "modal",
-              "transport": "postEvent('request_host_action') → AutodialManager.shared.handleAction",
+              "transport": "postEvent('request_host_action') → AutodialManager.handleAction",
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "start_autodial",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → start(autoDialId:hotline:campaignName:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → start(...)",
+                    "android": "MiniAppHelper.dispatchHostAction(...) → AutodialManager.handleAction(...) → start(...)"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"start_autodial\", payload }) + on(\"host_action_result\", cb)",
                   "payload": "{ request_id, action: 'start_autodial', payload: { autoDialId, hotline, campaignName? } }",
                   "response": "{ request_id, success, state, currentAutoDialId, totalCalled, currentPhone }",
@@ -904,6 +1456,10 @@
           },
           "techDetail": {
             "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Service/AutodialManager.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/AutodialManager.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-auto-call-campaign",
               "embedMode": "modal",
@@ -913,6 +1469,10 @@
                   "direction": "miniapp_to_host",
                   "name": "pause_autodial / resume_autodial / stop_autodial / get_autodial_state",
                   "hostFn": "AutodialManager.shared.handleAction(...) → pause() / resume() / stop() / toStateMap()",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.shared.handleAction(...) → pause() / resume() / stop() / toStateMap()",
+                    "android": "AutodialManager.handleAction(...) → pause() / resume() / stop() / toStateMap()"
+                  },
                   "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"pause_autodial\" | \"resume_autodial\" | \"stop_autodial\" | \"get_autodial_state\" })",
                   "payload": "{ request_id, action }",
                   "response": "{ request_id, success, state, totalCalled, currentPhone }",
@@ -930,19 +1490,27 @@
           "audience": "tech",
           "summary": {
             "overview": "Khi chiến dịch đã quay hết toàn bộ danh sách số điện thoại, Host tự báo về để Mini App hiện màn hình hoàn tất.",
-            "tech": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent('autodial_finished', data:)."
+            "tech": "AutodialManager.handleAutoDialFinished() → emit 'autodial_finished' về Mini App."
           },
           "techDetail": {
             "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Service/AutodialManager.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/AutodialManager.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-auto-call-campaign",
               "embedMode": "modal",
-              "transport": "AutodialManager.handleAutoDialFinished() → emitMiniAppEvent",
+              "transport": "AutodialManager.handleAutoDialFinished() → emitEvent('autodial_finished')",
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "autodial_finished",
                   "hostFn": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent(\"autodial_finished\", data:) → VbMa.shared.emitEvent(...)",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent(\"autodial_finished\", data:)",
+                    "android": "AutodialManager.handleAutoDialFinished() → VbMaSDK.emitEvent(\"autodial_finished\", data)"
+                  },
                   "miniAppFn": "on(\"autodial_finished\", cb) (@vbotma/sdk)",
                   "payload": "{ autoDialId, campaignName }",
                   "examplePayload": "{\n  \"autoDialId\": 701,\n  \"campaignName\": \"Chăm sóc KH T11\"\n}"
@@ -958,19 +1526,27 @@
           "audience": "tech",
           "summary": {
             "overview": "Nếu kết nối chiến dịch gặp lỗi không khôi phục được, Host đẩy thông báo lỗi rõ ràng về Mini App.",
-            "tech": "AutodialManager.handleAutoDialError(_:) → emitMiniAppEvent('autodial_error', { autoDialId, message })."
+            "tech": "AutodialManager.handleAutoDialError() → emit 'autodial_error' (Android thử reconnect tối đa 3 lần theo backoff 2s/4s/8s trước khi phát lỗi)."
           },
           "techDetail": {
             "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Service/AutodialManager.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/AutodialManager.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-auto-call-campaign",
               "embedMode": "modal",
-              "transport": "AutodialManager.handleAutoDialError(_:) → emitMiniAppEvent",
+              "transport": "AutodialManager.handleAutoDialError() → emitEvent('autodial_error')",
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "autodial_error",
                   "hostFn": "AutodialManager.handleAutoDialError(_:) → MiniAppService.shared.emitMiniAppEvent(\"autodial_error\", data:) → VbMa.shared.emitEvent(...)",
+                  "hostFnByPlatform": {
+                    "ios": "AutodialManager.handleAutoDialError(_:) → MiniAppService.shared.emitMiniAppEvent(\"autodial_error\", data:)",
+                    "android": "AutodialManager.handleAutoDialError(msg) → VbMaSDK.emitEvent(\"autodial_error\", data)"
+                  },
                   "miniAppFn": "on(\"autodial_error\", cb) (@vbotma/sdk)",
                   "payload": "{ autoDialId, message }",
                   "examplePayload": "{\n  \"autoDialId\": 701,\n  \"message\": \"Mất kết nối máy chủ chiến dịch Autodial\"\n}"
@@ -1021,15 +1597,23 @@
           },
           "techDetail": {
             "codeRefs": ["VBot/Service/MiniAppService.swift"],
+            "byPlatform": {
+              "ios": { "codeRefs": ["VBot/Service/MiniAppService.swift"] },
+              "android": { "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"] }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-monitoring",
               "embedMode": "modal",
-              "transport": "postEvent('monitor_call') → MiniAppService.onMonitorCall",
+              "transport": "postEvent('monitor_call') → onMonitorCall",
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "monitor_call",
                   "hostFn": "MiniAppService.onMonitorCall(requestId:action:transId:payload:) → sendEvent(\"monitor_call_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onMonitorCall(requestId:action:transId:payload:) → sendEvent(\"monitor_call_result\")",
+                    "android": "VbMABridge.handleMonitorCall(...) → MiniAppHelper.onMonitorCall(...)"
+                  },
                   "miniAppFn": "postEvent(\"monitor_call\", { request_id, action, transId, hotline, agentName, customerPhone })",
                   "payload": "{ request_id, action: 'listen'|'capture'|'capture_bot'|'whisper', transId, hotline?, agentName?, customerPhone? }",
                   "examplePayload": "{\n  \"request_id\": \"req_51\",\n  \"action\": \"whisper\",\n  \"transId\": \"tr_99120\",\n  \"hotline\": \"19001234\",\n  \"agentName\": \"Nhân viên A\",\n  \"customerPhone\": \"0912345678\"\n}"
@@ -1044,14 +1628,29 @@
           "kind": "process",
           "audience": "tech",
           "summary": {
-            "overview": "Host kiểm tra máy không có cuộc gọi CallKit nào khác đang chiếm kênh thoại, kiểm tra quyền Micro rồi nối SIP giám sát.",
-            "tech": "MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot kiểm tra CallKit/SIP; nếu bận trả CALL_BUSY, nếu trống trả CONNECTING và gọi VPMAppService.startMonitoringCall()."
+            "overview": "Host kiểm tra máy không có cuộc gọi hệ thống nào khác đang chiếm kênh thoại, kiểm tra quyền Micro rồi nối SIP giám sát.",
+            "tech": "iOS dùng MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot (NSRecursiveLock); Android dùng tryAcquireMonitoringSlot (synchronized monitorLock) + requiresMicForMonitoring(action)."
           },
           "techDetail": {
+            "platformDiffNote": "Android miễn quyền RECORD_AUDIO khi action == 'listen' (chế độ chỉ nghe) và dùng native PiP của NewCallActivity.",
             "codeRefs": [
               "VBot/Service/MiniAppMonitoringCoordinator.swift",
               "VBot/Service/VbMonitoringCallHelper.swift"
             ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppMonitoringCoordinator.swift",
+                  "VBot/Service/VbMonitoringCallHelper.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-monitoring",
               "embedMode": "modal",
@@ -1061,10 +1660,14 @@
                   "direction": "miniapp_to_host",
                   "name": "monitor_call_result",
                   "hostFn": "MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot → VbMonitoringCallHelper.buildMonitorCallResultPayload(...)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot → VbMonitoringCallHelper.buildMonitorCallResultPayload(...)",
+                    "android": "MiniAppHelper.tryAcquireMonitoringSlot → buildMonitorCallConnectingResult / buildMonitorCallBusyResult"
+                  },
                   "miniAppFn": "on(\"monitor_call_result\", cb) (@vbotma/sdk)",
                   "response": "{ request_id, action, transId, status }",
                   "exampleResponse": "{\n  \"request_id\": \"req_51\",\n  \"action\": \"whisper\",\n  \"transId\": \"tr_99120\",\n  \"status\": \"CONNECTING\"\n}",
-                  "note": "Nếu đang có cuộc gọi thường trên CallKit hoặc đã giữ 1 phiên giám sát khác, Host trả status = 'CALL_BUSY'."
+                  "note": "Nếu đang có cuộc gọi thường hoặc đã giữ 1 phiên giám sát khác, Host trả status = 'CALL_BUSY'."
                 }
               ]
             }
@@ -1077,13 +1680,30 @@
           "audience": "tech",
           "summary": {
             "overview": "Trong khi nghe giám sát hoặc khi kết thúc/từ chối Micro, Host phát sự kiện cập nhật trạng thái tức thì về Mini App.",
-            "tech": "NewCallViewController và VPMAppService gọi MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:)."
+            "tech": "iOS (NewCallViewController / VPMAppService) gọi sendMonitorCallStateChanged; Android chỉ cập nhật VbMaCallStateManager phía native và hiện chưa phát event này về JS."
           },
           "techDetail": {
+            "platformDiffNote": "Parity Gap: VbMABridge.sendMonitorCallStateChanged() đã khai báo trong vb-ma-android-sdk nhưng chưa có caller trong VBot-Android.",
             "codeRefs": [
               "VBot/Service/MiniAppService.swift",
               "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
             ],
+            "byPlatform": {
+              "ios": {
+                "summary": "NewCallViewController & VPMAppService gọi MiniAppService.shared.sendMonitorCallStateChanged() → emitMiniAppEvent('monitor_call_state_changed').",
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift",
+                  "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
+                ]
+              },
+              "android": {
+                "summary": "Listener trong MiniAppHelper.startMonitoringSipCall() chỉ cập nhật VbMaCallStateManager và gọi cleanupMonitoring() khi DISCONNECTED; chưa gọi VbMABridge.sendMonitorCallStateChanged().",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "vb-ma-android-sdk/vbotma-sdk/src/main/java/com/vbot/miniapp/sdk/VbMABridge.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-monitoring",
               "embedMode": "modal",
@@ -1093,10 +1713,14 @@
                   "direction": "host_to_miniapp",
                   "name": "monitor_call_state_changed",
                   "hostFn": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:) → emitMiniAppEvent(\"monitor_call_state_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(...) → emitMiniAppEvent(\"monitor_call_state_changed\")"
+                  },
                   "miniAppFn": "on(\"monitor_call_state_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ request_id, state, reason? }",
                   "examplePayload": "{\n  \"request_id\": \"req_51\",\n  \"state\": \"CONNECTED\"\n}",
-                  "note": "Khi dập máy hoặc bị từ chối quyền Micro, Host phát state = 'DISCONNECTED' kèm reason (VD 'PERMISSION_DENIED' / 'ENDED')."
+                  "note": "Khi dập máy hoặc bị từ chối quyền Micro, Host iOS phát state = 'DISCONNECTED' kèm reason.",
+                  "parityNote": "Trên Android hàm VbMABridge.sendMonitorCallStateChanged đã có sẵn trong SDK nhưng CHƯA được gọi từ VBot-Android."
                 }
               ]
             }

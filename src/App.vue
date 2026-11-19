@@ -28,6 +28,10 @@ const parseUrlState = () => {
     if (mode === 'tech' || mode === 'overview') {
       explorer.setAudienceMode(mode);
     }
+    const platform = hashParams.get('platform') ?? searchParams.get('platform');
+    if (platform === 'ios' || platform === 'android' || platform === 'compare') {
+      explorer.setPlatformMode(platform);
+    }
   }
 };
 
@@ -38,6 +42,7 @@ const syncToUrl = () => {
   }
   if (__ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech') {
     params.set('mode', 'tech');
+    params.set('platform', explorer.platformMode.value);
   }
   const qs = params.toString();
   const base = window.location.pathname + window.location.search;
@@ -67,7 +72,11 @@ onMounted(() => {
 });
 
 watch(
-  [() => explorer.focusRootId.value, () => explorer.audienceMode.value],
+  [
+    () => explorer.focusRootId.value,
+    () => explorer.audienceMode.value,
+    () => explorer.platformMode.value,
+  ],
   () => {
     syncToUrl();
   },

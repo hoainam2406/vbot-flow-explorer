@@ -4,10 +4,17 @@ import {
   buildVisibleTreeFlow,
   countDescendants,
   findNodeById,
+  isVisibleForMode,
+  isVisibleForPlatform,
   type ViewMode,
   type VisibleFlowResult,
 } from '../core/graphEngine';
-import type { FlowNodeData, MediaItem, MergedFlowDataset } from '../data/schema';
+import type {
+  FlowNodeData,
+  MediaItem,
+  MergedFlowDataset,
+  PlatformViewMode,
+} from '../data/schema';
 
 export interface CameraTarget {
   kind: 'all' | 'subtree' | 'node';
@@ -91,6 +98,7 @@ export function createFlowExplorerState(
   allowTechMode: boolean,
 ) {
   const audienceMode = ref<ViewMode>('overview');
+  const platformMode = ref<PlatformViewMode>('compare');
   const expandedIds = ref<Set<string>>(new Set());
   const accordionMode = ref(true);
   const focusRootId = ref<string | null>(null);
@@ -113,11 +121,47 @@ export function createFlowExplorerState(
   const setAudienceMode = (next: ViewMode) => {
     audienceMode.value = allowTechMode ? next : 'overview';
     activeScenarioId.value = null;
+    if (selectedNodeId.value) {
+      const sel = findNodeById(dataset, selectedNodeId.value);
+      if (
+        sel &&
+        (!isVisibleForMode(sel.audience, audienceMode.value) ||
+          !isVisibleForPlatform(sel.platforms, audienceMode.value, platformMode.value))
+      ) {
+        selectedNodeId.value = null;
+      }
+    }
     if (cameraTarget.value.kind === 'subtree' && cameraTarget.value.nodeId) {
       setCameraTarget('subtree', cameraTarget.value.nodeId);
     } else {
       setCameraTarget('all');
     }
+  };
+
+  const setPlatformMode = (next: PlatformViewMode) => {
+    if (!allowTechMode) return;
+    platformMode.value = next;
+    activeScenarioId.value = null;
+    if (selectedNodeId.value) {
+      const sel = findNodeById(dataset, selectedNodeId.value);
+      if (sel && !isVisibleForPlatform(sel.platforms, audienceMode.value, next)) {
+        selectedNodeId.value = null;
+      }
+    }
+    if (focusRootId.value) {
+      const focusNode = findNodeById(dataset, focusRootId.value);
+      if (focusNode && !isVisibleForPlatform(focusNode.platforms, audienceMode.value, next)) {
+        focusRootId.value = null;
+      }
+    }
+    if (cameraTarget.value.kind === 'subtree' && cameraTarget.value.nodeId) {
+      const subNode = findNodeById(dataset, cameraTarget.value.nodeId);
+      if (subNode && isVisibleForPlatform(subNode.platforms, audienceMode.value, next)) {
+        setCameraTarget('subtree', cameraTarget.value.nodeId);
+        return;
+      }
+    }
+    setCameraTarget('all');
   };
 
   const getAncestorChain = (nodeId: string): string[] => {
@@ -210,6 +254,7 @@ export function createFlowExplorerState(
       expandedIds.value,
       audienceMode.value,
       focusRootId.value,
+      platformMode.value,
     ),
   );
 
@@ -225,7 +270,7 @@ export function createFlowExplorerState(
   });
 
   const getChildCount = (nodeId: string) =>
-    countDescendants(dataset, nodeId, audienceMode.value);
+    countDescendants(dataset, nodeId, audienceMode.value, new Set(), platformMode.value);
 
   const hasSubtree = (nodeId: string) => Boolean(dataset.subtreesByParentId[nodeId]);
 
@@ -235,6 +280,7 @@ export function createFlowExplorerState(
     dataset,
     allowTechMode,
     audienceMode,
+    platformMode,
     expandedIds,
     accordionMode,
     focusRootId,
@@ -246,6 +292,7 @@ export function createFlowExplorerState(
     selectedNode,
     breadcrumbNodes,
     setAudienceMode,
+    setPlatformMode,
     toggleExpand,
     jumpToNode,
     setFocusRoot,

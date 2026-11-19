@@ -22,8 +22,20 @@ const query = ref('');
 const highlightedIndex = ref(0);
 const inputRef = ref<HTMLInputElement | null>(null);
 
+const searchPlaceholder = computed(() => {
+  if (__ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech') {
+    return 'Tìm tên chức năng, mô tả, API, tên hàm hoặc file (.swift / .kt)...';
+  }
+  return 'Tìm tên chức năng, màn hình hoặc bước xử lý...';
+});
+
 const hits = computed(() =>
-  searchFlowNodes(explorer.dataset, query.value, explorer.audienceMode.value),
+  searchFlowNodes(
+    explorer.dataset,
+    query.value,
+    explorer.audienceMode.value,
+    explorer.platformMode.value,
+  ),
 );
 
 watch(
@@ -87,11 +99,7 @@ const onKeyDown = (event: KeyboardEvent) => {
             ref="inputRef"
             v-model="query"
             type="text"
-            :placeholder="
-              enableTechMode && explorer.audienceMode.value === 'tech'
-                ? 'Tìm tên chức năng, mô tả, API hoặc file code (.swift)...'
-                : 'Tìm tên chức năng, màn hình hoặc bước xử lý...'
-            "
+            :placeholder="searchPlaceholder"
             class="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
           />
           <button

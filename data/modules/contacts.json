@@ -22,7 +22,7 @@
           "audience": "all",
           "summary": {
             "overview": "Quản lý danh bạ cá nhân với giao diện tìm kiếm A-Z nhanh, phân biệt rõ số chỉ mới lưu trên máy và số đã đồng bộ lên tài khoản VBot; dữ liệu tự tách riêng theo từng tài khoản đăng nhập.",
-            "tech": "Tab 3 (UserContactsMiniAppViewController) nhúng Mini App vb-ma-user-contact giao tiếp qua UserContactMiniAppBridgeHelper xuống SQLite user_contacts.sqlite tách biệt theo uid."
+            "tech": "Tab 3 (iOS UserContactsMiniAppViewController / Android UserContactsFragment) nhúng Mini App vb-ma-user-contact giao tiếp qua UserContactMiniAppBridgeHelper xuống SQLite tách theo uid."
           },
           "media": [
             {
@@ -34,20 +34,44 @@
             }
           ],
           "techDetail": {
+            "platformDiffNote": "Cả iOS và Android dùng chung bộ action bridge & SQLite schema theo uid, nhưng cơ chế chống lặp user_contacts_updated khác nhau (iOS gắn userInfo['source']='miniapp_bridge', Android so khớp computeContactsSignature & bỏ qua lastDeliveredSignature == null) và mở Cài đặt Android không gắn FLAG_ACTIVITY_NEW_TASK để Back quay về VBot.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "VBot/Service/Database/UserContactDatabaseHelper.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "Tab 3 UserContactsFragment nhúng MiniAppFragment(\"vb-ma-user-contact\", startParam=\"embedded\"), đọc danh bạ máy qua ContactsContract (READ_CONTACTS), lưu SQLiteOpenHelper vbot_user_contact.db v2 (PRIMARY KEY (local_key, uid)) và điều phối bridge qua UserContactMiniAppBridgeHelper.kt.",
+                "edgeCases": [
+                  "Chống LiveData sticky replay: UserContactMiniAppBridgeHelper bỏ qua dispatch khi lastDeliveredSignature == null",
+                  "Mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS KHÔNG gắn FLAG_ACTIVITY_NEW_TASK để Back quay thẳng về app"
+                ],
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "UserContactsMiniAppViewController ↔ UserContactMiniAppBridgeHelper (onHostActionRequested)",
+              "transportByPlatform": {
+                "ios": "UserContactsMiniAppViewController ↔ MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.swift",
+                "android": "UserContactsFragment ↔ VbMABridge (@JavascriptInterface) → UserContactMiniAppBridgeHelper.kt"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController",
                   "hostFn": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                    "android": "UserContactsFragment → MiniAppFragment.newInstance(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData)"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ id: 'vb-ma-user-contact', locale: 'vi', startParam: 'embedded', extraData: { theme_params, themeParams } }"
                 },
@@ -55,14 +79,22 @@
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
                   "hostFn": "UserContactsMiniAppViewController.onTabActivated(forceRefresh:) / refreshData() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.onTabActivated(forceRefresh:) → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                    "android": "UserContactsFragment / MainActivity → MiniAppFragment emitEvent(\"refresh_data\", data)"
+                  },
                   "miniAppFn": "onHostRefreshData(cb) [hostBridge.ts] → on(\"refresh_data\", cb)",
                   "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }",
-                  "note": "Gọi khi kích hoạt tab hoặc app quay lại foreground sau applyPendingBundleUpdate()."
+                  "note": "Gọi khi kích hoạt tab hoặc app quay lại foreground."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "theme_changed",
                   "hostFn": "UserContactsMiniAppViewController.syncTheme() → miniAppVC?.emitEvent(\"theme_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.syncTheme() → miniAppVC?.emitEvent(\"theme_changed\", data:)",
+                    "android": "UserContactsFragment / MainActivity syncTheme → emitEvent(\"theme_changed\", data)"
+                  },
                   "miniAppFn": "on(\"theme_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ theme_params, theme: 'light' | 'dark' }"
                 },
@@ -70,22 +102,35 @@
                   "direction": "host_to_miniapp",
                   "name": "toggle_actions_menu",
                   "hostFn": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\", data:)",
+                    "android": "MainActivity.ivAddContact → UserContactsFragment.onPlusButtonClicked() → emitEvent(\"toggle_actions_menu\")"
+                  },
                   "miniAppFn": "onToggleActionsMenu(cb) [hostBridge.ts] → on(\"toggle_actions_menu\", cb)",
                   "payload": "{}",
-                  "note": "Bấm nút '+' trên UINavigationBar native của Host để bật/tắt Popover menu trong Mini App."
+                  "note": "Bấm nút '+' native của Host để bật/tắt Popover menu trong Mini App."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "user_contacts_updated",
                   "hostFn": "UserContactsMiniAppViewController.handleReloadUserContacts(_:) → miniAppVC?.emitEvent(\"user_contacts_updated\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.handleReloadUserContacts(_:) (bỏ qua nếu userInfo['source'] == 'miniapp_bridge')",
+                    "android": "UserContactMiniAppBridgeHelper.shouldDispatchContactsUpdate(uid, items) (so khớp computeContactsSignature, bỏ qua nếu == lastDeliveredSignature hoặc == null)"
+                  },
                   "miniAppFn": "onUserContactsUpdated(cb) [hostBridge.ts] → on(\"user_contacts_updated\", cb)",
                   "payload": "{ reason: 'local_db_changed' }",
-                  "note": "Phát khi SQLite thay đổi từ Native; bỏ qua nếu source == 'miniapp_bridge' để chống vòng lặp."
+                  "note": "Chống vòng lặp vô hạn khi SQLite đổi từ phía Mini App.",
+                  "parityNote": "iOS gắn userInfo['source'] = 'miniapp_bridge' trên NotificationCenter; Android lưu lastDeliveredSignature = computeContactsSignature(uid, items) và bỏ qua cả trạng thái null ban đầu để chặn LiveData sticky replay."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_get_local",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → UserContactMiniAppBridgeHelper.handleAction(...) → executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → UserContactDatabaseHelper.swift (user_contacts.sqlite)",
+                    "android": "UserContactMiniAppBridgeHelper.kt → UserContactDatabaseHelper.kt (vbot_user_contact.db v2)"
+                  },
                   "miniAppFn": "getLocalContactsState() [hostBridge.ts] → requestHostAction(\"user_contact_get_local\") → postEvent(\"request_host_action\") + on(\"host_action_result\", cb)",
                   "payload": "{ request_id }",
                   "response": "{ request_id, success, uid, permissionStatus, hasImportedDevice, contacts[] }",
@@ -95,42 +140,65 @@
                   "direction": "miniapp_to_host",
                   "name": "user_contact_refresh_server",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.loadContacts(...) + executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → UserContactService.shared.loadContacts(...) + executeGetLocal(...)",
+                    "android": "UserContactMiniAppBridgeHelper.kt → UserContactManager.kt (GET api/user-contact/get-all) + UserContactDatabaseHelper.kt"
+                  },
                   "miniAppFn": "refreshServerContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_refresh_server\")",
                   "payload": "{ request_id }",
                   "response": "{ uid, permissionStatus, hasImportedDevice, contacts[] }",
-                  "note": "Gọi UserContactService.loadContacts tải Server vào SQLite rồi trả danh sách mới."
+                  "note": "Tải danh bạ Server vào SQLite rồi trả danh sách mới."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_import_device",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.fetchDeviceContacts(...) + executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → CNContactStore + UserContactService.fetchDeviceContacts(...)",
+                    "android": "UserContactMiniAppBridgeHelper.kt (ActivityResultContracts.RequestPermission coalesced + has_prompted_read_contacts) → UserContactManager (ContactsContract.CommonDataKinds.Phone.CONTENT_URI)"
+                  },
                   "miniAppFn": "importDeviceContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_import_device\")",
                   "payload": "{ request_id, requestPermission?: Bool }",
                   "response": "{ granted: Bool, permissionStatus, hasImportedDevice, contacts[] }",
-                  "note": "Đọc danh bạ iPhone (CNContactStore) và upsert vào SQLite."
+                  "note": "Đọc danh bạ thiết bị và upsert vào SQLite.",
+                  "parityNote": "Android gộp các yêu cầu xin quyền READ_CONTACTS đồng thời (coalesced ActivityResultContracts.RequestPermission) và theo dõi cờ has_prompted_read_contacts."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_delete_local",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → executeDeleteLocal(...) → UserContactDatabaseHelper.deleteServerContacts / deleteContactsByLocalKeys",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → executeDeleteLocal(...) (gắn source: 'miniapp_bridge')",
+                    "android": "UserContactMiniAppBridgeHelper.kt → executeDeleteLocal(...) → recordDeliveredContacts(uid, remainingItems) trước reloadFromLocalDB()"
+                  },
                   "miniAppFn": "deleteLocalContactsViaHost(syncedIds, unsyncedLocalKeys) [hostBridge.ts] → requestHostAction(\"user_contact_delete_local\")",
                   "payload": "{ request_id, syncedIds?: Int64[], unsyncedLocalKeys?: String[] }",
                   "response": "{ deletedCount, contacts[], ... }",
-                  "note": "Xóa local SQLite và bắn notification gắn source: 'miniapp_bridge'."
+                  "note": "Xóa local SQLite và cập nhật cơ chế chống lặp.",
+                  "parityNote": "Android gọi recordDeliveredContacts(uid, remainingItems) ngay trước reloadFromLocalDB() để computeContactsSignature khớp trạng thái mới."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_open_settings",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                  "hostFnByPlatform": {
+                    "ios": "UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                    "android": "Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) — không gắn FLAG_ACTIVITY_NEW_TASK"
+                  },
                   "miniAppFn": "openAppSettingsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_open_settings\")",
                   "payload": "{ request_id }",
                   "response": "{ request_id, success: true }",
-                  "note": "Mở màn hình Cài đặt quyền iOS (openSettingsURLString)."
+                  "note": "Mở màn hình Cài đặt quyền ứng dụng.",
+                  "parityNote": "Android cố ý bỏ FLAG_ACTIVITY_NEW_TASK khi startActivity Settings để nhấn Back quay về thẳng Tab Danh bạ."
                 },
                 {
                   "direction": "miniapp_to_host",
                   "name": "make_call",
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall(...) → sendEvent(\"call_result\")",
+                    "android": "VbMaHostCallback.onRequestCall → MiniAppHelper.makeDirectCall (CallModel.miniAppDisplayName) → emit \"call_result\" (~200ms)"
+                  },
                   "miniAppFn": "makeCallViaHost(contact) [hostBridge.ts] → makeCall(...) (@vbotma/sdk)",
                   "payload": "{ request_id, callee_info | phoneNumber, displayName }",
                   "response": "{ request_id, success }",
@@ -147,13 +215,24 @@
           "audience": "all",
           "summary": {
             "overview": "Đẩy danh bạ lên Server để khi đăng nhập ở điện thoại khác vẫn có đầy đủ danh bạ; bảo toàn 100% số đã nạp ngay cả khi người dùng tắt quyền danh bạ máy sau đó.",
-            "tech": "Đồng bộ hai chiều qua GET /api/user-contact/get-all và APIService+UserContact, gộp thông minh trên nhiều thiết bị (ưu tiên bản Server) và xử lý danh sách failed_phones."
+            "tech": "Đồng bộ hai chiều qua GET /api/user-contact/get-all (iOS UserContactService / Android UserContactManager + UserContactBatchHelper), gộp ưu tiên bản Server và xử lý failed_phones."
           },
           "techDetail": {
+            "platformDiffNote": "iOS dùng CNContactStore + UserContactService; Android dùng READ_CONTACTS (has_prompted_read_contacts + ActivityResultContracts.RequestPermission), ContactsContract.CommonDataKinds.Phone.CONTENT_URI và UserContactBatchHelper.",
             "codeRefs": [
               "VBot/Service/UserContactService.swift",
               "VBot/Service/API/Endpoints/APIService+UserContact.swift"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactManager.kt đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI, dùng UserContactBatchHelper xử lý batch sync/merge và tôn trọng cờ has_prompted_read_contacts.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -163,7 +242,20 @@
           "audience": "all",
           "summary": {
             "overview": "Thêm mới, chỉnh sửa, vuốt trái thao tác nhanh, chọn xoá tối đa 50 liên hệ một lần hoặc bấm gọi thẳng từ danh bạ / bàn phím nổi.",
-            "tech": "Menu '+' và Multi-Select Bar tối đa 50 bản ghi, gọi REST /user-contact/insert|update|delete đồng thời cập nhật SQLite local và truyền tên sang make_call."
+            "tech": "Menu '+' native (iOS NavigationBar / Android MainActivity.ivAddContact) và Multi-Select Bar tối đa 50 bản ghi, gọi REST /user-contact/insert|update|delete đồng thời cập nhật SQLite local."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android giữ MainActivity.ivAddContact kích hoạt UserContactsFragment.onPlusButtonClicked() phát toggle_actions_menu, và make_call đi qua MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName.",
+            "byPlatform": {
+              "android": {
+                "summary": "MainActivity.ivAddContact -> UserContactsFragment.onPlusButtonClicked() bật menu '+' trong Mini App; gọi nhanh đi qua MiniAppHelper.makeDirectCall.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -173,37 +265,71 @@
           "audience": "all",
           "summary": {
             "overview": "Tra cứu danh bạ các đơn vị hành chính, UBND, công an, trạm y tế theo địa bàn/đơn vị để gọi nhanh hoặc chuyển tiếp cuộc gọi đang nghe.",
-            "tech": "ContactForwardViewController và ContactV2ViewController sử dụng ContactV2Repository + ContactV2AdvancedFilterBottomSheet."
+            "tech": "Tab 1 (iOS ContactForwardViewController / Android ContactForwardFragment) nhúng Mini App vb-ma-contact-forward; luồng trong cuộc gọi vẫn dùng SQLite ContactV2."
           },
           "techDetail": {
+            "platformDiffNote": "CHÊNH LỆCH QUYỀN '+': Nút '+' thêm mới trên Header ở iOS hiển thị cho Admin HOẶC user có quyền CRM:CREATE; Android (MainActivity.ivAddContact) CHỈ hiển thị cho Admin (UtilsKotlin.checkAdmin()). Ngoài ra, ContactV2Fragment.kt trên Android đã ngừng dùng ở MainActivity, nhưng ContactV2DatabaseHelper (vbot_contact_v2.db) vẫn phục vụ CallForwardBottomSheet khi chuyển tiếp cuộc gọi.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "VBot/Controller/NewController/ContactV2/ContactV2ViewController.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "ContactForwardFragment.kt (Tab 1) nhúng MiniAppFragment(\"vb-ma-contact-forward\"); MainActivity.ivAddContact chỉ mở modal \"add\" khi UtilsKotlin.checkAdmin(). ContactV2Fragment.kt cũ không gắn lên MainActivity, nhưng ContactV2DatabaseHelper (vbot_contact_v2.db, PK (id, uid, project_code)) + ContactV2Manager vẫn cấp dữ liệu cho CallForwardBottomSheet khi đang gọi.",
+                "edgeCases": [
+                  "Nút '+' trên Android MainActivity.ivAddContact chỉ hiện khi UtilsKotlin.checkAdmin() == true (khác iOS: Admin || CRM:CREATE)",
+                  "ContactV2Fragment.kt là màn hình legacy đã thay bằng ContactForwardFragment, nhưng SQLite vbot_contact_v2.db vẫn dùng trong CallForwardBottomSheet"
+                ],
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/ContactV2DatabaseHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/ContactV2Manager.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-contact-forward",
               "embedMode": "inline_tab",
               "transport": "ContactForwardViewController (embedded + modal 'add') ↔ VbMaDelegate",
+              "transportByPlatform": {
+                "ios": "ContactForwardViewController (embedded + modal 'add') ↔ VbMaDelegate",
+                "android": "ContactForwardFragment (MiniAppFragment embedded) + MainActivity.ivAddContact (MiniAppHelper.openMiniApp 'add')"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController (Tab & Modal)",
                   "hostFn": "ContactForwardViewController.loadMiniApp() / openAddContactForward() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.loadMiniApp() / openAddContactForward() (Admin || CRM:CREATE)",
+                    "android": "ContactForwardFragment (embedded) / MainActivity.ivAddContact → MiniAppHelper.openMiniApp(..., \"add\") (chỉ Admin)"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
-                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native (Admin hoặc CRM:CREATE): { startParam: 'add', onClose → refreshData() }"
+                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native: { startParam: 'add', onClose → refreshData() }",
+                  "parityNote": "Khác biệt phân quyền: iOS kiểm tra Admin hoặc CRM:CREATE; Android hiện chỉ kiểm tra UtilsKotlin.checkAdmin() ở MainActivity.ivAddContact."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
                   "hostFn": "ContactForwardViewController.onTabActivated() / refreshData() / handleRefreshNotification() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.onTabActivated() / refreshData() → emitEvent(\"refresh_data\")",
+                    "android": "ContactForwardFragment / MainActivity → emitEvent(\"refresh_data\") sau khi đóng modal add"
+                  },
                   "miniAppFn": "on(\"refresh_data\", cb) [+page.svelte] (@vbotma/sdk)",
                   "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }",
-                  "note": "Gọi khi kích hoạt tab, nhận reloadContactV2Noti hoặc đóng modal thêm mới."
+                  "note": "Gọi khi kích hoạt tab hoặc đóng modal thêm mới."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "theme_changed",
                   "hostFn": "ContactForwardViewController.syncTheme() → miniAppVC?.emitEvent(\"theme_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.syncTheme() → emitEvent(\"theme_changed\")",
+                    "android": "ContactForwardFragment / MainActivity syncTheme → emitEvent(\"theme_changed\")"
+                  },
                   "miniAppFn": "on(\"theme_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ theme_params, theme: 'light' | 'dark' }"
                 },
@@ -211,6 +337,10 @@
                   "direction": "miniapp_to_host",
                   "name": "check_permissions / make_call",
                   "hostFn": "MiniAppService.onCheckPermissions(module:actions:) / MiniAppService.onRequestCall(payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onCheckPermissions / onRequestCall → VPMAppService.makeCall",
+                    "android": "VbMaHostCallback.onCheckPermissions / onRequestCall → MiniAppHelper.makeDirectCall"
+                  },
                   "miniAppFn": "checkPermissions(\"CRM\", actions) / makeCall(item.phone, ...) [contact-item.svelte] (@vbotma/sdk/svelte)",
                   "payload": "{ module: 'CRM', actions } / { phoneNumber, displayName }",
                   "response": "{ [action]: Bool } / { success }"
@@ -226,15 +356,27 @@
           "audience": "tech",
           "summary": {
             "overview": "Lá đại diện Mini App Danh bạ cá nhân (vb-ma-user-contact) nhúng trong Tab 3: bấm '+12' để bung 4 luồng giao tiếp Host ↔ Mini App (Nạp danh bạ máy, Thêm/Sửa, Xoá & Chống lặp, Gọi nhanh) và chạy 4 kịch bản ví dụ.",
-            "tech": "Host iOS (UserContactsMiniAppViewController + UserContactMiniAppBridgeHelper) giữ SQLite user_contacts theo uid và CNContactStore; Mini App Svelte (hostBridge.ts + userContactStore.svelte.ts) gọi REST API Thêm/Sửa/Xoá trên Server trước rồi gọi Bridge đồng bộ ngược lại Host SQLite."
+            "tech": "Host (iOS UserContactsMiniAppViewController / Android UserContactsFragment + UserContactMiniAppBridgeHelper) giữ SQLite theo uid; Mini App Svelte (hostBridge.ts + userContactStore.svelte.ts) đồng bộ ngược qua Bridge."
           },
           "techDetail": {
+            "platformDiffNote": "Android dùng VbMABridge (@JavascriptInterface) + SQLiteOpenHelper (vbot_user_contact.db v2), chống lặp bằng computeContactsSignature và mở Settings không gắn FLAG_ACTIVITY_NEW_TASK.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts",
               "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactsFragment + UserContactMiniAppBridgeHelper.kt + UserContactDatabaseHelper.kt (SQLiteOpenHelper v2) + UserContactManager.kt.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["contact-personal", "miniapp-list"]
         },
@@ -245,14 +387,24 @@
           "audience": "tech",
           "summary": {
             "overview": "Lá đại diện Mini App Danh bạ chuyển tiếp (vb-ma-contact-forward) nhúng ở Tab 1 và mở modal 'add': bấm '+4' để xem luồng mở Tab/Modal, refresh_data, kiểm tra quyền CRM và make_call.",
-            "tech": "ContactForwardViewController nhúng WebView embedded và mở modal toàn màn hình startParam='add' (hoặc open_mini_app 'edit/{id}' từ contact-item.svelte)."
+            "tech": "iOS ContactForwardViewController / Android ContactForwardFragment nhúng WebView embedded và MainActivity.ivAddContact mở modal 'add' (Android chỉ cho Admin)."
           },
           "techDetail": {
+            "platformDiffNote": "Android chỉ hiện nút '+' mở modal 'add' khi UtilsKotlin.checkAdmin() (iOS cho cả Admin hoặc CRM:CREATE); trong cuộc gọi Android dùng ContactV2DatabaseHelper (vbot_contact_v2.db) cho CallForwardBottomSheet.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "vb-ma-contact-forward/src/routes/+page.svelte",
               "vb-ma-contact-forward/src/lib/components/contact-item.svelte"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "ContactForwardFragment.kt (Tab 1) + MainActivity.ivAddContact (Admin-only) mở MiniAppHelper.openMiniApp(\"vb-ma-contact-forward\", \"add\").",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["contact-forward-v2", "miniapp-list"]
         }
@@ -272,7 +424,7 @@
           "audience": "all",
           "summary": {
             "overview": "Chạm tab Danh bạ để xem danh sách liên hệ A-Z, tìm kiếm không dấu tức thời và sử dụng nút '+' hoặc bàn phím gọi nổi góc dưới phải.",
-            "tech": "UserContactsMiniAppViewController giữ UINavigationBar native (Avatar + nút '+' phát sự kiện toggle_actions_menu) và nhúng VbMaViewController (vb-ma-user-contact) cùng FloatingDialPadView."
+            "tech": "Tab 3 giữ thanh điều hướng native (nút '+' phát toggle_actions_menu) và nhúng Mini App vb-ma-user-contact (iOS UserContactsMiniAppViewController / Android UserContactsFragment)."
           },
           "media": [
             {
@@ -284,16 +436,34 @@
             }
           ],
           "techDetail": {
+            "platformDiffNote": "Android dùng MainActivity (AHBottomNavigation giữ sống WebView bằng add/show/hide) nhúng MiniAppFragment(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData) bên trong UserContactsFragment.",
             "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactsFragment.kt nhúng MiniAppFragment(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData); MainActivity.ivAddContact gọi onPlusButtonClicked() để emit toggle_actions_menu.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "UserContactsMiniAppViewController (UINavigationBar + VbMaViewController)",
+              "transportByPlatform": {
+                "ios": "UserContactsMiniAppViewController (UINavigationBar + VbMaViewController)",
+                "android": "UserContactsFragment + MiniAppFragment + MainActivity.ivAddContact"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController",
                   "hostFn": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                    "android": "UserContactsFragment → MiniAppFragment.newInstance(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData)"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ id: 'vb-ma-user-contact', locale: 'vi', startParam: 'embedded', extraData: { theme_params, themeParams } }"
                 },
@@ -301,6 +471,10 @@
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
                   "hostFn": "UserContactsMiniAppViewController.onTabActivated(forceRefresh:) / refreshData() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.onTabActivated(forceRefresh:) → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                    "android": "UserContactsFragment / MainActivity → MiniAppFragment emitEvent(\"refresh_data\", data)"
+                  },
                   "miniAppFn": "onHostRefreshData(cb) [hostBridge.ts] → on(\"refresh_data\", cb)",
                   "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }"
                 },
@@ -308,6 +482,10 @@
                   "direction": "host_to_miniapp",
                   "name": "theme_changed",
                   "hostFn": "UserContactsMiniAppViewController.syncTheme() → miniAppVC?.emitEvent(\"theme_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.syncTheme() → emitEvent(\"theme_changed\", data:)",
+                    "android": "UserContactsFragment syncTheme → emitEvent(\"theme_changed\", data)"
+                  },
                   "miniAppFn": "on(\"theme_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ theme_params, theme: 'light' | 'dark' }"
                 },
@@ -315,6 +493,10 @@
                   "direction": "host_to_miniapp",
                   "name": "toggle_actions_menu",
                   "hostFn": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.handlePlusTapped() → emitEvent(\"toggle_actions_menu\", data:)",
+                    "android": "MainActivity.ivAddContact → UserContactsFragment.onPlusButtonClicked() → emitEvent(\"toggle_actions_menu\")"
+                  },
                   "miniAppFn": "onToggleActionsMenu(cb) [hostBridge.ts] → on(\"toggle_actions_menu\", cb)",
                   "payload": "{}",
                   "note": "Bấm nút '+' trên thanh điều hướng native để bật/tắt menu trong Mini App."
@@ -330,22 +512,41 @@
           "audience": "tech",
           "summary": {
             "overview": "Mini App đọc và lưu trữ danh bạ an toàn thông qua bộ nhớ nội bộ của ứng dụng.",
-            "tech": "Mini App gọi request_host_action qua UserContactMiniAppBridgeHelper điều phối tới UserContactService (5 lệnh SQLite & quyền danh bạ máy)."
+            "tech": "Mini App gọi request_host_action qua UserContactMiniAppBridgeHelper điều phối 5 lệnh SQLite & quyền danh bạ máy trên cả iOS và Android."
           },
           "techDetail": {
+            "platformDiffNote": "Cầu nối WebView trên iOS dùng WKWebView ScriptMessageHandler ('vbma'); Android dùng VbMABridge (@JavascriptInterface) và gộp yêu cầu READ_CONTACTS qua ActivityResultContracts.RequestPermission.",
             "codeRefs": [
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "VBot/Service/UserContactService.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper.kt xử lý 5 action từ VbMABridge xuống UserContactDatabaseHelper.kt (vbot_user_contact.db v2) & UserContactManager.kt.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.handleAction",
+              "transportByPlatform": {
+                "ios": "MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.swift",
+                "android": "VbMABridge (@JavascriptInterface) → UserContactMiniAppBridgeHelper.kt"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_get_local",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → UserContactMiniAppBridgeHelper.handleAction(...) → executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → UserContactDatabaseHelper.swift (user_contacts.sqlite)",
+                    "android": "UserContactMiniAppBridgeHelper.kt → UserContactDatabaseHelper.kt (vbot_user_contact.db v2)"
+                  },
                   "miniAppFn": "getLocalContactsState() [hostBridge.ts] → requestHostAction(\"user_contact_get_local\") → postEvent(\"request_host_action\") + on(\"host_action_result\", cb)",
                   "payload": "{ request_id }",
                   "response": "{ uid, permissionStatus, hasImportedDevice, contacts[] }"
@@ -354,6 +555,10 @@
                   "direction": "miniapp_to_host",
                   "name": "user_contact_refresh_server",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.loadContacts(...) + executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → UserContactService.shared.loadContacts(...) + executeGetLocal(...)",
+                    "android": "UserContactMiniAppBridgeHelper.kt → UserContactManager.kt (Server API) + UserContactDatabaseHelper.kt"
+                  },
                   "miniAppFn": "refreshServerContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_refresh_server\")",
                   "payload": "{ request_id }",
                   "response": "{ uid, permissionStatus, hasImportedDevice, contacts[] }"
@@ -362,6 +567,10 @@
                   "direction": "miniapp_to_host",
                   "name": "user_contact_import_device",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.fetchDeviceContacts(...) + executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → CNContactStore + fetchDeviceContacts(...)",
+                    "android": "UserContactMiniAppBridgeHelper.kt (ActivityResultContracts.RequestPermission + has_prompted_read_contacts) → UserContactManager (ContactsContract)"
+                  },
                   "miniAppFn": "importDeviceContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_import_device\")",
                   "payload": "{ request_id, requestPermission?: Bool }",
                   "response": "{ granted: Bool, permissionStatus, hasImportedDevice, contacts[] }"
@@ -370,6 +579,10 @@
                   "direction": "miniapp_to_host",
                   "name": "user_contact_delete_local",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → executeDeleteLocal(...) → UserContactDatabaseHelper.deleteServerContacts / deleteContactsByLocalKeys",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → executeDeleteLocal(...) (userInfo['source']='miniapp_bridge')",
+                    "android": "UserContactMiniAppBridgeHelper.kt → executeDeleteLocal(...) → recordDeliveredContacts(uid, remainingItems) trước reloadFromLocalDB()"
+                  },
                   "miniAppFn": "deleteLocalContactsViaHost(syncedIds, unsyncedLocalKeys) [hostBridge.ts] → requestHostAction(\"user_contact_delete_local\")",
                   "payload": "{ request_id, syncedIds?: Int64[], unsyncedLocalKeys?: String[] }",
                   "response": "{ deletedCount, contacts[] }"
@@ -378,6 +591,10 @@
                   "direction": "miniapp_to_host",
                   "name": "user_contact_open_settings",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                  "hostFnByPlatform": {
+                    "ios": "UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                    "android": "Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) — không gắn FLAG_ACTIVITY_NEW_TASK"
+                  },
                   "miniAppFn": "openAppSettingsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_open_settings\")",
                   "payload": "{ request_id }",
                   "response": "{ request_id, success: true }"
@@ -386,9 +603,14 @@
                   "direction": "host_to_miniapp",
                   "name": "user_contacts_updated",
                   "hostFn": "UserContactsMiniAppViewController.handleReloadUserContacts(_:) → miniAppVC?.emitEvent(\"user_contacts_updated\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.handleReloadUserContacts(_:) (bỏ qua nếu source == 'miniapp_bridge')",
+                    "android": "UserContactMiniAppBridgeHelper.shouldDispatchContactsUpdate(uid, items) (so khớp computeContactsSignature & chặn null)"
+                  },
                   "miniAppFn": "onUserContactsUpdated(cb) [hostBridge.ts] → on(\"user_contacts_updated\", cb)",
                   "payload": "{ reason: 'local_db_changed' }",
-                  "note": "Chống lặp vô hạn bằng userInfo['source'] = 'miniapp_bridge'."
+                  "note": "Chống lặp vô hạn khi cập nhật từ Native hoặc Mini App.",
+                  "parityNote": "iOS dùng userInfo['source'] = 'miniapp_bridge'; Android dùng lastDeliveredSignature = computeContactsSignature(uid, items) & bỏ qua null ban đầu để chặn LiveData sticky replay."
                 }
               ]
             }
@@ -401,16 +623,25 @@
           "audience": "tech",
           "summary": {
             "overview": "Mỗi tài khoản có vùng dữ liệu danh bạ riêng trên điện thoại: đăng xuất không mất dữ liệu và đăng nhập tài khoản khác không bị lẫn số.",
-            "tech": "UserContactDatabaseHelper quản lý bảng user_contacts (PRIMARY KEY (local_key, uid)) và user_contact_meta trong user_contacts.sqlite; đồng thời phục vụ tra cứu tên khi có cuộc gọi đến/đi."
+            "tech": "UserContactDatabaseHelper quản lý bảng user_contacts (PRIMARY KEY (local_key, uid)) trên cả iOS (user_contacts.sqlite) và Android (SQLiteOpenHelper vbot_user_contact.db v2)."
           },
           "techDetail": {
+            "platformDiffNote": "Android dùng thuần Android SQLiteOpenHelper (vbot_user_contact.db version 2, PRIMARY KEY (local_key, uid)); iOS dùng SQLite.swift (user_contacts.sqlite).",
             "edgeCases": [
-              "Khi đăng xuất tài khoản A rồi đăng nhập tài khoản B trên cùng 1 iPhone, dữ liệu của A được ẩn an toàn và hiển thị lại ngay khi A đăng nhập lại"
+              "Khi đăng xuất tài khoản A rồi đăng nhập tài khoản B trên cùng thiết bị, dữ liệu của A được giữ riêng an toàn và hiển thị lại ngay khi A đăng nhập lại"
             ],
             "codeRefs": [
               "VBot/Service/Database/UserContactDatabaseHelper.swift",
               "VBot/Model/UserContactModel.swift"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactDatabaseHelper.kt kế thừa SQLiteOpenHelper quản lý vbot_user_contact.db (version 2) với PRIMARY KEY (local_key, uid).",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["call-in-raw-log", "call-out-preserve-name"]
         },
@@ -439,12 +670,20 @@
       "nodes": [
         {
           "id": "ct-perm-check",
-          "label": "Kiểm tra quyền Danh bạ iPhone (Đã nạp hay Trống?)",
+          "label": "Kiểm tra quyền Danh bạ thiết bị (Đã nạp hay Trống?)",
           "kind": "decision",
           "audience": "all",
           "summary": {
-            "overview": "Khi mở Danh bạ, ứng dụng kiểm tra xem máy đã từng nạp danh bạ chưa và người dùng có đang cấp quyền truy cập danh bạ iPhone hay không.",
-            "tech": "Kiểm tra CNContactStore.authorizationStatus kết hợp số lượng bản ghi hiện có trong SQLite của uid hiện tại."
+            "overview": "Khi mở Danh bạ, ứng dụng kiểm tra xem máy đã từng nạp danh bạ chưa và người dùng có đang cấp quyền truy cập danh bạ máy hay không.",
+            "tech": "iOS kiểm tra CNContactStore.authorizationStatus; Android kiểm tra READ_CONTACTS + cờ has_prompted_read_contacts và số bản ghi SQLite theo uid."
+          },
+          "techDetail": {
+            "byPlatform": {
+              "android": {
+                "summary": "Kiểm tra Manifest.permission.READ_CONTACTS kết hợp cờ has_prompted_read_contacts và số bản ghi trong vbot_user_contact.db.",
+                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"]
+              }
+            }
           }
         },
         {
@@ -453,11 +692,21 @@
           "kind": "process",
           "audience": "all",
           "summary": {
-            "overview": "Nếu trước đây bạn đã nạp danh bạ vào App rồi sau đó vào Cài đặt iPhone tắt quyền (hoặc xóa số ngoài máy), toàn bộ danh bạ trong App vẫn nguyên vẹn, không đòi quyền lại và vẫn đồng bộ lên Server được.",
-            "tech": "Không bật lại prompt xin quyền khi mở app nếu SQLite đã có dữ liệu; chỉ mở Cài đặt khi danh bạ trống hoàn toàn hoặc người dùng chủ động bấm 'Cập nhật danh bạ thiết bị'."
+            "overview": "Nếu trước đây bạn đã nạp danh bạ vào App rồi sau đó vào Cài đặt tắt quyền (hoặc xóa số ngoài máy), toàn bộ danh bạ trong App vẫn nguyên vẹn, không đòi quyền lại và vẫn đồng bộ lên Server được.",
+            "tech": "Không bật prompt xin quyền nếu SQLite đã có dữ liệu; chỉ mở Cài đặt khi user bấm (Android bỏ FLAG_ACTIVITY_NEW_TASK để Back quay về app)."
           },
           "techDetail": {
-            "codeRefs": ["VBot/Service/Database/UserContactDatabaseHelper.swift"]
+            "platformDiffNote": "Android kiểm soát prompt lần đầu qua has_prompted_read_contacts và khi mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS cố ý không gắn FLAG_ACTIVITY_NEW_TASK.",
+            "codeRefs": ["VBot/Service/Database/UserContactDatabaseHelper.swift"],
+            "byPlatform": {
+              "android": {
+                "summary": "Giữ nguyên dữ liệu trong UserContactDatabaseHelper (vbot_user_contact.db); chỉ mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS (không gắn FLAG_ACTIVITY_NEW_TASK) khi danh bạ trống và user bấm nút mở Cài đặt.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -466,11 +715,21 @@
           "kind": "action",
           "audience": "all",
           "summary": {
-            "overview": "Để tránh tự ý thay đổi dữ liệu, ứng dụng chỉ quét bổ sung số mới lưu trên iPhone khi người dùng bấm nút '+' -> 'Cập nhật danh bạ thiết bị'.",
-            "tech": "Yêu cầu quyền CNContactStore đang bật, đọc danh bạ máy và upsert vào SQLite mà không ghi đè các liên hệ đã có trên Server."
+            "overview": "Để tránh tự ý thay đổi dữ liệu, ứng dụng chỉ quét bổ sung số mới lưu trên máy khi người dùng bấm nút '+' -> 'Cập nhật danh bạ thiết bị'.",
+            "tech": "iOS đọc CNContactStore; Android gộp request READ_CONTACTS qua ActivityResultContracts.RequestPermission và đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI qua UserContactManager."
           },
           "techDetail": {
-            "codeRefs": ["VBot/Service/UserContactService.swift"]
+            "platformDiffNote": "Android dùng ActivityResultContracts.RequestPermission gộp các yêu cầu trùng lặp và đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI.",
+            "codeRefs": ["VBot/Service/UserContactService.swift"],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper xin quyền READ_CONTACTS (coalesced ActivityResultContracts.RequestPermission) rồi UserContactManager đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -480,14 +739,23 @@
           "audience": "all",
           "summary": {
             "overview": "Đẩy các liên hệ có biểu tượng Điện thoại lên Server VBot để đổi sang biểu tượng VBot; khi đăng nhập máy mới tự động tải về và gộp thông minh (ưu tiên bản trên Server nếu trùng số).",
-            "tech": "Gọi API đồng bộ đẩy danh sách chưa synced và tải GET /api/user-contact/get-all để replaceServerContacts / merge theo số điện thoại chuẩn hóa."
+            "tech": "Gọi API đồng bộ đẩy danh sách chưa synced và tải GET /api/user-contact/get-all (iOS UserContactService; Android UserContactManager + UserContactBatchHelper)."
           },
           "techDetail": {
             "apisOrEvents": ["GET /api/user-contact/get-all", "APIService+UserContact sync"],
             "codeRefs": [
               "VBot/Service/API/Endpoints/APIService+UserContact.swift",
               "VBot/Service/UserContactService.swift"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactManager.kt + UserContactBatchHelper.kt đồng bộ danh bạ theo batch lên Server và gộp về vbot_user_contact.db.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -497,7 +765,14 @@
           "audience": "all",
           "summary": {
             "overview": "Nếu trong danh bạ máy có số điện thoại bị sai định dạng không đẩy lên Server được, hệ thống liệt kê rõ và cho phép bấm 'Xoá' hàng loạt ngay trong 1 bước.",
-            "tech": "Hiển thị danh sách failed_phones từ phản hồi API trong Bottom Sheet (tích sẵn tối đa 50 số) để gọi deleteContactsByLocalKeys."
+            "tech": "Hiển thị danh sách failed_phones từ phản hồi API trong Bottom Sheet (tích sẵn tối đa 50 số) để xóa local qua bridge."
+          },
+          "techDetail": {
+            "byPlatform": {
+              "android": {
+                "summary": "Mini App dùng chung xử lý failed_phones và gọi user_contact_delete_local qua UserContactMiniAppBridgeHelper.kt."
+              }
+            }
           }
         }
       ],
@@ -512,14 +787,14 @@
         {
           "id": "sc-contact-sync-happy",
           "name": "Quét danh bạ máy và đồng bộ lên Server VBot",
-          "description": "Cập nhật số mới từ iPhone rồi đẩy lên tài khoản VBot để dùng trên nhiều thiết bị.",
+          "description": "Cập nhật số mới từ thiết bị rồi đẩy lên tài khoản VBot để dùng trên nhiều máy.",
           "audience": "all",
           "nodeIds": ["ct-perm-check", "ct-device-import", "ct-server-sync"],
           "edgeIds": ["e-cs-2", "e-cs-4"]
         },
         {
           "id": "sc-contact-revoked-perm",
-          "name": "Đã nạp danh bạ nhưng sau đó tắt quyền iPhone",
+          "name": "Đã nạp danh bạ nhưng sau đó tắt quyền danh bạ",
           "description": "App giữ nguyên danh bạ trong bộ nhớ và vẫn cho đồng bộ lên Server mà không hỏi quyền lại.",
           "audience": "all",
           "nodeIds": ["ct-perm-check", "ct-perm-revoked", "ct-server-sync"],
@@ -540,19 +815,36 @@
           "audience": "all",
           "summary": {
             "overview": "Người dùng bấm nút '+' góc phải để Thêm liên hệ / Xoá nhiều, hoặc vuốt trái / nhấn giữ 0.45s ngay trên dòng liên hệ để thao tác nhanh.",
-            "tech": "Hỗ trợ Popover menu từ nút '+', Swipe trái (Sửa/Đồng bộ/Xoá) và Long-press 0.45s bật Multi-Select Bar (giới hạn 50 mục/lần)."
+            "tech": "Nút '+' native (iOS handlePlusTapped / Android MainActivity.ivAddContact -> onPlusButtonClicked()) phát toggle_actions_menu bật Popover menu (tối đa 50 mục/lần)."
           },
           "techDetail": {
             "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"],
+            "byPlatform": {
+              "android": {
+                "summary": "MainActivity.ivAddContact gọi UserContactsFragment.onPlusButtonClicked() phát toggle_actions_menu vào MiniAppFragment.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\")",
+              "transportByPlatform": {
+                "ios": "UserContactsMiniAppViewController.handlePlusTapped() → emitEvent(\"toggle_actions_menu\")",
+                "android": "MainActivity.ivAddContact → UserContactsFragment.onPlusButtonClicked() → emitEvent(\"toggle_actions_menu\")"
+              },
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "toggle_actions_menu",
                   "hostFn": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.handlePlusTapped() → emitEvent(\"toggle_actions_menu\", data:)",
+                    "android": "MainActivity.ivAddContact → UserContactsFragment.onPlusButtonClicked() → emitEvent(\"toggle_actions_menu\")"
+                  },
                   "miniAppFn": "onToggleActionsMenu(cb) [hostBridge.ts] → on(\"toggle_actions_menu\", cb)",
                   "payload": "{}",
                   "note": "Bấm nút '+' trên thanh điều hướng native để bật/tắt Popover menu trong Mini App."
@@ -578,7 +870,7 @@
           "audience": "all",
           "summary": {
             "overview": "Cập nhật thông tin liên hệ mới hoặc xoá đồng thời cả các số trên máy lẫn trên Server VBot tối đa 50 liên hệ mỗi đợt.",
-            "tech": "Gọi POST /user-contact/insert, /update, /delete kết hợp deleteContactsByLocalKeys trong SQLite qua UserContactService."
+            "tech": "Gọi POST /user-contact/insert, /update, /delete kết hợp xoá SQLite local (iOS UserContactService; Android UserContactMiniAppBridgeHelper + UserContactManager)."
           },
           "techDetail": {
             "apisOrEvents": [
@@ -590,7 +882,16 @@
             "codeRefs": [
               "VBot/Service/UserContactService.swift",
               "VBot/Service/API/Endpoints/APIService+UserContact.swift"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper.executeDeleteLocal() xoá vbot_user_contact.db và cập nhật recordDeliveredContacts trước reloadFromLocalDB.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -600,7 +901,16 @@
           "audience": "all",
           "summary": {
             "overview": "Bấm nút Gọi trên dòng liên hệ (hoặc mở Bàn phím số nổi góc dưới phải để thấy gợi ý tên khớp) và chuyển thẳng sang màn hình gọi.",
-            "tech": "Bắn lệnh make_call kèm sẵn tên liên hệ và số điện thoại sang luồng gọi đi để giữ nguyên tên hiển thị."
+            "tech": "Bắn lệnh make_call kèm sẵn tên liên hệ và SĐT; iOS giữ suppliedCallerName, Android truyền qua MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName."
+          },
+          "techDetail": {
+            "platformDiffNote": "Gọi từ Mini App trên Android đi qua MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName (trong khi bấm gọi từ native Dialpad/Danh bạ cũ trên Android không gán field này).",
+            "byPlatform": {
+              "android": {
+                "summary": "MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName và khởi chạy CreateCallActivity / VBotPhone.startOutgoingCall (PJSIP).",
+                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"]
+              }
+            }
           },
           "relatedNodeIds": ["call-out-start"]
         }
@@ -624,7 +934,7 @@
           "audience": "all",
           "summary": {
             "overview": "Truy cập danh sách các đơn vị/tổ chức chuyển tiếp ở Tab thứ 2 trên thanh điều hướng hoặc ngay trong popup Chuyển tiếp khi đang nghe máy.",
-            "tech": "ContactForwardViewController (nhúng Mini App vb-ma-contact-forward) và ContactV2ViewController (dùng trong modal chuyển tiếp cuộc gọi)."
+            "tech": "Tab 1 dùng Mini App vb-ma-contact-forward (iOS ContactForwardViewController / Android ContactForwardFragment); modal chuyển tiếp trong cuộc gọi dùng ContactV2."
           },
           "media": [
             {
@@ -636,34 +946,65 @@
             }
           ],
           "techDetail": {
+            "platformDiffNote": "Android bỏ ContactV2Fragment ở MainActivity để thay bằng ContactForwardFragment (nhúng vb-ma-contact-forward), nhưng nút '+' thêm mới trên MainActivity.ivAddContact CHỈ hiện khi UtilsKotlin.checkAdmin() (iOS hiện cho cả Admin hoặc CRM:CREATE).",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "VBot/Controller/NewController/ContactV2/ContactV2ViewController.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "Tab 1 là ContactForwardFragment (MiniAppFragment vb-ma-contact-forward); MainActivity.ivAddContact chỉ mở modal 'add' khi UtilsKotlin.checkAdmin(); khi đang gọi dùng CallForwardBottomSheet + ContactV2DatabaseHelper (vbot_contact_v2.db).",
+                "edgeCases": [
+                  "Nút '+' Android chỉ hiện cho Admin (UtilsKotlin.checkAdmin()), không xét CRM:CREATE như iOS"
+                ],
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/ContactV2DatabaseHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-contact-forward",
               "embedMode": "inline_tab",
               "transport": "ContactForwardViewController (embedded + modal 'add') ↔ VbMaDelegate",
+              "transportByPlatform": {
+                "ios": "ContactForwardViewController (embedded + modal 'add') ↔ VbMaDelegate",
+                "android": "ContactForwardFragment (embedded) + MainActivity.ivAddContact (MiniAppHelper.openMiniApp 'add')"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController (Tab & Modal)",
                   "hostFn": "ContactForwardViewController.loadMiniApp() / openAddContactForward() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.loadMiniApp() / openAddContactForward() (Admin || CRM:CREATE)",
+                    "android": "ContactForwardFragment (embedded) / MainActivity.ivAddContact → MiniAppHelper.openMiniApp(..., \"add\") (chỉ Admin)"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
-                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native (Admin hoặc CRM:CREATE): { startParam: 'add', onClose → refreshData() }"
+                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native: { startParam: 'add', onClose → refreshData() }",
+                  "parityNote": "iOS kiểm tra Admin || CRM:CREATE cho nút '+'; Android chỉ kiểm tra UtilsKotlin.checkAdmin()."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
                   "hostFn": "ContactForwardViewController.onTabActivated() / refreshData() / handleRefreshNotification() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.onTabActivated() / refreshData() → emitEvent(\"refresh_data\", data:)",
+                    "android": "ContactForwardFragment / MainActivity → emitEvent(\"refresh_data\", data)"
+                  },
                   "miniAppFn": "on(\"refresh_data\", cb) [+page.svelte] (@vbotma/sdk)",
                   "payload": "{ reason: 'tab_activated' | 'bundle_updated' | 'host_resume', force: Bool }",
-                  "note": "Gọi khi kích hoạt tab, nhận reloadContactV2Noti hoặc đóng modal thêm mới."
+                  "note": "Gọi khi kích hoạt tab hoặc đóng modal thêm mới."
                 },
                 {
                   "direction": "host_to_miniapp",
                   "name": "theme_changed",
                   "hostFn": "ContactForwardViewController.syncTheme() → miniAppVC?.emitEvent(\"theme_changed\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.syncTheme() → emitEvent(\"theme_changed\", data:)",
+                    "android": "ContactForwardFragment syncTheme → emitEvent(\"theme_changed\", data)"
+                  },
                   "miniAppFn": "on(\"theme_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ theme_params, theme: 'light' | 'dark' }"
                 },
@@ -671,6 +1012,10 @@
                   "direction": "miniapp_to_host",
                   "name": "check_permissions / make_call",
                   "hostFn": "MiniAppService.onCheckPermissions(module:actions:) / MiniAppService.onRequestCall(payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onCheckPermissions / onRequestCall → VPMAppService.makeCall",
+                    "android": "VbMaHostCallback.onCheckPermissions / onRequestCall → MiniAppHelper.makeDirectCall"
+                  },
                   "miniAppFn": "checkPermissions(\"CRM\", actions) / makeCall(item.phone, ...) [contact-item.svelte] (@vbotma/sdk/svelte)",
                   "payload": "{ module: 'CRM', actions } / { phoneNumber, displayName }",
                   "response": "{ [action]: Bool } / { success }"
@@ -686,13 +1031,22 @@
           "audience": "all",
           "summary": {
             "overview": "Tìm theo tên đơn vị, số điện thoại hoặc lọc nhanh theo Tỉnh/Thành, Phường/Xã, nhóm đơn vị hành chính.",
-            "tech": "ContactV2AdvancedFilterBottomSheet lọc dữ liệu qua ContactV2Repository và SQLite cache địa phương."
+            "tech": "iOS ContactV2AdvancedFilterBottomSheet + ContactV2Repository; Android dùng ContactV2Manager + ContactV2DatabaseHelper (vbot_contact_v2.db, PK (id, uid, project_code)) cho lọc/tra cứu."
           },
           "techDetail": {
             "codeRefs": [
               "VBot/Controller/NewController/ContactV2/ContactV2AdvancedFilterBottomSheet.swift",
               "VBot/Service/ContactV2/ContactV2Repository.swift"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "ContactV2Manager truy vấn ContactV2DatabaseHelper (vbot_contact_v2.db, PRIMARY KEY (id, uid, project_code)) phục vụ lọc địa bàn & tìm số khi chuyển tiếp cuộc gọi.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/utils/ContactV2Manager.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/ContactV2DatabaseHelper.kt"
+                ]
+              }
+            }
           }
         },
         {
@@ -702,10 +1056,19 @@
           "audience": "all",
           "summary": {
             "overview": "Cập nhật thông tin đơn vị (theo phân quyền) hoặc bấm nút gọi/chuyển cuộc gọi ngay tới số điện thoại của đơn vị đó.",
-            "tech": "Mở ContactV2FormViewController để thêm/sửa, hoặc truyền số đích sang luồng chuyển tiếp cuộc gọi (Blind Transfer)."
+            "tech": "iOS ContactV2FormViewController hoặc modal Mini App; Android qua CallForwardBottomSheet dùng ContactV2Manager chuyển tiếp cuộc gọi."
           },
           "techDetail": {
-            "codeRefs": ["VBot/Controller/NewController/ContactV2/ContactV2FormViewController.swift"]
+            "codeRefs": ["VBot/Controller/NewController/ContactV2/ContactV2FormViewController.swift"],
+            "byPlatform": {
+              "android": {
+                "summary": "Trong cuộc gọi, CallForwardBottomSheet lấy danh bạ V2 từ ContactV2Manager để thực hiện chuyển tiếp DTMF #1.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/call/CallForwardBottomSheet.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/ContactV2Manager.kt"
+                ]
+              }
+            }
           },
           "relatedNodeIds": ["call-tr-open"]
         }
@@ -728,26 +1091,44 @@
       "nodes": [
         {
           "id": "mauc-init",
-          "label": "1. Host nhúng WebView Danh bạ (loadMiniApp)",
+          "label": "1. Host nhúng WebView Danh bạ (loadMiniApp / MiniAppFragment)",
           "kind": "action",
           "audience": "tech",
           "summary": {
-            "overview": "Host iOS khởi tạo Mini App Danh bạ cá nhân ở chế độ nhúng tab (startParam: 'embedded') và truyền bộ màu giao diện.",
-            "tech": "UserContactsMiniAppViewController.loadMiniApp() gọi VbMa.shared.createMiniAppViewController(...) rồi gắn WKWebView vào miniAppContainer cùng UINavigationBar native phía trên."
+            "overview": "Host khởi tạo Mini App Danh bạ cá nhân ở chế độ nhúng tab (startParam: 'embedded') và truyền bộ màu giao diện.",
+            "tech": "iOS UserContactsMiniAppViewController -> VbMa.shared.createMiniAppViewController(...); Android UserContactsFragment -> MiniAppFragment.newInstance(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData)."
           },
           "techDetail": {
+            "platformDiffNote": "Android dùng MainActivity (AHBottomNavigation add/show/hide để giữ sống WebView khi chuyển tab) nhúng MiniAppFragment; iOS gắn WKWebView vào UserContactsMiniAppViewController.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactsFragment (Tab 3 trong MainActivity) nhúng MiniAppFragment.newInstance(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData).",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+              "transportByPlatform": {
+                "ios": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                "android": "UserContactsFragment → MiniAppFragment.newInstance(\"vb-ma-user-contact\", startParam=\"embedded\")"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController",
                   "hostFn": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                    "android": "UserContactsFragment → MiniAppFragment.newInstance(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData)"
+                  },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ id, locale, startParam, extraData: { theme_params, themeParams } }",
                   "examplePayload": "{\n  \"id\": \"vb-ma-user-contact\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": {\n      \"bg_color\": \"#FFFFFF\",\n      \"text_color\": \"#111827\"\n    }\n  }\n}",
@@ -764,29 +1145,47 @@
           "audience": "tech",
           "summary": {
             "overview": "Ngay khi khởi chạy, Mini App yêu cầu Host trả toàn bộ danh bạ đang lưu cục bộ trong SQLite của tài khoản hiện tại.",
-            "tech": "userContactStore.init() gọi getLocalContactsState() -> request_host_action('user_contact_get_local'); Host đọc SQLite user_contacts theo uid cùng trạng thái quyền CNContactStore."
+            "tech": "userContactStore.init() gọi getLocalContactsState() -> request_host_action('user_contact_get_local'); Host đọc SQLite theo uid và trạng thái quyền danh bạ máy."
           },
           "techDetail": {
+            "platformDiffNote": "Android đọc trực tiếp bằng SQLiteOpenHelper (UserContactDatabaseHelper.kt, vbot_user_contact.db v2, PRIMARY KEY (local_key, uid)) và kiểm tra READ_CONTACTS.",
             "codeRefs": [
               "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts",
               "VBot/Service/UserContactMiniAppBridgeHelper.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper.kt nhận \"user_contact_get_local\" qua VbMABridge, đọc UserContactDatabaseHelper.kt (vbot_user_contact.db v2) và kiểm tra quyền READ_CONTACTS.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "postEvent('request_host_action') → MiniAppService.onHostActionRequested → executeGetLocal",
+              "transportByPlatform": {
+                "ios": "postEvent('request_host_action') → MiniAppService.onHostActionRequested → UserContactMiniAppBridgeHelper.swift",
+                "android": "VbMABridge.postEvent('request_host_action') → UserContactMiniAppBridgeHelper.kt → vbot_user_contact.db"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_get_local",
                   "hostFn": "MiniAppService.onHostActionRequested(...) → UserContactMiniAppBridgeHelper.executeGetLocal(requestId:uid:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → executeGetLocal(requestId:uid:) (user_contacts.sqlite)",
+                    "android": "UserContactMiniAppBridgeHelper.kt → UserContactDatabaseHelper (SQLiteOpenHelper vbot_user_contact.db v2)"
+                  },
                   "miniAppFn": "userContactStore.init() → getLocalContactsState() → postEvent(\"request_host_action\")",
                   "payload": "{ request_id, action: 'user_contact_get_local', payload: {} }",
                   "response": "{ request_id, success, uid, permissionStatus, hasImportedDevice, contacts[] }",
                   "examplePayload": "{\n  \"request_id\": \"req_01\",\n  \"action\": \"user_contact_get_local\",\n  \"payload\": {}\n}",
                   "exampleResponse": "{\n  \"request_id\": \"req_01\",\n  \"success\": true,\n  \"uid\": \"u_8842\",\n  \"permissionStatus\": \"not_determined\",\n  \"hasImportedDevice\": false,\n  \"contacts\": []\n}",
-                  "note": "Sau đó Store gọi tiếp refreshServerContactsViaHost() để gộp danh bạ Server; nếu permissionStatus == 'not_determined' mới chuyển sang quét danh bạ iPhone."
+                  "note": "Sau đó Store gọi tiếp refreshServerContactsViaHost() để gộp danh bạ Server; nếu chưa có quyền mới xin quét danh bạ thiết bị."
                 }
               ]
             }
@@ -794,28 +1193,51 @@
         },
         {
           "id": "mauc-import-device",
-          "label": "3. Host quét danh bạ iPhone (CNContactStore) & lưu SQLite",
+          "label": "3. Host quét danh bạ thiết bị & lưu SQLite",
           "kind": "external",
           "audience": "tech",
           "summary": {
-            "overview": "Host iOS đọc danh bạ từ máy iPhone, lưu vào SQLite theo tài khoản rồi trả mảng contacts[] mới về Mini App.",
-            "tech": "Chỉ tự chạy khi permissionStatus == 'not_determined' ở lần đầu hoặc khi người dùng chủ động bấm 'Cập nhật danh bạ thiết bị' trên menu '+' (giữ nguyên danh bạ đã lưu nếu user tắt quyền sau đó)."
+            "overview": "Host đọc danh bạ từ máy (CNContactStore trên iOS / ContactsContract trên Android), lưu vào SQLite theo tài khoản rồi trả mảng contacts[] mới về Mini App.",
+            "tech": "iOS đọc CNContactStore; Android dùng ActivityResultContracts.RequestPermission (coalesced) + has_prompted_read_contacts -> UserContactManager truy vấn ContactsContract.CommonDataKinds.Phone.CONTENT_URI."
           },
           "techDetail": {
+            "platformDiffNote": "Android gộp đồng thời các request xin quyền READ_CONTACTS qua ActivityResultContracts.RequestPermission, kiểm tra cờ has_prompted_read_contacts và đọc từ ContactsContract.CommonDataKinds.Phone.CONTENT_URI.",
             "codeRefs": [
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "VBot/Service/UserContactService.swift",
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper.kt (ActivityResultContracts.RequestPermission coalesced + has_prompted_read_contacts) -> UserContactManager.kt đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI và lưu SQLiteOpenHelper.",
+                "edgeCases": [
+                  "Gộp nhiều lời gọi user_contact_import_device đồng thời vào 1 prompt READ_CONTACTS",
+                  "Cờ has_prompted_read_contacts ngăn hỏi lại khi user đã từng có dữ liệu hoặc từ chối"
+                ],
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "UserContactMiniAppBridgeHelper.handleAction → UserContactService.fetchDeviceContacts",
+              "transportByPlatform": {
+                "ios": "UserContactMiniAppBridgeHelper.swift → CNContactStore",
+                "android": "UserContactMiniAppBridgeHelper.kt → ContactsContract.CommonDataKinds.Phone.CONTENT_URI"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_import_device",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.fetchDeviceContacts(requestPermissionIfNeeded:) → executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → CNContactStore + UserContactService.fetchDeviceContacts(...)",
+                    "android": "UserContactMiniAppBridgeHelper.kt (ActivityResultContracts.RequestPermission + has_prompted_read_contacts) → UserContactManager (ContactsContract)"
+                  },
                   "miniAppFn": "importDeviceContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_import_device\")",
                   "payload": "{ request_id, action: 'user_contact_import_device', payload: { requestPermission?: Bool } }",
                   "response": "{ request_id, success, granted, uid, permissionStatus, hasImportedDevice, contacts[] }",
@@ -834,28 +1256,45 @@
           "audience": "tech",
           "summary": {
             "overview": "Mini App chuẩn hóa mảng contacts[], phân nhóm A-Z và hiển thị icon Điện thoại (chưa sync) hoặc VBot (đã sync).",
-            "tech": "applyHostResponse(res) + normalizeBridgeContacts() + groupContactsByAlphabet(); nếu danh sách trống và bị từ chối quyền, cho phép gọi openAppSettingsViaHost() ('user_contact_open_settings')."
+            "tech": "applyHostResponse(res) + normalizeBridgeContacts() + groupContactsByAlphabet(); nếu danh sách trống và bị từ chối quyền, gọi openAppSettingsViaHost() ('user_contact_open_settings')."
           },
           "techDetail": {
+            "platformDiffNote": "Khi mở cài đặt quyền ('user_contact_open_settings'): iOS mở openSettingsURLString; Android mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS KHÔNG gắn FLAG_ACTIVITY_NEW_TASK để Back quay về đúng Tab Danh bạ.",
             "codeRefs": [
               "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS không gắn FLAG_ACTIVITY_NEW_TASK.",
+                "edgeCases": ["Bỏ FLAG_ACTIVITY_NEW_TASK giúp nhấn Back từ Cài đặt Android quay về thẳng app VBot"],
+                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "applyHostResponse(res) / openAppSettingsViaHost()",
+              "transportByPlatform": {
+                "ios": "UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                "android": "Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) without FLAG_ACTIVITY_NEW_TASK"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_open_settings",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                  "hostFnByPlatform": {
+                    "ios": "UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                    "android": "UserContactMiniAppBridgeHelper.kt → startActivity(Settings.ACTION_APPLICATION_DETAILS_SETTINGS) (no FLAG_ACTIVITY_NEW_TASK)"
+                  },
                   "miniAppFn": "openAppSettingsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_open_settings\")",
                   "payload": "{ request_id, action: 'user_contact_open_settings', payload: {} }",
                   "response": "{ request_id, success }",
                   "examplePayload": "{\n  \"request_id\": \"req_06\",\n  \"action\": \"user_contact_open_settings\",\n  \"payload\": {}\n}",
                   "exampleResponse": "{\n  \"request_id\": \"req_06\",\n  \"success\": true\n}",
-                  "note": "Chỉ kích hoạt khi danh sách trống hoàn toàn và user bấm nút mở Cài đặt quyền Danh bạ iOS."
+                  "note": "Chỉ kích hoạt khi danh sách trống hoàn toàn và user bấm nút mở Cài đặt quyền.",
+                  "parityNote": "Android bỏ FLAG_ACTIVITY_NEW_TASK để Back trên hệ thống đưa user về thẳng Mini App Danh bạ thay vì tác vụ Settings riêng."
                 }
               ]
             }
@@ -867,27 +1306,44 @@
           "kind": "action",
           "audience": "tech",
           "summary": {
-            "overview": "Người dùng chạm nút '+' trên thanh tiêu đề iOS; Host đẩy sự kiện sang Mini App để mở menu Thêm / Đồng bộ / Xoá nhiều.",
-            "tech": "UserContactsMiniAppViewController.handlePlusTapped() gọi miniAppVC?.emitEvent('toggle_actions_menu'); phía JS onToggleActionsMenu() gọi toggleActionsMenu()."
+            "overview": "Người dùng chạm nút '+' trên thanh tiêu đề native; Host đẩy sự kiện sang Mini App để mở menu Thêm / Đồng bộ / Xoá nhiều.",
+            "tech": "iOS handlePlusTapped() / Android MainActivity.ivAddContact -> UserContactsFragment.onPlusButtonClicked() đều phát 'toggle_actions_menu'; JS gọi toggleActionsMenu()."
           },
           "techDetail": {
             "codeRefs": [
               "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "MainActivity.ivAddContact gọi UserContactsFragment.onPlusButtonClicked() emit \"toggle_actions_menu\" xuống MiniAppFragment.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/UserContactsFragment.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "UIBarButtonItem (+) → miniAppVC.emitEvent('toggle_actions_menu')",
+              "transportByPlatform": {
+                "ios": "UIBarButtonItem (+) → miniAppVC.emitEvent('toggle_actions_menu')",
+                "android": "MainActivity.ivAddContact → UserContactsFragment.onPlusButtonClicked() → emitEvent('toggle_actions_menu')"
+              },
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "toggle_actions_menu",
                   "hostFn": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\", data: [:])",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\", data: [:])",
+                    "android": "MainActivity.ivAddContact → UserContactsFragment.onPlusButtonClicked() → emitEvent(\"toggle_actions_menu\")"
+                  },
                   "miniAppFn": "onToggleActionsMenu(cb) [hostBridge.ts] → userContactStore.toggleActionsMenu()",
                   "payload": "{}",
                   "examplePayload": "{}",
-                  "note": "Minh họa rõ sự phối hợp UI Native (UINavigationBar '+') điều khiển Popover bên trong WKWebView."
+                  "note": "Minh họa sự phối hợp UI Native ('+') điều khiển Popover bên trong WebView."
                 }
               ]
             }
@@ -900,9 +1356,10 @@
           "audience": "tech",
           "summary": {
             "overview": "Sau khi nhập form Thêm hoặc Sửa trong Mini App, JS gọi thẳng REST API lên Server VBot bằng MiniAppToken.",
-            "tech": "userContactStore.saveContact() gọi insertSingleContact() (POST /api/user-contact/insert) hoặc updateServerContact() (POST /api/user-contact/update) kèm Bearer MiniAppToken; nếu 401 SDK tự refreshHostToken."
+            "tech": "userContactStore.saveContact() gọi POST /api/user-contact/insert|/update kèm Bearer MiniAppToken xin từ Host."
           },
           "techDetail": {
+            "platformDiffNote": "iOS hỗ trợ prewarmMiniAppTokenIfNeeded (cache RAM 600s); Android cấp token qua VbMABridge / MiniAppHelper khi nhận request_mini_app_token (chưa có prewarm).",
             "apisOrEvents": [
               "POST /api/user-contact/insert",
               "GET /api/user-contact/detail",
@@ -912,21 +1369,36 @@
               "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
               "vb-ma-user-contact/src/lib/api/userContactApi.ts"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "VbMABridge xử lý request_mini_app_token thông qua MiniAppHelper / DefaultModuleTokenProvider (không prewarm trước).",
+                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "saveContact() xin MiniAppToken rồi gọi REST API Server",
+              "transportByPlatform": {
+                "ios": "MiniAppService.prewarmMiniAppTokenIfNeeded → mini_app_token_result",
+                "android": "VbMABridge → MiniAppHelper / DefaultModuleTokenProvider → mini_app_token_result"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "request_mini_app_token",
                   "hostFn": "MiniAppService.prewarmMiniAppTokenIfNeeded(force:) → VbMaViewController.sendEvent(\"mini_app_token_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.prewarmMiniAppTokenIfNeeded(force:) → VbMaViewController.sendEvent(\"mini_app_token_result\")",
+                    "android": "MiniAppHelper / DefaultModuleTokenProvider → VbMABridge trả \"mini_app_token_result\""
+                  },
                   "miniAppFn": "getAuthHeader() [token.ts] → requestMiniAppToken(timeoutMs) → saveContact() gửi POST /api/user-contact/insert|/update",
                   "payload": "{ request_id } (REST body: { uid, items: [{ full_name, phone }] } hoặc { uid, id, full_name, phone })",
                   "response": "{ success_count, fail_count, failed_phones[] }",
                   "examplePayload": "{\n  \"uid\": \"u_8842\",\n  \"items\": [\n    {\n      \"full_name\": \"Trần Thị B\",\n      \"phone\": \"0988111222\"\n    }\n  ]\n}",
                   "exampleResponse": "{\n  \"status\": 200,\n  \"error\": 0,\n  \"data\": {\n    \"success_count\": 1,\n    \"fail_count\": 0,\n    \"failed_phones\": []\n  }\n}",
-                  "note": "Mini App không sửa thẳng SQLite của Host mà đẩy qua Server API trước để đảm bảo dữ liệu đồng nhất giữa mọi thiết bị."
+                  "note": "Mini App không sửa thẳng SQLite của Host mà đẩy qua Server API trước để đảm bảo dữ liệu đồng nhất.",
+                  "parityNote": "iOS có prewarmMiniAppTokenIfNeeded TTL 600s; Android chưa có prewarm."
                 }
               ]
             }
@@ -939,7 +1411,7 @@
           "audience": "tech",
           "summary": {
             "overview": "Ngay sau khi Thêm/Sửa thành công trên Server, Mini App yêu cầu Host tải lại dữ liệu Server về SQLite và trả danh sách mới.",
-            "tech": "saveContact() gọi refreshServerContactsViaHost() -> action 'user_contact_refresh_server'; Host chạy UserContactService.loadContacts() cập nhật SQLite rồi executeGetLocal trả contacts[] đã có srv_<id>."
+            "tech": "saveContact() gọi refreshServerContactsViaHost() -> action 'user_contact_refresh_server'; iOS dùng UserContactService.loadContacts, Android dùng UserContactManager + UserContactBatchHelper."
           },
           "techDetail": {
             "codeRefs": [
@@ -947,21 +1419,39 @@
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "VBot/Service/UserContactService.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper.kt gọi UserContactManager & UserContactBatchHelper tải Server vào vbot_user_contact.db rồi trả contacts[] mới.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactManager.kt",
+                  "app/src/main/java/com/vpmedia/vbot/utils/UserContactBatchHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "refreshServerContactsViaHost() → UserContactService.loadContacts → executeGetLocal",
+              "transportByPlatform": {
+                "ios": "UserContactMiniAppBridgeHelper.swift → UserContactService.loadContacts → executeGetLocal",
+                "android": "UserContactMiniAppBridgeHelper.kt → UserContactManager / UserContactBatchHelper → vbot_user_contact.db"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_refresh_server",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.loadContacts(...) → executeGetLocal(...)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → UserContactService.shared.loadContacts(...) → executeGetLocal",
+                    "android": "UserContactMiniAppBridgeHelper.kt → UserContactManager + UserContactBatchHelper → executeGetLocal"
+                  },
                   "miniAppFn": "saveContact() → refreshServerContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_refresh_server\")",
                   "payload": "{ request_id, action: 'user_contact_refresh_server', payload: {} }",
                   "response": "{ request_id, success, uid, permissionStatus, hasImportedDevice, contacts[] }",
                   "examplePayload": "{\n  \"request_id\": \"req_03\",\n  \"action\": \"user_contact_refresh_server\",\n  \"payload\": {}\n}",
                   "exampleResponse": "{\n  \"request_id\": \"req_03\",\n  \"success\": true,\n  \"uid\": \"u_8842\",\n  \"permissionStatus\": \"authorized\",\n  \"hasImportedDevice\": true,\n  \"contacts\": [\n    {\n      \"id\": 102,\n      \"localKey\": \"srv_102\",\n      \"uid\": \"u_8842\",\n      \"fullName\": \"Trần Thị B\",\n      \"phone\": \"0988111222\",\n      \"avatarColor\": \"#10B981\",\n      \"isSynced\": true,\n      \"sectionLetter\": \"T\"\n    }\n  ]\n}",
-                  "note": "Bước bắt buộc để SQLite trên Host có ngay bản ghi vừa tạo/sửa, giúp cuộc gọi đến CallKit tra ra đúng tên."
+                  "note": "Bước bắt buộc để SQLite trên Host có ngay bản ghi vừa tạo/sửa, giúp cuộc gọi đến tra ra đúng tên."
                 }
               ]
             }
@@ -974,7 +1464,7 @@
           "audience": "tech",
           "summary": {
             "overview": "Khi Xoá 1 hoặc nhiều liên hệ (tối đa 50), Mini App tách các số đã đồng bộ (syncedIds) để gọi API xoá trên Server trước.",
-            "tech": "executeDeleteItems() gọi partitionForDelete(items); nếu có syncedIds thì chạy deleteSyncedContactsInBatches() (POST /api/user-contact/delete) — lỗi Server sẽ dừng ngay, tuyệt đối không xoá SQLite local."
+            "tech": "executeDeleteItems() gọi partitionForDelete(items); nếu có syncedIds thì chạy deleteSyncedContactsInBatches() (POST /api/user-contact/delete) — lỗi Server sẽ dừng ngay, không xoá SQLite local."
           },
           "techDetail": {
             "apisOrEvents": [
@@ -987,7 +1477,12 @@
             "outputs": [
               "syncedIds: [101] (gửi POST /api/user-contact/delete với { uid: 'u_8842', ids: [101] })",
               "unsyncedLocalKeys: ['dev_0909888777'] (chuyển sang bước Bridge xoá SQLite)"
-            ]
+            ],
+            "byPlatform": {
+              "android": {
+                "summary": "Dùng chung logic Svelte Mini App gọi POST /api/user-contact/delete trước khi gọi bridge user_contact_delete_local trên Android."
+              }
+            }
           }
         },
         {
@@ -997,28 +1492,47 @@
           "audience": "tech",
           "summary": {
             "overview": "Sau khi Server xác nhận xoá xong (hoặc với số chỉ có trên máy), Mini App gửi cả 2 danh sách ID sang Host để dọn sạch SQLite.",
-            "tech": "deleteLocalContactsViaHost(syncedIds, unsyncedLocalKeys) gọi executeDeleteLocal(): parseDeletePayload(), xoá syncedIds và unsyncedLocalKeys trong SQLite rồi trả deletedCount và contacts[] còn lại."
+            "tech": "deleteLocalContactsViaHost() gọi executeDeleteLocal(): xoá trong SQLite rồi trả deletedCount và contacts[] còn lại (Android gọi recordDeliveredContacts trước reloadFromLocalDB)."
           },
           "techDetail": {
+            "platformDiffNote": "Trước khi reloadFromLocalDB, Android bắt buộc gọi recordDeliveredContacts(uid, remainingItems) để lưu chữ ký tập còn lại nhằm chống vòng lặp LiveData.",
             "codeRefs": [
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts",
               "VBot/Service/UserContactMiniAppBridgeHelper.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper.kt xóa syncedIds & unsyncedLocalKeys trong vbot_user_contact.db và gọi recordDeliveredContacts(uid, remainingItems) trước reloadFromLocalDB().",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/sqlite/UserContactDatabaseHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "deleteLocalContactsViaHost() → UserContactMiniAppBridgeHelper.executeDeleteLocal",
+              "transportByPlatform": {
+                "ios": "UserContactMiniAppBridgeHelper.swift → executeDeleteLocal (gắn source='miniapp_bridge')",
+                "android": "UserContactMiniAppBridgeHelper.kt → recordDeliveredContacts(uid, remainingItems) trước reloadFromLocalDB()"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "user_contact_delete_local",
                   "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → executeDeleteLocal(requestId:uid:payload:) → deleteServerContacts + deleteContactsByLocalKeys",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactMiniAppBridgeHelper.swift → executeDeleteLocal(...) (gắn userInfo['source']='miniapp_bridge')",
+                    "android": "UserContactMiniAppBridgeHelper.kt → executeDeleteLocal(...) → recordDeliveredContacts(uid, remainingItems)"
+                  },
                   "miniAppFn": "deleteLocalContactsViaHost([101], [\"dev_0909888777\"]) [hostBridge.ts] → requestHostAction(\"user_contact_delete_local\")",
                   "payload": "{ request_id, action: 'user_contact_delete_local', payload: { syncedIds?: Int64[], unsyncedLocalKeys?: String[] } }",
                   "response": "{ request_id, success, uid, deletedCount, permissionStatus, hasImportedDevice, contacts[] }",
                   "examplePayload": "{\n  \"request_id\": \"req_04\",\n  \"action\": \"user_contact_delete_local\",\n  \"payload\": {\n    \"syncedIds\": [101],\n    \"unsyncedLocalKeys\": [\"dev_0909888777\"]\n  }\n}",
                   "exampleResponse": "{\n  \"request_id\": \"req_04\",\n  \"success\": true,\n  \"uid\": \"u_8842\",\n  \"deletedCount\": 2,\n  \"permissionStatus\": \"authorized\",\n  \"hasImportedDevice\": true,\n  \"contacts\": []\n}",
-                  "note": "Trả trực tiếp mảng contacts[] còn lại để Store cập nhật UI ngay lập tức mà không cần đọc lại lần 2."
+                  "note": "Trả trực tiếp mảng contacts[] còn lại để Store cập nhật UI ngay lập tức mà không cần đọc lại lần 2.",
+                  "parityNote": "Android ghi recordDeliveredContacts(uid, remainingItems) trước khi kích hoạt reloadFromLocalDB() thay vì gắn metadata notification như iOS."
                 }
               ]
             }
@@ -1026,32 +1540,51 @@
         },
         {
           "id": "mauc-loop-guard",
-          "label": "3. Host bắn Noti & Chống lặp (source: miniapp_bridge)",
+          "label": "3. Host bắn Noti & Chống lặp (source / computeContactsSignature)",
           "kind": "decision",
           "audience": "tech",
           "summary": {
-            "overview": "Host gắn nhãn 'miniapp_bridge' khi báo toàn app SQLite vừa đổi để không bắn ngược lại sự kiện vào chính Mini App vừa ra lệnh xoá.",
-            "tech": "executeDeleteLocal gắn userInfo['source'] = 'miniapp_bridge' lên reloadUserContactNoti; UserContactsMiniAppViewController bỏ qua các noti có source này và chỉ emit 'user_contacts_updated' khi SQLite đổi từ phía Native."
+            "overview": "Host chống bắn ngược sự kiện user_contacts_updated vào chính Mini App vừa ra lệnh thay đổi SQLite.",
+            "tech": "iOS gắn userInfo['source'] = 'miniapp_bridge' trên NotificationCenter; Android so khớp chữ ký computeContactsSignature(uid, items) trong shouldDispatchContactsUpdate() (kèm bỏ qua null chặn sticky replay LiveData)."
           },
           "techDetail": {
+            "platformDiffNote": "2 CƠ CHẾ CHỐNG LẶP KHÁC NHAU: iOS kiểm tra userInfo['source'] == 'miniapp_bridge' trên NotificationCenter; Android lưu lastDeliveredSignature = computeContactsSignature(uid, items) trong shouldDispatchContactsUpdate(uid, items) và bỏ qua khi lastDeliveredSignature == null để chặn LiveData phát lại giá trị cũ khi mở tab.",
             "codeRefs": [
               "VBot/Service/UserContactMiniAppBridgeHelper.swift",
               "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "UserContactMiniAppBridgeHelper.shouldDispatchContactsUpdate(uid, items) kiểm tra lastDeliveredSignature (tính qua computeContactsSignature(uid, items)) và bỏ qua nếu == null (chặn initial LiveData sticky replay) hoặc trùng chữ ký.",
+                "edgeCases": [
+                  "Chống LiveData sticky replay lúc mới đăng ký Observer bằng điều kiện bỏ qua lastDeliveredSignature == null"
+                ],
+                "codeRefs": ["app/src/main/java/com/vpmedia/vbot/miniapp/UserContactMiniAppBridgeHelper.kt"]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "handleReloadUserContacts(_:) → emitEvent('user_contacts_updated')",
+              "transportByPlatform": {
+                "ios": "handleReloadUserContacts(_:) (source == 'miniapp_bridge') → emitEvent('user_contacts_updated')",
+                "android": "shouldDispatchContactsUpdate(uid, items) (computeContactsSignature) → emitEvent('user_contacts_updated')"
+              },
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "user_contacts_updated",
                   "hostFn": "UserContactsMiniAppViewController.handleReloadUserContacts(_:) → miniAppVC?.emitEvent(\"user_contacts_updated\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "UserContactsMiniAppViewController.handleReloadUserContacts(_:) (skip nếu source == 'miniapp_bridge')",
+                    "android": "UserContactMiniAppBridgeHelper.shouldDispatchContactsUpdate(uid, items) (skip nếu null hoặc == lastDeliveredSignature)"
+                  },
                   "miniAppFn": "onUserContactsUpdated(cb) [hostBridge.ts] → userContactStore.reloadLocal()",
                   "payload": "{ reason: 'local_db_changed' }",
                   "examplePayload": "{\n  \"reason\": \"local_db_changed\"\n}",
-                  "note": "Nếu thay đổi xuất phát từ Mini App (source == 'miniapp_bridge'), Host không emit lại event này — chặn đứng vòng lặp xoá → noti → reload."
+                  "note": "Chặn đứng vòng lặp xoá → noti/observer → reload.",
+                  "parityNote": "iOS lọc theo source == 'miniapp_bridge'; Android lọc theo computeContactsSignature + chặn null ban đầu cho LiveData sticky replay."
                 }
               ]
             }
@@ -1071,21 +1604,35 @@
               "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
               "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "JS gọi @vbotma/sdk makeCall sang VbMABridge trên WebView Android.",
+                "codeRefs": ["vb-ma-user-contact/src/lib/bridge/hostBridge.ts"]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "makeCallViaHost(contact) → makeCall(params) (@vbotma/sdk)",
+              "transportByPlatform": {
+                "ios": "makeCall() (@vbotma/sdk) → VbMaDelegate.onRequestCall",
+                "android": "makeCall() (@vbotma/sdk) → VbMABridge / VbMaHostCallback.onRequestCall"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "make_call",
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...)",
+                    "android": "VbMaHostCallback.onRequestCall → MiniAppHelper.makeDirectCall(...)"
+                  },
                   "miniAppFn": "callContact(contact) → makeCallViaHost(contact) [hostBridge.ts] → makeCall(params) (@vbotma/sdk)",
                   "payload": "{ request_id, phoneNumber, displayName, avatarColor }",
                   "response": "{ request_id, success }",
                   "examplePayload": "{\n  \"request_id\": \"req_05\",\n  \"phoneNumber\": \"0912345678\",\n  \"displayName\": \"Nguyễn Văn A\",\n  \"avatarColor\": \"#2563EB\"\n}",
                   "exampleResponse": "{\n  \"request_id\": \"req_05\",\n  \"success\": true\n}",
-                  "note": "Truyền kèm displayName ngay lúc bấm gọi giúp màn hình CallKit giữ nguyên tên liên hệ."
+                  "note": "Truyền kèm displayName ngay lúc bấm gọi giúp màn hình gọi giữ nguyên tên liên hệ."
                 }
               ]
             }
@@ -1093,32 +1640,52 @@
         },
         {
           "id": "mauc-call-native",
-          "label": "2. Host mở cuộc gọi CallKit & giữ suppliedCallerName",
+          "label": "2. Host mở cuộc gọi & giữ tên truyền sẵn (suppliedCallerName / miniAppDisplayName)",
           "kind": "external",
           "audience": "tech",
           "summary": {
-            "overview": "Host iOS nhận lệnh make_call, mở màn hình chọn Hotline / đàm thoại Linphone và phản hồi call_result về Mini App.",
-            "tech": "MiniAppService.onRequestCall() điều hướng sang VPMAppService.makeCall(), lưu suppliedCallerName và trả VbMaViewController.sendEvent('call_result', { request_id, success: true })."
+            "overview": "Host nhận lệnh make_call, mở màn hình chọn Hotline / đàm thoại và phản hồi call_result về Mini App.",
+            "tech": "iOS lưu suppliedCallerName (Linphone/CallKit); Android gọi MiniAppHelper.makeDirectCall lưu CallModel.miniAppDisplayName (PJSIP/CreateCallActivity) và emit call_result sau ~200ms."
           },
           "techDetail": {
+            "platformDiffNote": "Android nhận make_call qua MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName rồi phát \"call_result\" sau ~200ms để không mất callback khi chuyển sang CreateCallActivity.",
             "codeRefs": [
               "VBot/Service/MiniAppService.swift",
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName, mở CreateCallActivity / VBotPhone.startOutgoingCall (PJSIP) và emit \"call_result\" sau ~200ms.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt",
+                  "vbotphonesdk/src/main/java/com/vpmedia/vbot/vbotphonesdk/model/CallModel.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-user-contact",
               "embedMode": "inline_tab",
               "transport": "MiniAppService.onRequestCall → VPMAppService.makeCall → sendEvent('call_result')",
+              "transportByPlatform": {
+                "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall → sendEvent('call_result')",
+                "android": "VbMaHostCallback.onRequestCall → MiniAppHelper.makeDirectCall → emit 'call_result' (~200ms)"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "make_call",
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall → VbMaViewController.sendEvent(\"call_result\")",
+                    "android": "MiniAppHelper.makeDirectCall → VBotPhone.startOutgoingCall → VbMaSDK emit \"call_result\" (~200ms)"
+                  },
                   "miniAppFn": "makeCall(params) (@vbotma/sdk) nhận Promise<CallResult> từ sự kiện call_result",
                   "payload": "{ request_id, phoneNumber, displayName, avatarColor }",
                   "response": "{ request_id, success }",
                   "exampleResponse": "{\n  \"request_id\": \"req_05\",\n  \"success\": true\n}",
-                  "note": "Các bước tra cứu CRM/getInfoCall2 sau đó chỉ bổ sung avatar/idCustomer mà không ghi đè suppliedCallerName."
+                  "note": "Tên hiển thị truyền sẵn được giữ nguyên ưu tiên cao nhất trong suốt cuộc gọi.",
+                  "parityNote": "iOS trả call_result đồng bộ; Android delay ~200ms trước khi chuyển Activity và giữ tên qua CallModel.miniAppDisplayName."
                 }
               ]
             }
@@ -1139,8 +1706,8 @@
       "scenarios": [
         {
           "id": "sc-mauc-import",
-          "name": "VD1: Host nạp danh bạ iPhone → Mini App",
-          "description": "Host nhúng WebView (loadMiniApp) → Mini App xin user_contact_get_local → yêu cầu user_contact_import_device (CNContactStore) → nhận mảng contacts[] render A-Z.",
+          "name": "VD1: Host nạp danh bạ thiết bị → Mini App",
+          "description": "Host nhúng WebView → Mini App xin user_contact_get_local → yêu cầu user_contact_import_device (CNContactStore / ContactsContract) → nhận mảng contacts[] render A-Z.",
           "audience": "tech",
           "nodeIds": ["mauc-init", "mauc-get-local", "mauc-import-device", "mauc-render-list"],
           "edgeIds": ["e-mauc-1", "e-mauc-2", "e-mauc-3"]
@@ -1156,15 +1723,15 @@
         {
           "id": "sc-mauc-delete",
           "name": "VD3: Mini App Xoá → Host xoá SQLite & chống lặp",
-          "description": "Mini App xoá Server trước (POST /delete) → gọi user_contact_delete_local({ syncedIds, unsyncedLocalKeys }) → Host xoá SQLite & gắn source='miniapp_bridge' chặn lặp.",
+          "description": "Mini App xoá Server trước (POST /delete) → gọi user_contact_delete_local({ syncedIds, unsyncedLocalKeys }) → Host xoá SQLite & chống lặp (source / computeContactsSignature).",
           "audience": "tech",
           "nodeIds": ["mauc-delete-server", "mauc-delete-host", "mauc-loop-guard"],
           "edgeIds": ["e-mauc-6", "e-mauc-7"]
         },
         {
           "id": "sc-mauc-call",
-          "name": "VD4: Mini App bấm Gọi → Host mở CallKit",
-          "description": "Mini App gọi makeCallViaHost() → gửi make_call({ phoneNumber, displayName }) → Host giữ suppliedCallerName & mở màn hình gọi.",
+          "name": "VD4: Mini App bấm Gọi → Host mở cuộc gọi",
+          "description": "Mini App gọi makeCallViaHost() → gửi make_call({ phoneNumber, displayName }) → Host giữ tên (suppliedCallerName / miniAppDisplayName) & mở màn hình gọi.",
           "audience": "tech",
           "nodeIds": ["mauc-call-click", "mauc-call-native"],
           "edgeIds": ["e-mauc-8"]
@@ -1183,23 +1750,41 @@
           "kind": "action",
           "audience": "tech",
           "summary": {
-            "overview": "Host iOS nhúng Mini App vb-ma-contact-forward vào Tab 1 (Chuyển tiếp) và truyền theme_params ban đầu.",
-            "tech": "ContactForwardViewController.loadMiniApp() gọi createMiniAppViewController(id: 'vb-ma-contact-forward', startParam: 'embedded'); +page.svelte đọc retrieveLaunchParams() để nạp danh sách."
+            "overview": "Host nhúng Mini App vb-ma-contact-forward vào Tab 1 (Chuyển tiếp) và truyền theme_params ban đầu.",
+            "tech": "iOS ContactForwardViewController / Android ContactForwardFragment nhúng Mini App với startParam='embedded'; +page.svelte đọc retrieveLaunchParams() để nạp danh sách."
           },
           "techDetail": {
+            "platformDiffNote": "Android nhúng ContactForwardFragment.kt vào Tab 1 qua MiniAppFragment.newInstance (trong khi ContactV2Fragment cũ không dùng ở MainActivity).",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "vb-ma-contact-forward/src/routes/+page.svelte"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "ContactForwardFragment.kt khởi tạo MiniAppFragment(\"vb-ma-contact-forward\", startParam=\"embedded\", extraData=themeExtraData) bên trong MainActivity.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-contact-forward",
               "embedMode": "inline_tab",
               "transport": "ContactForwardViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController",
+              "transportByPlatform": {
+                "ios": "ContactForwardViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController",
+                "android": "ContactForwardFragment → MiniAppFragment.newInstance(\"vb-ma-contact-forward\", \"embedded\")"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "createMiniAppViewController",
                   "hostFn": "ContactForwardViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                    "android": "ContactForwardFragment → MiniAppFragment.newInstance(\"vb-ma-contact-forward\", startParam=\"embedded\")"
+                  },
                   "miniAppFn": "retrieveLaunchParams() (@vbotma/sdk/svelte)",
                   "payload": "{ id, locale, startParam: 'embedded', extraData: { theme_params, themeParams } }",
                   "examplePayload": "{\n  \"id\": \"vb-ma-contact-forward\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": { \"bg_color\": \"#FFFFFF\" }\n  }\n}"
@@ -1214,27 +1799,49 @@
           "kind": "miniapp",
           "audience": "tech",
           "summary": {
-            "overview": "Nút '+' trên header iOS (nếu Admin / quyền CRM CREATE) hoặc nút Sửa trong danh sách sẽ mở instance toàn màn hình mới để tránh kẹt header tab.",
-            "tech": "Host gọi openAddContactForward() (startParam: 'add', callback onClose → refreshData()); ở dòng liên hệ, handleEdit() gọi postEvent('open_mini_app', { app_id: 'vb-ma-contact-forward', path: 'edit/{id}' })."
+            "overview": "Nút '+' trên header hoặc nút Sửa trong danh sách mở instance toàn màn hình mới để tránh kẹt header tab.",
+            "tech": "iOS hiện '+' cho Admin hoặc CRM:CREATE; Android MainActivity.ivAddContact CHỈ hiện cho Admin (UtilsKotlin.checkAdmin()) và gọi MiniAppHelper.openMiniApp(..., 'add')."
           },
           "techDetail": {
+            "platformDiffNote": "PARITY DIFF QUAN TRỌNG: Nút '+' ở iOS hiển thị khi user là Admin HOẶC có quyền CRM:CREATE; Android (MainActivity.ivAddContact) chỉ hiện khi UtilsKotlin.checkAdmin() == true.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "vb-ma-contact-forward/src/lib/components/contact-item.svelte"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "MainActivity.ivAddContact chỉ hiển thị khi UtilsKotlin.checkAdmin() == true; bấm vào gọi MiniAppHelper.openMiniApp(\"vb-ma-contact-forward\", startParam = \"add\").",
+                "edgeCases": [
+                  "User thường có CRM:CREATE nhưng không phải Admin sẽ KHÔNG thấy nút '+' trên Android (khác iOS)"
+                ],
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-contact-forward",
               "embedMode": "modal",
               "transport": "openAddContactForward() / postEvent('open_mini_app')",
+              "transportByPlatform": {
+                "ios": "ContactForwardViewController.openAddContactForward() / postEvent('open_mini_app')",
+                "android": "MainActivity.ivAddContact → MiniAppHelper.openMiniApp(..., \"add\") / postEvent('open_mini_app')"
+              },
               "messages": [
                 {
                   "direction": "host_init",
                   "name": "openAddContactForward / open_mini_app",
                   "hostFn": "ContactForwardViewController.openAddContactForward() → MiniAppService.openMiniApp(id:startParam: 'add')",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.openAddContactForward() (Admin || CRM:CREATE) → MiniAppService.openMiniApp(..., 'add')",
+                    "android": "MainActivity.ivAddContact (Admin only: UtilsKotlin.checkAdmin()) → MiniAppHelper.openMiniApp(..., \"add\")"
+                  },
                   "miniAppFn": "retrieveLaunchParams() đọc startParam='add' → goto('/add') | postEvent(\"open_mini_app\", ...)",
                   "payload": "{ startParam: 'add' } | { app_id, path, params: { editId } }",
                   "examplePayload": "{\n  \"app_id\": \"vb-ma-contact-forward\",\n  \"path\": \"edit/402\",\n  \"params\": { \"editId\": 402 }\n}",
-                  "note": "Khi Modal Thêm/Sửa đóng lại, callback onClose của Host tự kích hoạt refreshData() trên Tab đang nhúng."
+                  "note": "Khi Modal Thêm/Sửa đóng lại, Host kích hoạt refreshData() trên Tab đang nhúng.",
+                  "parityNote": "Chênh lệch quyền '+': iOS cho phép Admin hoặc CRM:CREATE; Android chỉ cho Admin (UtilsKotlin.checkAdmin())."
                 }
               ]
             }
@@ -1247,22 +1854,39 @@
           "audience": "tech",
           "summary": {
             "overview": "Khi quay lại Tab, đổi giao diện Sáng/Tối hoặc vừa đóng Modal thêm mới, Host đẩy sự kiện để Mini App tải lại danh bạ đơn vị.",
-            "tech": "ContactForwardViewController gọi miniAppVC.emitEvent('refresh_data') / syncTheme(); +page.svelte đăng ký on('refresh_data', () => contactStore.loadContacts(true))."
+            "tech": "Host gọi emitEvent('refresh_data') / syncTheme(); +page.svelte đăng ký on('refresh_data', () => contactStore.loadContacts(true))."
           },
           "techDetail": {
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "vb-ma-contact-forward/src/routes/+page.svelte"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "ContactForwardFragment / MainActivity phát refresh_data & theme_changed về MiniAppFragment đang nhúng ở Tab 1.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/contact/ContactForwardFragment.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-contact-forward",
               "embedMode": "inline_tab",
               "transport": "ContactForwardViewController.refreshData() / syncTheme()",
+              "transportByPlatform": {
+                "ios": "ContactForwardViewController.refreshData() → miniAppVC.emitEvent(\"refresh_data\")",
+                "android": "ContactForwardFragment / MainActivity → emitEvent(\"refresh_data\")"
+              },
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "refresh_data",
                   "hostFn": "ContactForwardViewController.refreshData() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "hostFnByPlatform": {
+                    "ios": "ContactForwardViewController.refreshData() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                    "android": "ContactForwardFragment → emitEvent(\"refresh_data\", data)"
+                  },
                   "miniAppFn": "on(\"refresh_data\", cb) [+page.svelte] → contactStore.loadContacts(true)",
                   "payload": "{ reason, force }",
                   "examplePayload": "{\n  \"reason\": \"tab_activated\",\n  \"force\": true\n}"
@@ -1277,23 +1901,41 @@
           "kind": "external",
           "audience": "tech",
           "summary": {
-            "overview": "Nhấn nút Gọi trên từng đơn vị (UBND / Công an / Trạm y tế) để quay số nhanh qua Host CallKit kèm tên đơn vị.",
-            "tech": "contact-item.svelte gọi makeCall(item.phone, { displayName: item.name }); MiniAppService.onRequestCall() xử lý gọi và checkPermissions('CRM', actions) kiểm tra quyền."
+            "overview": "Nhấn nút Gọi trên từng đơn vị (UBND / Công an / Trạm y tế) để quay số nhanh kèm tên đơn vị.",
+            "tech": "contact-item.svelte gọi makeCall(item.phone, { displayName: item.name }); Host xử lý gọi (iOS CallKit / Android MiniAppHelper.makeDirectCall -> PJSIP)."
           },
           "techDetail": {
+            "platformDiffNote": "Android gọi MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName rồi mở CreateCallActivity / VBotPhone.startOutgoingCall và emit \"call_result\" sau ~200ms.",
             "codeRefs": [
               "vb-ma-contact-forward/src/lib/components/contact-item.svelte",
               "VBot/Service/MiniAppService.swift"
             ],
+            "byPlatform": {
+              "android": {
+                "summary": "VbMaHostCallback.onRequestCall -> MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName và trả \"call_result\" sau ~200ms.",
+                "codeRefs": [
+                  "app/src/main/java/com/vpmedia/vbot/miniapp/MiniAppHelper.kt",
+                  "app/src/main/java/com/vpmedia/vbot/ui/call/CreateCallActivity.kt"
+                ]
+              }
+            },
             "miniAppBridge": {
               "miniAppId": "vb-ma-contact-forward",
               "embedMode": "inline_tab",
               "transport": "makeCall() (@vbotma/sdk/svelte) → MiniAppService.onRequestCall",
+              "transportByPlatform": {
+                "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall",
+                "android": "VbMaHostCallback.onRequestCall → MiniAppHelper.makeDirectCall"
+              },
               "messages": [
                 {
                   "direction": "miniapp_to_host",
                   "name": "make_call",
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall(...) → sendEvent(\"call_result\")",
+                    "android": "VbMaHostCallback.onRequestCall → MiniAppHelper.makeDirectCall → emit \"call_result\" (~200ms)"
+                  },
                   "miniAppFn": "handleCall() [contact-item.svelte] → makeCall(item.phone, { displayName: item.name })",
                   "payload": "{ request_id, phoneNumber, displayName }",
                   "response": "{ request_id, success }",

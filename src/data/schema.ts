@@ -13,6 +13,22 @@ export const NodeKindSchema = z.enum([
 
 export const AudienceScopeSchema = z.enum(['all', 'tech']);
 
+export const PlatformSchema = z.enum(['ios', 'android']);
+export type Platform = z.infer<typeof PlatformSchema>;
+export type PlatformViewMode = 'ios' | 'android' | 'compare';
+
+export const PlatformTechDetailSchema = z
+  .object({
+    summary: z.string().min(1).optional(),
+    transport: z.string().min(1).optional(),
+    inputs: z.array(z.string()).optional(),
+    outputs: z.array(z.string()).optional(),
+    apisOrEvents: z.array(z.string()).optional(),
+    edgeCases: z.array(z.string()).optional(),
+    codeRefs: z.array(z.string()).optional(),
+  })
+  .strict();
+
 export const MediaItemSchema = z.object({
   src: z.string().min(1),
   caption: z.string().min(1),
@@ -21,64 +37,102 @@ export const MediaItemSchema = z.object({
   audience: AudienceScopeSchema.optional(),
 });
 
-export const BridgeMessageSchema = z.object({
-  direction: z.enum(['host_init', 'host_to_miniapp', 'miniapp_to_host']),
-  name: z.string().min(1),
-  hostFn: z.string().min(1).optional(),
-  miniAppFn: z.string().min(1).optional(),
-  payload: z.string().optional(),
-  response: z.string().optional(),
-  examplePayload: z.string().min(1).optional(),
-  exampleResponse: z.string().min(1).optional(),
-  note: z.string().optional(),
-});
+export const BridgeMessageSchema = z
+  .object({
+    direction: z.enum(['host_init', 'host_to_miniapp', 'miniapp_to_host']),
+    name: z.string().min(1),
+    hostFn: z.string().min(1).optional(),
+    hostFnByPlatform: z
+      .object({
+        ios: z.string().min(1).optional(),
+        android: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    miniAppFn: z.string().min(1).optional(),
+    payload: z.string().optional(),
+    response: z.string().optional(),
+    examplePayload: z.string().min(1).optional(),
+    exampleResponse: z.string().min(1).optional(),
+    note: z.string().optional(),
+    parityNote: z.string().min(1).optional(),
+  })
+  .strict();
 
-export const MiniAppBridgeSchema = z.object({
-  miniAppId: z.string().min(1),
-  embedMode: z.enum(['inline_tab', 'modal', 'sdk_global']),
-  transport: z.string().optional(),
-  messages: z.array(BridgeMessageSchema).min(1),
-});
+export const MiniAppBridgeSchema = z
+  .object({
+    miniAppId: z.string().min(1),
+    embedMode: z.enum(['inline_tab', 'modal', 'sdk_global']),
+    transport: z.string().optional(),
+    transportByPlatform: z
+      .object({
+        ios: z.string().min(1).optional(),
+        android: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+    messages: z.array(BridgeMessageSchema).min(1),
+  })
+  .strict();
 
-export const TechDetailSchema = z.object({
-  inputs: z.array(z.string()).optional(),
-  outputs: z.array(z.string()).optional(),
-  apisOrEvents: z.array(z.string()).optional(),
-  edgeCases: z.array(z.string()).optional(),
-  codeRefs: z.array(z.string()).optional(),
-  miniAppBridge: MiniAppBridgeSchema.optional(),
-});
+export const TechDetailSchema = z
+  .object({
+    platformDiffNote: z.string().min(1).optional(),
+    inputs: z.array(z.string()).optional(),
+    outputs: z.array(z.string()).optional(),
+    apisOrEvents: z.array(z.string()).optional(),
+    edgeCases: z.array(z.string()).optional(),
+    codeRefs: z.array(z.string()).optional(),
+    byPlatform: z
+      .object({
+        ios: PlatformTechDetailSchema.optional(),
+        android: PlatformTechDetailSchema.optional(),
+      })
+      .strict()
+      .optional(),
+    miniAppBridge: MiniAppBridgeSchema.optional(),
+  })
+  .strict();
 
-export const FlowNodeDataSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  kind: NodeKindSchema,
-  audience: AudienceScopeSchema,
-  summary: z.object({
-    overview: z.string().min(1),
-    tech: z.string().optional(),
-  }),
-  media: z.array(MediaItemSchema).optional(),
-  techDetail: TechDetailSchema.optional(),
-  relatedNodeIds: z.array(z.string()).optional(),
-});
+export const FlowNodeDataSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    kind: NodeKindSchema,
+    audience: AudienceScopeSchema,
+    platforms: z.array(PlatformSchema).min(1).optional(),
+    summary: z.object({
+      overview: z.string().min(1),
+      tech: z.string().optional(),
+    }),
+    media: z.array(MediaItemSchema).optional(),
+    techDetail: TechDetailSchema.optional(),
+    relatedNodeIds: z.array(z.string()).optional(),
+  })
+  .strict();
 
-export const FlowEdgeDataSchema = z.object({
-  id: z.string().min(1),
-  source: z.string().min(1),
-  target: z.string().min(1),
-  label: z.string().optional(),
-  audience: AudienceScopeSchema.optional(),
-});
+export const FlowEdgeDataSchema = z
+  .object({
+    id: z.string().min(1),
+    source: z.string().min(1),
+    target: z.string().min(1),
+    label: z.string().optional(),
+    audience: AudienceScopeSchema.optional(),
+    platforms: z.array(PlatformSchema).min(1).optional(),
+  })
+  .strict();
 
-export const ScenarioSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().optional(),
-  audience: AudienceScopeSchema.optional(),
-  nodeIds: z.array(z.string()),
-  edgeIds: z.array(z.string()),
-});
+export const ScenarioSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    description: z.string().optional(),
+    audience: AudienceScopeSchema.optional(),
+    platforms: z.array(PlatformSchema).min(1).optional(),
+    nodeIds: z.array(z.string()),
+    edgeIds: z.array(z.string()),
+  })
+  .strict();
 
 export const SubtreeDefinitionSchema = z.object({
   title: z.string().min(1),
@@ -115,6 +169,7 @@ export type AudienceScope = z.infer<typeof AudienceScopeSchema>;
 export type MediaItem = z.infer<typeof MediaItemSchema>;
 export type BridgeMessage = z.infer<typeof BridgeMessageSchema>;
 export type MiniAppBridge = z.infer<typeof MiniAppBridgeSchema>;
+export type PlatformTechDetail = z.infer<typeof PlatformTechDetailSchema>;
 export type TechDetail = z.infer<typeof TechDetailSchema>;
 export type FlowNodeData = z.infer<typeof FlowNodeDataSchema>;
 export type FlowEdgeData = z.infer<typeof FlowEdgeDataSchema>;

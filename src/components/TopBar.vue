@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject } from 'vue';
+import { defineAsyncComponent, inject } from 'vue';
 import { ChevronRight, GitBranch, Image as ImageIcon, Layers, RotateCcw, Search } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 
@@ -13,6 +13,9 @@ if (!explorer) {
 }
 
 const enableTechMode = __ENABLE_TECH_MODE__;
+const TechPlatformSwitcher = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./TechPlatformSwitcher.vue'))
+  : null;
 
 const onBreadcrumbClick = (nodeId: string) => {
   if (nodeId === explorer.dataset.rootNode.id) {
@@ -130,6 +133,11 @@ const onBreadcrumbClick = (nodeId: string) => {
         <ImageIcon class="h-3.5 w-3.5" />
         <span class="hidden lg:inline">Hiện ảnh trên sơ đồ</span>
       </button>
+
+      <component
+        :is="TechPlatformSwitcher"
+        v-if="TechPlatformSwitcher && explorer.audienceMode.value === 'tech'"
+      />
 
       <div
         v-if="enableTechMode"

@@ -217,4 +217,68 @@ describe('createFlowExplorerState', () => {
       'ma-user-contact',
     ]);
   });
+
+  it('switches platformMode (ios / android / compare), clears hidden selection, and filters searchFlowNodes by platform', () => {
+    const platformDataset: MergedFlowDataset = {
+      ...sampleDataset,
+      subtreesByParentId: {
+        ...sampleDataset.subtreesByParentId,
+        b1: {
+          title: 'Sub 1',
+          layoutHint: 'flow',
+          entryNodeIds: ['b1-ios', 'b1-and'],
+          nodes: [
+            {
+              id: 'b1-ios',
+              label: 'iOS Only Step',
+              kind: 'process',
+              audience: 'tech',
+              platforms: ['ios'],
+              summary: { overview: 'iOS' },
+            },
+            {
+              id: 'b1-and',
+              label: 'Android Only Step',
+              kind: 'process',
+              audience: 'tech',
+              platforms: ['android'],
+              summary: { overview: 'Android', tech: 'AndroidSpecificFn()' },
+            },
+          ] as MergedFlowDataset['subtreesByParentId']['b1']['nodes'],
+          edges: [],
+        },
+      },
+    };
+
+    const state = createFlowExplorerState(platformDataset, true) as ReturnType<
+      typeof createFlowExplorerState
+    > & {
+      platformMode: { value: string };
+      setPlatformMode: (m: 'ios' | 'android' | 'compare') => void;
+    };
+
+    expect(state.platformMode.value).toBe('compare');
+    state.setAudienceMode('tech');
+    state.toggleExpand('b1');
+    expect(state.visibleFlow.value.nodes.map((n) => n.id)).toContain('b1-ios');
+    expect(state.visibleFlow.value.nodes.map((n) => n.id)).toContain('b1-and');
+
+    state.selectedNodeId.value = 'b1-ios';
+    state.setPlatformMode('android');
+    expect(state.selectedNodeId.value).toBeNull();
+    expect(state.visibleFlow.value.nodes.map((n) => n.id)).not.toContain('b1-ios');
+    expect(state.visibleFlow.value.nodes.map((n) => n.id)).toContain('b1-and');
+
+    const searchFn = searchFlowNodes as (
+      d: MergedFlowDataset,
+      q: string,
+      m: 'overview' | 'tech',
+      p?: 'ios' | 'android' | 'compare',
+    ) => ReturnType<typeof searchFlowNodes>;
+    expect(searchFn(platformDataset, 'AndroidSpecificFn', 'tech', 'android').map((h) => h.node.id)).toEqual([
+      'b1-and',
+    ]);
+    expect(searchFn(platformDataset, 'AndroidSpecificFn', 'tech', 'ios')).toEqual([]);
+    expect(searchFn(platformDataset, 'AndroidSpecificFn', 'overview', 'android')).toEqual([]);
+  });
 });

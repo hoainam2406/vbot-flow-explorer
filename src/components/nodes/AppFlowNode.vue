@@ -65,6 +65,32 @@ const hasMiniAppBridge = computed(() => {
   return Boolean(props.data.techDetail?.miniAppBridge);
 });
 
+const platformBadge = computed<{ label: string; cls: string } | null>(() => {
+  if (!__ENABLE_TECH_MODE__ || explorer.audienceMode.value !== 'tech') return null;
+  const platforms = props.data.platforms;
+  if (platforms?.length === 1) {
+    if (platforms[0] === 'ios') {
+      return { label: 'iOS', cls: 'border-slate-700 bg-slate-800 text-white' };
+    }
+    return { label: 'Android', cls: 'border-emerald-700 bg-emerald-600 text-white' };
+  }
+  if (explorer.platformMode.value === 'compare') {
+    const detail = props.data.techDetail;
+    const hasDiff = Boolean(
+      detail?.platformDiffNote ||
+        detail?.byPlatform?.android ||
+        detail?.miniAppBridge?.messages.some((m) => m.hostFnByPlatform?.android || m.parityNote),
+    );
+    if (hasDiff) {
+      return {
+        label: 'iOS ≠ Android',
+        cls: 'border-amber-300 bg-amber-100 text-amber-900',
+      };
+    }
+  }
+  return null;
+});
+
 const visibleMedia = computed(() => getVisibleMedia(props.data, explorer.audienceMode.value));
 const firstMedia = computed(() => visibleMedia.value[0] ?? null);
 const mediaError = ref(false);
@@ -147,6 +173,13 @@ const onToggleBranch = () => {
           class="inline-flex shrink-0 items-center rounded-md border border-cyan-300 bg-cyan-50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800"
         >
           Mini App
+        </span>
+        <span
+          v-if="platformBadge"
+          class="inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold"
+          :class="platformBadge.cls"
+        >
+          {{ platformBadge.label }}
         </span>
       </div>
 

@@ -2,6 +2,7 @@
 import { computed, defineAsyncComponent, inject } from 'vue';
 import { Focus, GitBranch, Link2, RotateCcw, X } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
+import { isVisibleForMode, isVisibleForPlatform } from '../../core/graphEngine';
 import type { NodeKind } from '../../data/schema';
 import MediaGallery from './MediaGallery.vue';
 
@@ -46,17 +47,36 @@ const isFocusedHere = computed(
 const relatedNodes = computed(() => {
   const ids = node.value?.relatedNodeIds ?? [];
   const mode = explorer.audienceMode.value;
+  const plat = explorer.platformMode.value;
   return ids
     .map((id) => explorer.findNode(id))
     .filter((target): target is NonNullable<typeof target> => Boolean(target))
-    .filter((target) => mode === 'tech' || target.audience === 'all');
+    .filter(
+      (target) =>
+        isVisibleForMode(target.audience, mode) &&
+        isVisibleForPlatform(target.platforms, mode, plat),
+    );
 });
+
+const isCompareDrawer = computed(
+  () =>
+    __ENABLE_TECH_MODE__ &&
+    explorer.audienceMode.value === 'tech' &&
+    explorer.platformMode.value === 'compare',
+);
+
+const drawerWidthClass = computed(() =>
+  isCompareDrawer.value
+    ? 'sm:w-[540px] lg:w-[680px] xl:w-[740px]'
+    : 'sm:w-[400px] lg:w-[440px]',
+);
 </script>
 
 <template>
   <aside
     v-if="node"
-    class="z-10 flex h-full w-full shrink-0 flex-col border-l border-slate-200 bg-white shadow-xl sm:w-[400px] lg:w-[440px]"
+    class="z-10 flex h-full w-full shrink-0 flex-col border-l border-slate-200 bg-white shadow-xl transition-[width] duration-200"
+    :class="drawerWidthClass"
   >
     <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
       <div class="min-w-0">
@@ -140,6 +160,7 @@ const relatedNodes = computed(() => {
         :is="TechDetailPanel"
         v-if="TechDetailPanel && explorer.audienceMode.value === 'tech'"
         :node="node"
+        :platform-mode="explorer.platformMode.value"
       />
 
       <section v-if="relatedNodes.length > 0" class="space-y-2 border-t border-slate-100 pt-4">

@@ -5,6 +5,8 @@ import type {
   FlowModuleFile,
   FlowNodeData,
   MergedFlowDataset,
+  Platform,
+  PlatformViewMode,
   SubtreeDefinition,
 } from '../data/schema';
 
@@ -29,20 +31,34 @@ export function mergeDataset(
   };
 }
 
-function isVisibleForMode(audience: 'all' | 'tech' | undefined, mode: ViewMode): boolean {
+export function isVisibleForMode(audience: 'all' | 'tech' | undefined, mode: ViewMode): boolean {
   return mode === 'tech' || (audience ?? 'all') === 'all';
+}
+
+export function isVisibleForPlatform(
+  platforms: Platform[] | undefined,
+  mode: ViewMode,
+  platformMode: PlatformViewMode = 'compare',
+): boolean {
+  if (mode === 'overview' || platformMode === 'compare') return true;
+  return !platforms || platforms.includes(platformMode);
 }
 
 export function filterAndBridgeSubtree(
   subtree: SubtreeDefinition,
   mode: ViewMode,
+  platformMode: PlatformViewMode = 'compare',
 ): SubtreeDefinition {
-  if (mode === 'tech') return subtree;
+  if (mode === 'tech' && platformMode === 'compare') return subtree;
 
-  const visibleIds = new Set(
-    subtree.nodes.filter((n) => isVisibleForMode(n.audience, 'overview')).map((n) => n.id),
+  const isNodeVisible = (n: FlowNodeData) =>
+    isVisibleForMode(n.audience, mode) && isVisibleForPlatform(n.platforms, mode, platformMode);
+
+  const visibleIds = new Set(subtree.nodes.filter(isNodeVisible).map((n) => n.id));
+  const activeEdges = subtree.edges.filter(
+    (e) =>
+      isVisibleForMode(e.audience, mode) && isVisibleForPlatform(e.platforms, mode, platformMode),
   );
-  const activeEdges = subtree.edges.filter((e) => isVisibleForMode(e.audience, 'overview'));
 
   const outgoing = new Map<string, FlowEdgeData[]>();
   for (const edge of activeEdges) {
@@ -95,7 +111,7 @@ export function filterAndBridgeSubtree(
           source: sourceId,
           target: hit.target,
           ...(hit.labels[0] ? { label: hit.labels[0] } : {}),
-          audience: 'all',
+          audience: mode === 'overview' ? 'all' : undefined,
         },
       });
     }
@@ -130,11 +146,17 @@ export function filterAndBridgeSubtree(
     nodes: visibleNodes,
     edges: bridgedEdges,
     scenarios: (subtree.scenarios ?? [])
-      .filter((s) => isVisibleForMode(s.audience, 'overview'))
+      .filter(
+        (s) =>
+          isVisibleForMode(s.audience, mode) &&
+          isVisibleForPlatform(s.platforms, mode, platformMode),
+      )
       .map((s) => {
         const scenarioEdgeSet = new Set(s.edgeIds);
+        const { platforms: scenarioPlatforms, ...rest } = s;
         return {
-          ...s,
+          ...rest,
+          ...(mode === 'tech' && scenarioPlatforms ? { platforms: scenarioPlatforms } : {}),
           nodeIds: s.nodeIds.filter((id) => visibleIds.has(id)),
           edgeIds: bridgedEntries
             .filter((entry) => entry.viaEdgeIds.every((eid) => scenarioEdgeSet.has(eid)))
@@ -201,12 +223,14 @@ export function sanitizeForPublic(dataset: MergedFlowDataset): MergedFlowDataset
     app: dataset.app,
     rootNode: stripNodeForPublic(dataset.rootNode, allowedIds),
     branches: visibleBranches.map((b) => stripNodeForPublic(b, allowedIds)),
-    branchEdges: dataset.branchEdges.filter(
-      (e) =>
-        isVisibleForMode(e.audience, 'overview') &&
-        allowedIds.has(e.source) &&
-        allowedIds.has(e.target),
-    ),
+    branchEdges: dataset.branchEdges
+      .filter(
+        (e) =>
+          isVisibleForMode(e.audience, 'overview') &&
+          allowedIds.has(e.source) &&
+          allowedIds.has(e.target),
+      )
+      .map(({ platforms: _platforms, ...edge }) => edge),
     subtreesByParentId: filteredSubtrees,
   };
 }
@@ -216,15 +240,16 @@ export function countDescendants(
   parentId: string,
   mode: ViewMode,
   visited = new Set<string>(),
+  platformMode: PlatformViewMode = 'compare',
 ): number {
   if (visited.has(parentId)) return 0;
   visited.add(parentId);
   const raw = dataset.subtreesByParentId[parentId];
   if (!raw) return 0;
-  const sub = filterAndBridgeSubtree(raw, mode);
+  const sub = filterAndBridgeSubtree(raw, mode, platformMode);
   let total = sub.nodes.length;
   for (const node of sub.nodes) {
-    total += countDescendants(dataset, node.id, mode, visited);
+    total += countDescendants(dataset, node.id, mode, visited, platformMode);
   }
   return total;
 }
@@ -241,6 +266,7 @@ export function buildVisibleTreeFlow(
   expandedIds: Set<string>,
   mode: ViewMode,
   focusRootId?: string | null,
+  platformMode: PlatformViewMode = 'compare',
 ): VisibleFlowResult {
   const nodes: FlowNodeData[] = [];
   const edges: FlowEdgeData[] = [];
@@ -260,7 +286,7 @@ export function buildVisibleTreeFlow(
     visited.add(parentId);
     const raw = dataset.subtreesByParentId[parentId];
     if (!raw) return;
-    const sub = filterAndBridgeSubtree(raw, mode);
+    const sub = filterAndBridgeSubtree(raw, mode, platformMode);
     if (sub.scenarios?.length) activeScenarios.push(...sub.scenarios);
 
     for (const node of sub.nodes) {
@@ -282,7 +308,11 @@ export function buildVisibleTreeFlow(
 
   if (focusRootId && focusRootId !== dataset.rootNode.id) {
     const focusNode = findNodeById(dataset, focusRootId);
-    if (focusNode) {
+    if (
+      focusNode &&
+      isVisibleForMode(focusNode.audience, mode) &&
+      isVisibleForPlatform(focusNode.platforms, mode, platformMode)
+    ) {
       pushNode(focusNode);
       expandSubtree(focusNode.id);
       return { nodes, edges, nodeParentMap, activeScenarios };
@@ -291,12 +321,22 @@ export function buildVisibleTreeFlow(
 
   pushNode(dataset.rootNode);
   for (const branch of dataset.branches) {
-    if (!isVisibleForMode(branch.audience, mode)) continue;
+    if (
+      !isVisibleForMode(branch.audience, mode) ||
+      !isVisibleForPlatform(branch.platforms, mode, platformMode)
+    ) {
+      continue;
+    }
     pushNode(branch, dataset.rootNode.id);
     expandSubtree(branch.id);
   }
   for (const edge of dataset.branchEdges) {
-    if (addedNodes.has(edge.source) && addedNodes.has(edge.target)) {
+    if (
+      addedNodes.has(edge.source) &&
+      addedNodes.has(edge.target) &&
+      isVisibleForMode(edge.audience, mode) &&
+      isVisibleForPlatform(edge.platforms, mode, platformMode)
+    ) {
       edges.push(edge);
     }
   }

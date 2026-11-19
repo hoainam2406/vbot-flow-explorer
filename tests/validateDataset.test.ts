@@ -260,4 +260,94 @@ describe('validateDataset', () => {
     };
     expect(validateDataset(validManifest, [withEmptyExamplePayload]).length).toBeGreaterThan(0);
   });
+
+  it('validates platform-aware tech fields (platforms, byPlatform, hostFnByPlatform, parityNote) and rejects invalid platform values', () => {
+    const withPlatformMeta = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Android FSI Lockscreen',
+              kind: 'process',
+              audience: 'tech',
+              platforms: ['android'],
+              summary: { overview: 'Lockscreen' },
+              techDetail: {
+                platformDiffNote: 'iOS dùng PushKit+CallKit; Android dùng FCM+FullScreenIntent',
+                byPlatform: {
+                  ios: {
+                    summary: 'PushKit + CallKit',
+                    codeRefs: ['CallKitProviderDelegate.swift'],
+                  },
+                  android: {
+                    summary: 'FCM + Notification.CallStyle + Foreground CallService',
+                    codeRefs: ['VBotNotifications.kt', 'CallService.kt'],
+                  },
+                },
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-user-contact',
+                  embedMode: 'inline_tab',
+                  transportByPlatform: {
+                    ios: 'WKScriptMessageHandler vbma',
+                    android: '@JavascriptInterface VbMABridge',
+                  },
+                  messages: [
+                    {
+                      direction: 'miniapp_to_host',
+                      name: 'user_contact_get_local',
+                      hostFnByPlatform: {
+                        ios: 'UserContactMiniAppBridgeHelper.executeGetLocal',
+                        android: 'UserContactMiniAppBridgeHelper.handleAction',
+                      },
+                      parityNote: 'Android dùng computeContactsSignature để chống loop thay Notification source.',
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          edges: [],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [withPlatformMeta])).toEqual([]);
+
+    const parsedBridgeMsg = BridgeMessageSchema.parse({
+      direction: 'miniapp_to_host',
+      name: 'user_contact_get_local',
+      hostFnByPlatform: {
+        ios: 'UserContactMiniAppBridgeHelper.executeGetLocal',
+        android: 'UserContactMiniAppBridgeHelper.handleAction',
+      },
+      parityNote: 'Loop guard diff',
+    });
+    expect(parsedBridgeMsg.hostFnByPlatform).toEqual({
+      ios: 'UserContactMiniAppBridgeHelper.executeGetLocal',
+      android: 'UserContactMiniAppBridgeHelper.handleAction',
+    });
+    expect(parsedBridgeMsg.parityNote).toBe('Loop guard diff');
+
+    const withInvalidPlatform = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Invalid Platform',
+              kind: 'process',
+              audience: 'tech',
+              platforms: ['windows'],
+              summary: { overview: 'Bad' },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [withInvalidPlatform]).length).toBeGreaterThan(0);
+  });
 });
