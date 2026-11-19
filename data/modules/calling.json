@@ -1,0 +1,586 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "mod-calling",
+  "subtrees": {
+    "mod-calling": {
+      "title": "Các nhóm luồng Gọi thoại & Chuyển tiếp",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": [
+        "call-incoming",
+        "call-outgoing",
+        "call-transfer",
+        "call-controls"
+      ],
+      "nodes": [
+        {
+          "id": "call-incoming",
+          "label": "Cuộc gọi đến (PushKit & CallKit)",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Đổ chuông màn hình khóa iPhone như cuộc gọi thông thường ngay cả khi đã tắt ứng dụng, đồng thời tự động hiển thị tên khách hàng hoặc người quen trong danh bạ.",
+            "tech": "Xử lý PushKit VoIP từ AppDelegate/CallKitProviderDelegate, tra cứu tên ưu tiên CRM > PushKit > SQLite > SĐT và hỗ trợ tra cứu CRM nền có retry lỗi mạng tạm thời."
+          },
+          "media": [
+            {
+              "src": "/media/calling/incoming-callkit.webp",
+              "caption": "Màn hình đổ chuông CallKit hiển thị tên khách hàng ưu tiên",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "codeRefs": [
+              "VBot/AppDelegate/CallKIt+Appdelegate.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift",
+              "VBot/Linphone+CallKit/CallKitProviderDelegate.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-outgoing",
+          "label": "Cuộc gọi đi (Dialpad / Danh bạ / MiniApp)",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Gọi ra từ bàn phím số, danh bạ hoặc từ Mini App khách hàng; cho phép chọn đầu số Hotline hiển thị với người nghe.",
+            "tech": "Luồng VPMAppService+CallOut qua PrepareCallViewController và SelectCallTypeViewController; bảo toàn suppliedCallerName khi gọi từ Mini App / Danh bạ / Autodial."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift",
+              "VBot/Controller/NewController/CallVC/PrepareCallViewController.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-transfer",
+          "label": "Chuyển tiếp cuộc gọi (Blind & Attended)",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Khi đang đàm thoại, nhân viên có thể chuyển ngay cuộc gọi sang đồng nghiệp/số ngoài hoặc giữ máy khách để hỏi trước người nhận rồi mới bàn giao.",
+            "tech": "Hỗ trợ Blind Transfer (ưu tiên FreeSWITCH HTTP bgapi và tự fallback sang DTMF #1) và Attended Transfer (DTMF *2 giữ máy, *9/*2 xác nhận, *1 hủy)."
+          },
+          "media": [
+            {
+              "src": "/media/calling/transfer-sheet.webp",
+              "caption": "Giao diện chọn thành viên / danh bạ chuyển tiếp trong cuộc gọi",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/API/FreeSwitchTransferHelper.swift",
+              "VBot/Controller/NewController/CallVC/ChildCallForwardViewController.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-controls",
+          "label": "Điều khiển trong cuộc gọi & Khảo sát",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Các thao tác khi đang nghe máy: tắt tiếng, bật loa ngoài, giữ máy, bàn phím số, thu nhỏ cửa sổ gọi và chuyển khách sang khảo sát chất lượng.",
+            "tech": "Điều phối qua VPMAppService+CallFeatures, VPMAppService+CallState, PipCallViewController và CallSurveyHelper (DTMF #3)."
+          }
+        }
+      ],
+      "edges": []
+    },
+    "call-incoming": {
+      "title": "Luồng xử lý Cuộc gọi đến",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["call-in-pushkit"],
+      "nodes": [
+        {
+          "id": "call-in-pushkit",
+          "label": "Nhận thông báo cuộc gọi đến (PushKit)",
+          "kind": "external",
+          "audience": "all",
+          "summary": {
+            "overview": "Hệ thống tổng đài gửi tín hiệu đánh thức điện thoại ngay khi có người gọi vào Hotline, giúp máy đổ chuông tức thì dù app đang đóng.",
+            "tech": "PKPushRegistryDelegate nhận payload VoIP từ APNs tại AppDelegate / CallKIt+Appdelegate, kích hoạt ngay chuỗi xử lý setCallInDataPushkit."
+          },
+          "techDetail": {
+            "inputs": ["Payload APNs VoIP: caller, hotline, project_code, custom.name, aps.alert, isCustomer"],
+            "edgeCases": ["Bắt buộc report CallKit ngay trong chu kỳ PushKit của iOS để không bị hệ thống thu hồi quyền VoIP"],
+            "codeRefs": [
+              "VBot/AppDelegate/AppDelegate.swift",
+              "VBot/AppDelegate/CallKIt+Appdelegate.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-in-raw-log",
+          "label": "Ghi nhận Raw PushKit & Trích xuất tên ban đầu",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Tạm lưu tên người gọi gửi kèm từ tổng đài hoặc tra nhanh trong danh bạ lưu trên máy.",
+            "tech": "UserContactDatabaseHelper.formatRawPushKitLogSummary ghi log đối chiếu raw payload; extractPushKitCallerName lấy tên hợp lệ từ PushKit ưu tiên cao hơn SQLite user_contacts (với cuộc gọi ngoài !isVPM)."
+          },
+          "techDetail": {
+            "inputs": ["dictionaryPayload", "SQLite user_contacts (uid)"],
+            "outputs": ["oneCallModel.pushKitCallerName", "ResolvedPushPayload"],
+            "edgeCases": [
+              "Loại bỏ các nhãn mặc định như 'Call incoming', 'Cuộc gọi đến', 'null' hoặc chuỗi chỉ chứa SĐT",
+              "Che số dạng 09xx***xxx nếu là khách hàng và tài khoản không có quyền HIEN_SO_DIEN_THOAI"
+            ],
+            "codeRefs": [
+              "VBot/Service/Database/UserContactDatabaseHelper.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift"
+            ]
+          },
+          "relatedNodeIds": ["ct-sqlite-uid"]
+        },
+        {
+          "id": "call-in-callkit",
+          "label": "Hiển thị màn hình đổ chuông CallKit",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Điện thoại bật chuông và hiện màn hình nhận cuộc gọi chuẩn iOS kèm tên người gọi hoặc số điện thoại.",
+            "tech": "CXProvider.reportNewIncomingCall qua CallKitProviderDelegate; khi có kết quả CRM nền sẽ gọi reportCall(with:updated:) để cập nhật lại tên hiển thị ngay trên màn hình chuông."
+          },
+          "media": [
+            {
+              "src": "/media/calling/incoming-callkit.webp",
+              "caption": "Giao diện đổ chuông CallKit trên màn hình khóa",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Linphone+CallKit/CallKitProviderDelegate.swift"
+            ]
+          },
+          "relatedNodeIds": ["tfa-force-logout"]
+        },
+        {
+          "id": "call-in-crm-bg",
+          "label": "Tra cứu tên Khách hàng CRM ở nền",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Hệ thống tự đối chiếu số điện thoại với hồ sơ khách hàng CRM để hiển thị đúng tên khách trước khi bạn kịp nhấc máy.",
+            "tech": "Sau callback reportNewIncomingCall, triggerBackgroundPushKitCRMLookupIfNeeded bọc UIApplication.beginBackgroundTask('PushKitCRMLookup') và gọi GET /api/module-crm/Customer/getAllByPhone."
+          },
+          "techDetail": {
+            "apisOrEvents": ["GET /api/module-crm/Customer/getAllByPhone"],
+            "outputs": ["oneCallModel.persionInCall (tên khách CRM, idCustomer, avatarColor)"],
+            "codeRefs": [
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-in-crm-retry",
+          "label": "Kiểm tra kết nối mạng nền (-1005 / POSIX 53)?",
+          "kind": "decision",
+          "audience": "tech",
+          "summary": {
+            "overview": "Kiểm tra xem việc tra cứu tên khách hàng khi máy vừa thức dậy từ chế độ ngủ có bị rớt kết nối tạm thời hay không.",
+            "tech": "isTransientNetworkErrorForCRMRetry kiểm tra lỗi NSURLErrorDomain (-1005, -1001, -1009) hoặc POSIX (53, 54, 57) khi app vừa thức dậy từ background."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/Database/UserContactDatabaseHelper.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-in-crm-error",
+          "label": "Tự thử lại CRM & Mở khóa tra lại khi nghe máy",
+          "kind": "error",
+          "audience": "tech",
+          "summary": {
+            "overview": "Nếu mạng chập chờn lúc máy mới sáng màn hình, app tự thử tra lại và đảm bảo sẽ cập nhật lại tên khi cuộc gọi bắt đầu.",
+            "tech": "Tự động retry 1 lần sau 0.4s nếu cuộc gọi chưa kết thúc; nếu vẫn lỗi thì không bật didResolveCRMCustomer và gọi removeCRMLookupPair để getInfoCall2 tra cứu lại khi mở NewCallViewController."
+          },
+          "techDetail": {
+            "edgeCases": [
+              "Không khóa cờ didResolveCRMCustomer khi gặp lỗi mạng tạm thời để bước mở màn hình gọi vẫn lấy lại được tên CRM"
+            ],
+            "codeRefs": [
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift",
+              "VBot/Service/Database/UserContactDatabaseHelper.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-in-answer",
+          "label": "Nhấc máy & Mở màn hình đàm thoại",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Khi bấm Trả lời, âm thanh được nối máy và mở giao diện cuộc gọi với đầy đủ nút điều khiển (loa, tắt mic, ghi chú, chuyển tiếp...).",
+            "tech": "LinphoneAPI kết nối kênh thoại SIP/RTP, mở NewCallViewController và hoàn tất đồng bộ thông tin qua getInfoCall2 theo thứ tự ưu tiên: CRM > PushKit > SQLite > SĐT."
+          },
+          "media": [
+            {
+              "src": "/media/calling/in-call-active.webp",
+              "caption": "Màn hình đàm thoại chính sau khi bắt máy",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift",
+              "VBot/Linphone+CallKit/LinphoneAPI.swift"
+            ]
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-ci-1", "source": "call-in-pushkit", "target": "call-in-raw-log" },
+        { "id": "e-ci-2", "source": "call-in-raw-log", "target": "call-in-callkit" },
+        { "id": "e-ci-3", "source": "call-in-callkit", "target": "call-in-crm-bg" },
+        { "id": "e-ci-4", "source": "call-in-crm-bg", "target": "call-in-crm-retry" },
+        { "id": "e-ci-5", "source": "call-in-crm-retry", "target": "call-in-answer", "label": "Thành công / Cập nhật CallKit" },
+        { "id": "e-ci-6", "source": "call-in-crm-retry", "target": "call-in-crm-error", "label": "Lỗi mạng -1005 / POSIX 53" },
+        { "id": "e-ci-7", "source": "call-in-crm-error", "target": "call-in-answer", "label": "Retry / Tra lại ở getInfoCall2" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-call-in-happy",
+          "name": "Nhận cuộc gọi đến thành công",
+          "description": "Đổ chuông CallKit tức thì, hiển thị tên khách hàng và vào màn hình đàm thoại.",
+          "audience": "all",
+          "nodeIds": ["call-in-pushkit", "call-in-raw-log", "call-in-callkit", "call-in-crm-bg", "call-in-crm-retry", "call-in-answer"],
+          "edgeIds": ["e-ci-1", "e-ci-2", "e-ci-3", "e-ci-4", "e-ci-5"]
+        },
+        {
+          "id": "sc-call-in-bg-retry",
+          "name": "Thức dậy từ background bị lỗi mạng -1005",
+          "description": "Kịch bản kỹ thuật: Socket vừa tỉnh dậy bị ngắt -1005 -> tự retry 0.4s -> không khóa cờ tra cứu lại.",
+          "audience": "tech",
+          "nodeIds": ["call-in-pushkit", "call-in-raw-log", "call-in-callkit", "call-in-crm-bg", "call-in-crm-retry", "call-in-crm-error", "call-in-answer"],
+          "edgeIds": ["e-ci-1", "e-ci-2", "e-ci-3", "e-ci-4", "e-ci-6", "e-ci-7"]
+        }
+      ]
+    },
+    "call-outgoing": {
+      "title": "Luồng xử lý Cuộc gọi đi",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["call-out-start"],
+      "nodes": [
+        {
+          "id": "call-out-start",
+          "label": "Bắt đầu gọi từ Bàn phím / Danh bạ / Mini App",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Người dùng bấm số trên bàn phím, chọn một liên hệ trong danh bạ hoặc bấm nút Gọi trực tiếp từ Mini App CRM/Khách hàng.",
+            "tech": "Điểm vào từ qMainDiaPadViewController hoặc Bridge make_call -> VPMAppService.executeMakeCall; kiểm tra chặn mở trùng nếu VPMCallData.controller đang tồn tại."
+          },
+          "media": [
+            {
+              "src": "/media/calling/dialpad.webp",
+              "caption": "Bàn phím số và gợi ý liên hệ khi chuẩn bị gọi đi",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "inputs": ["name (tên truyền từ Mini App / Danh bạ nếu có)", "phone", "isVPM", "typeCall"],
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/MainDialPad/qMainDiaPadViewController.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift"
+            ]
+          },
+          "relatedNodeIds": ["ct-quick-call", "autodial-campaign"]
+        },
+        {
+          "id": "call-out-hotline",
+          "label": "Chọn đầu số Hotline & Kiểu gọi",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Chọn đầu số Hotline của công ty dùng để hiển thị với khách hàng (hoặc chọn gọi bằng kịch bản tự động nếu được cấu hình).",
+            "tech": "PrepareCallViewController kiểm tra quyền & cấu hình gọi, gọi SelectHotlineViewController hoặc SelectCallTypeViewController (gọi thường vs gọi kịch bản tự động)."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/PrepareCallViewController.swift",
+              "VBot/Controller/NewController/CallVC/SelectCallTypeViewController.swift"
+            ]
+          },
+          "relatedNodeIds": ["call-marketing-template", "hotline-project"]
+        },
+        {
+          "id": "call-out-preserve-name",
+          "label": "Bảo toàn tên người nhận truyền sẵn (suppliedCallerName)",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Nếu bạn bấm gọi từ hồ sơ khách hàng hoặc danh bạ, tên người nhận được giữ ổn định xuyên suốt cuộc gọi, không bị nhảy lại thành số điện thoại.",
+            "tech": "UserContactDatabaseHelper.resolveOutgoingCalleeDisplay lưu oneCallModel.suppliedCallerName khi tham số name hợp lệ (không phải SĐT); các bước getInfoCall2 và lookupAndApplyCRMCustomer sau đó chỉ bổ sung avatar/idCustomer mà không ghi đè tên này."
+          },
+          "techDetail": {
+            "edgeCases": [
+              "Nếu gọi từ Dialpad chỉ có SĐT (suppliedCallerName rỗng) thì vẫn chạy resolve theo thứ tự SQLite -> getInfoCall2 -> CRM",
+              "Reset suppliedCallerName về rỗng khi bắt đầu cuộc gọi mới"
+            ],
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/Extension+Component/VPMCallFunc+Extension.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift"
+            ]
+          },
+          "relatedNodeIds": ["ct-sqlite-uid"]
+        },
+        {
+          "id": "call-out-sip",
+          "label": "Thiết lập phiên SIP & Mở màn hình gọi",
+          "kind": "external",
+          "audience": "all",
+          "summary": {
+            "overview": "Kết nối đường truyền thoại qua tổng đài và hiển thị màn hình cuộc gọi đi với trạng thái Đang gọi / Đổ chuông / Đang nói chuyện.",
+            "tech": "LinphoneAPI khởi tạo INVITE qua tổng đài SIP, đồng bộ trạng thái lên CallKitProviderDelegate và hiển thị NewCallViewController."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Linphone+CallKit/LinphoneAPI.swift",
+              "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
+            ]
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-co-1", "source": "call-out-start", "target": "call-out-hotline" },
+        { "id": "e-co-2", "source": "call-out-hotline", "target": "call-out-preserve-name" },
+        { "id": "e-co-3", "source": "call-out-preserve-name", "target": "call-out-sip" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-call-out-miniapp",
+          "name": "Gọi ra từ Mini App Khách hàng giữ nguyên tên",
+          "description": "Truyền sẵn tên khách hàng khi bấm gọi và bảo toàn tên đó xuyên suốt cuộc gọi.",
+          "audience": "all",
+          "nodeIds": ["call-out-start", "call-out-hotline", "call-out-preserve-name", "call-out-sip"],
+          "edgeIds": ["e-co-1", "e-co-2", "e-co-3"]
+        }
+      ]
+    },
+    "call-transfer": {
+      "title": "Luồng Chuyển tiếp cuộc gọi",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["call-tr-open"],
+      "nodes": [
+        {
+          "id": "call-tr-open",
+          "label": "Mở bảng chọn đối tượng chuyển tiếp",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Khi đang đàm thoại ổn định, nhân viên bấm Chuyển tiếp và chọn đích đến từ Thành viên nội bộ, Danh bạ chuyển tiếp hoặc Bàn phím nhập số tự do.",
+            "tech": "Chỉ khả dụng khi cuộc gọi ở trạng thái ACTIVE/ANSWERED (không chuyển được khi RINGING/CONNECTING). Mở ChildCallForwardViewController hoặc ChildCallSelectMemberViewController."
+          },
+          "techDetail": {
+            "edgeCases": ["Quyền hiển thị Danh bạ chuyển tiếp V2 phụ thuộc cờ shouldShowContactForward"],
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/ChildCallForwardViewController.swift",
+              "VBot/Controller/NewController/CallVC/ChildCallSelectMemberViewController.swift"
+            ]
+          },
+          "relatedNodeIds": ["ctv2-action"]
+        },
+        {
+          "id": "call-tr-dest",
+          "label": "Chọn hình thức: Chuyển ngay hay Hỏi trước?",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Chuyển ngay (Blind Transfer) phù hợp nối máy nhanh; Hỏi trước (Attended Transfer) giúp trao đổi sơ bộ với đồng nghiệp trước khi giao khách.",
+            "tech": "Thành viên nội bộ hỗ trợ cả Blind và Attended; Danh bạ V2 / số tự do mặc định thực hiện Blind Transfer."
+          }
+        },
+        {
+          "id": "call-tr-blind-api",
+          "label": "Gửi lệnh chuyển ngay qua HTTP FreeSWITCH API",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Hệ thống gửi yêu cầu chuyển máy tức thì tới tổng đài chỉ trong 1 thao tác.",
+            "tech": "FreeSwitchTransferHelper.shared.executeBlindTransfer gọi HTTP bgapi chạy script Lua truyền (UUID_CALLER, CUSTOMER_NUMBER, SIP_SENDER, DIGITS) với timeout 5 giây."
+          },
+          "techDetail": {
+            "apisOrEvents": ["GET/POST /webapi/bgapi (FreeSWITCH Lua blindtransfer_call_phone)"],
+            "outputs": ["+OK Job-UUID"],
+            "codeRefs": [
+              "VBot/Service/API/FreeSwitchTransferHelper.swift",
+              "VBot/Controller/CallVC/MainCallVC/CallOut/ConfirmAskForwardViewController.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-tr-blind-fallback",
+          "label": "Fallback phát mã DTMF #1 qua kênh thoại",
+          "kind": "error",
+          "audience": "tech",
+          "summary": {
+            "overview": "Nếu kết nối lệnh chuyển tức thì gặp trục trặc, app tự động chuyển sang phát tín hiệu phím tắt để cuộc gọi vẫn được chuyển thành công.",
+            "tech": "Khi HTTP bgapi thất bại hoặc quá hạn 5s, tự động fallback phát chuỗi DTMF #1<project>*<ext> hoặc #1<phone> trên kênh thoại đang mở."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/API/FreeSwitchTransferHelper.swift"]
+          }
+        },
+        {
+          "id": "call-tr-blind-done",
+          "label": "Nhân viên cúp máy — Khách nối thẳng người nhận",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Cuộc gọi phía nhân viên chuyển tự động kết thúc; khách hàng nghe tiếng đổ chuông và nói chuyện trực tiếp với người nhận mới.",
+            "tech": "FreeSWITCH ngắt kênh của Agent chuyển và nối đường truyền Caller sang Target ngay khi Target nhấc máy."
+          }
+        },
+        {
+          "id": "call-tr-att-hold",
+          "label": "Giữ máy khách (Hold) & Gọi trao đổi trước",
+          "kind": "process",
+          "audience": "all",
+          "summary": {
+            "overview": "Khách hàng tạm nghe nhạc chờ trong lúc nhân viên gọi riêng cho người nhận để tóm tắt vấn đề của khách.",
+            "tech": "App gửi mã DTMF *2<project>*<ext> (hoặc *2<project>*<hotline>*<phone>), đưa khách vào Hold và mở màn hình ChildConfirmForwardCallViewController chờ trạng thái CONNECTED."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/Forward/ChildConfirmForwardCallViewController.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-tr-att-decision",
+          "label": "Người nhận đồng ý tiếp nhận hay Bận/Không nghe?",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Sau khi trao đổi riêng, nhân viên bấm Xác nhận chuyển nếu người nhận sẵn sàng, hoặc Hủy nếu người nhận bận/không nghe máy.",
+            "tech": "Theo dõi sự kiện trạng thái từ tổng đài: CONNECTED / ANSWER / NOANSWER / MISSCALL / ENDCALL."
+          }
+        },
+        {
+          "id": "call-tr-att-confirm",
+          "label": "Xác nhận bàn giao cuộc gọi (*9 / *2)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Khách hàng được nối máy trực tiếp với người nhận mới, nhân viên ban đầu tự động rời khỏi cuộc gọi.",
+            "tech": "Bấm Xác nhận gửi DTMF *9 (hoặc *2 khi trạng thái ANSWER) -> FreeSWITCH nối Caller với Target và ngắt kênh Agent."
+          }
+        },
+        {
+          "id": "call-tr-att-cancel",
+          "label": "Hủy chuyển (*1) & Quay lại nói chuyện với khách",
+          "kind": "error",
+          "audience": "all",
+          "summary": {
+            "overview": "Nếu người nhận bận, từ chối hoặc không bắt máy, cuộc gọi tự động hoàn trả để nhân viên tiếp tục giải thích và hỗ trợ khách hàng.",
+            "tech": "Khi bấm Hủy hoặc nhận NOANSWER / MISSCALL / ENDCALL, app gửi DTMF *1, đóng màn hình chuyển tiếp và khôi phục đàm thoại giữa Agent và khách."
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-tr-1", "source": "call-tr-open", "target": "call-tr-dest" },
+        { "id": "e-tr-2", "source": "call-tr-dest", "target": "call-tr-blind-api", "label": "Chuyển ngay (Blind)" },
+        { "id": "e-tr-3", "source": "call-tr-blind-api", "target": "call-tr-blind-done", "label": "+OK" },
+        { "id": "e-tr-4", "source": "call-tr-blind-api", "target": "call-tr-blind-fallback", "label": "Lỗi / Timeout 5s" },
+        { "id": "e-tr-5", "source": "call-tr-blind-fallback", "target": "call-tr-blind-done" },
+        { "id": "e-tr-6", "source": "call-tr-dest", "target": "call-tr-att-hold", "label": "Hỏi trước (Attended)" },
+        { "id": "e-tr-7", "source": "call-tr-att-hold", "target": "call-tr-att-decision" },
+        { "id": "e-tr-8", "source": "call-tr-att-decision", "target": "call-tr-att-confirm", "label": "Đồng ý nhận" },
+        { "id": "e-tr-9", "source": "call-tr-att-decision", "target": "call-tr-att-cancel", "label": "Hủy / Bận / Không nghe" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-transfer-attended",
+          "name": "Chuyển tiếp có hỏi trước thành công",
+          "description": "Giữ máy khách, trao đổi riêng với đồng nghiệp và xác nhận bàn giao.",
+          "audience": "all",
+          "nodeIds": ["call-tr-open", "call-tr-dest", "call-tr-att-hold", "call-tr-att-decision", "call-tr-att-confirm"],
+          "edgeIds": ["e-tr-1", "e-tr-6", "e-tr-7", "e-tr-8"]
+        },
+        {
+          "id": "sc-transfer-blind-fallback",
+          "name": "Blind Transfer lỗi HTTP tự fallback DTMF",
+          "description": "API bgapi timeout 5s -> app tự phát DTMF #1 để không làm rớt yêu cầu chuyển tiếp.",
+          "audience": "tech",
+          "nodeIds": ["call-tr-open", "call-tr-dest", "call-tr-blind-api", "call-tr-blind-fallback", "call-tr-blind-done"],
+          "edgeIds": ["e-tr-1", "e-tr-2", "e-tr-4", "e-tr-5"]
+        }
+      ]
+    },
+    "call-controls": {
+      "title": "Điều khiển trong cuộc gọi & Khảo sát",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": ["call-ctrl-pip", "call-ctrl-audio", "call-ctrl-survey"],
+      "nodes": [
+        {
+          "id": "call-ctrl-pip",
+          "label": "Thu nhỏ cuộc gọi (Picture-in-Picture)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Thu nhỏ màn hình gọi thành bong bóng nổi để nhân viên vừa nói chuyện vừa tra cứu dữ liệu ở các tab khác trong app.",
+            "tech": "PipCallViewController / FloatingView+Appdelegate giữ phiên gọi sống và khôi phục lại NewCallViewController khi chạm vào."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/new/PipCallViewController.swift",
+              "VBot/AppDelegate/FloatingView+Appdelegate.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-ctrl-audio",
+          "label": "Âm thanh, Giữ máy & Phím bấm (DTMF)",
+          "kind": "process",
+          "audience": "all",
+          "summary": {
+            "overview": "Bật/tắt micro, chuyển loa ngoài/Bluetooth, tạm giữ cuộc gọi (Hold) và bấm phím số tương tác tổng đài tự động (IVR).",
+            "tech": "VPMAppService+CallFeatures và VPMAppService+CallState khóa nút chức năng mờ (alpha 0.45) khi cuộc gọi chưa kết nối và kích hoạt đầy đủ khi trạng thái chuyển sang connected."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallFeatures.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallState.swift"
+            ]
+          }
+        },
+        {
+          "id": "call-ctrl-survey",
+          "label": "Chuyển khách vào Khảo sát sau cuộc gọi",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Cho phép nhân viên bấm nút Khảo sát để chuyển khách hàng sang hệ thống chấm điểm chất lượng dịch vụ.",
+            "tech": "CallSurveyHelper chỉ cho phép kích hoạt khi cuộc gọi Hotline đã kết nối và chưa gửi trước đó; phát tuần tự chuỗi DTMF #3 với độ trễ 300ms mỗi ký tự."
+          },
+          "techDetail": {
+            "apisOrEvents": ["DTMF sequence: #3 (interToneDelay = 0.3s)"],
+            "codeRefs": ["VBot/Service/CallSurveyHelper.swift"]
+          }
+        }
+      ],
+      "edges": []
+    }
+  }
+}

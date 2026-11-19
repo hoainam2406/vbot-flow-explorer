@@ -1,0 +1,401 @@
+{
+  "schemaVersion": "1.0",
+  "moduleId": "mod-contacts",
+  "subtrees": {
+    "mod-contacts": {
+      "title": "Các nhóm luồng Danh bạ & Khách hàng",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": [
+        "contact-personal",
+        "contact-sync-perm",
+        "contact-crud-batch",
+        "contact-forward-v2"
+      ],
+      "nodes": [
+        {
+          "id": "contact-personal",
+          "label": "Danh bạ cá nhân (Mini App & SQLite theo tài khoản)",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Quản lý danh bạ cá nhân với giao diện tìm kiếm A-Z nhanh, phân biệt rõ số chỉ mới lưu trên máy và số đã đồng bộ lên tài khoản VBot; dữ liệu tự tách riêng theo từng tài khoản đăng nhập.",
+            "tech": "Tab 3 (UserContactsMiniAppViewController) nhúng Mini App vb-ma-user-contact giao tiếp qua UserContactMiniAppBridgeHelper xuống SQLite user_contacts.sqlite tách biệt theo uid."
+          },
+          "media": [
+            {
+              "src": "/media/contacts/contacts-list.webp",
+              "caption": "Danh bạ cá nhân phân nhóm A-Z với icon Điện thoại / VBot",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift",
+              "VBot/Service/Database/UserContactDatabaseHelper.swift"
+            ]
+          }
+        },
+        {
+          "id": "contact-sync-perm",
+          "label": "Đồng bộ Server & Xử lý quyền / Đa thiết bị",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Đẩy danh bạ lên Server để khi đăng nhập ở điện thoại khác vẫn có đầy đủ danh bạ; bảo toàn 100% số đã nạp ngay cả khi người dùng tắt quyền danh bạ máy sau đó.",
+            "tech": "Đồng bộ hai chiều qua GET /api/user-contact/get-all và APIService+UserContact, gộp thông minh trên nhiều thiết bị (ưu tiên bản Server) và xử lý danh sách failed_phones."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/UserContactService.swift",
+              "VBot/Service/API/Endpoints/APIService+UserContact.swift"
+            ]
+          }
+        },
+        {
+          "id": "contact-crud-batch",
+          "label": "Thêm / Sửa / Xoá hàng loạt (tối đa 50) & Gọi nhanh",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Thêm mới, chỉnh sửa, vuốt trái thao tác nhanh, chọn xoá tối đa 50 liên hệ một lần hoặc bấm gọi thẳng từ danh bạ / bàn phím nổi.",
+            "tech": "Menu '+' và Multi-Select Bar tối đa 50 bản ghi, gọi REST /user-contact/insert|update|delete đồng thời cập nhật SQLite local và truyền tên sang make_call."
+          }
+        },
+        {
+          "id": "contact-forward-v2",
+          "label": "Danh bạ chuyển tiếp (Tab 1 — Contact V2)",
+          "kind": "module",
+          "audience": "all",
+          "summary": {
+            "overview": "Tra cứu danh bạ các đơn vị hành chính, UBND, công an, trạm y tế theo địa bàn/đơn vị để gọi nhanh hoặc chuyển tiếp cuộc gọi đang nghe.",
+            "tech": "ContactForwardViewController và ContactV2ViewController sử dụng ContactV2Repository + ContactV2AdvancedFilterBottomSheet."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
+              "VBot/Controller/NewController/ContactV2/ContactV2ViewController.swift"
+            ]
+          }
+        }
+      ],
+      "edges": []
+    },
+    "contact-personal": {
+      "title": "Kiến trúc Tab Danh bạ cá nhân",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["ct-open-tab"],
+      "nodes": [
+        {
+          "id": "ct-open-tab",
+          "label": "Mở Tab Danh bạ (Host Native + Mini App nhúng)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Chạm tab Danh bạ để xem danh sách liên hệ A-Z, tìm kiếm không dấu tức thời và sử dụng nút '+' hoặc bàn phím gọi nổi góc dưới phải.",
+            "tech": "UserContactsMiniAppViewController giữ UINavigationBar native (Avatar + nút '+' phát sự kiện toggle_actions_menu) và nhúng VbMaViewController (vb-ma-user-contact) cùng FloatingDialPadView."
+          },
+          "media": [
+            {
+              "src": "/media/contacts/contacts-menu-plus.webp",
+              "caption": "Menu thao tác '+' trên màn hình Danh bạ",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"]
+          }
+        },
+        {
+          "id": "ct-host-bridge",
+          "label": "Giao tiếp Mini App <-> Host qua Cầu nối SQLite",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Mini App đọc và lưu trữ danh bạ an toàn thông qua bộ nhớ nội bộ của ứng dụng.",
+            "tech": "Mini App gọi request_host_action qua UserContactMiniAppBridgeHelper điều phối tới UserContactService (5 lệnh SQLite & quyền danh bạ máy)."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift",
+              "VBot/Service/UserContactService.swift"
+            ]
+          }
+        },
+        {
+          "id": "ct-sqlite-uid",
+          "label": "Lưu SQLite tách biệt độc lập theo từng tài khoản (uid)",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Mỗi tài khoản có vùng dữ liệu danh bạ riêng trên điện thoại: đăng xuất không mất dữ liệu và đăng nhập tài khoản khác không bị lẫn số.",
+            "tech": "UserContactDatabaseHelper quản lý bảng user_contacts (PRIMARY KEY (local_key, uid)) và user_contact_meta trong user_contacts.sqlite; đồng thời phục vụ tra cứu tên khi có cuộc gọi đến/đi."
+          },
+          "techDetail": {
+            "edgeCases": [
+              "Khi đăng xuất tài khoản A rồi đăng nhập tài khoản B trên cùng 1 iPhone, dữ liệu của A được ẩn an toàn và hiển thị lại ngay khi A đăng nhập lại"
+            ],
+            "codeRefs": [
+              "VBot/Service/Database/UserContactDatabaseHelper.swift",
+              "VBot/Model/UserContactModel.swift"
+            ]
+          },
+          "relatedNodeIds": ["call-in-raw-log", "call-out-preserve-name"]
+        },
+        {
+          "id": "ct-two-badges",
+          "label": "Phân biệt 2 trạng thái: Điện thoại vs Đã đồng bộ VBot",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Mỗi liên hệ mang 1 trong 2 biểu tượng: Điện thoại (đã nạp vào bộ nhớ App trên máy hiện tại) hoặc VBot (đã đồng bộ lên Server để dùng trên mọi máy).",
+            "tech": "Dựa vào cờ is_synced trong user_contacts để hiển thị icon nguồn tương ứng và quyết định menu hành động (Đồng bộ vs Sửa)."
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-cp-1", "source": "ct-open-tab", "target": "ct-host-bridge" },
+        { "id": "e-cp-2", "source": "ct-host-bridge", "target": "ct-sqlite-uid" },
+        { "id": "e-cp-3", "source": "ct-sqlite-uid", "target": "ct-two-badges" }
+      ]
+    },
+    "contact-sync-perm": {
+      "title": "Luồng Đồng bộ Server & Quyền danh bạ máy",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["ct-perm-check"],
+      "nodes": [
+        {
+          "id": "ct-perm-check",
+          "label": "Kiểm tra quyền Danh bạ iPhone (Đã nạp hay Trống?)",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Khi mở Danh bạ, ứng dụng kiểm tra xem máy đã từng nạp danh bạ chưa và người dùng có đang cấp quyền truy cập danh bạ iPhone hay không.",
+            "tech": "Kiểm tra CNContactStore.authorizationStatus kết hợp số lượng bản ghi hiện có trong SQLite của uid hiện tại."
+          }
+        },
+        {
+          "id": "ct-perm-revoked",
+          "label": "Đã nạp trước đó rồi tắt quyền -> Giữ nguyên 100% danh bạ App",
+          "kind": "process",
+          "audience": "all",
+          "summary": {
+            "overview": "Nếu trước đây bạn đã nạp danh bạ vào App rồi sau đó vào Cài đặt iPhone tắt quyền (hoặc xóa số ngoài máy), toàn bộ danh bạ trong App vẫn nguyên vẹn, không đòi quyền lại và vẫn đồng bộ lên Server được.",
+            "tech": "Không bật lại prompt xin quyền khi mở app nếu SQLite đã có dữ liệu; chỉ mở Cài đặt khi danh bạ trống hoàn toàn hoặc người dùng chủ động bấm 'Cập nhật danh bạ thiết bị'."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/Database/UserContactDatabaseHelper.swift"]
+          }
+        },
+        {
+          "id": "ct-device-import",
+          "label": "Chủ động bấm 'Cập nhật danh bạ thiết bị'",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Để tránh tự ý thay đổi dữ liệu, ứng dụng chỉ quét bổ sung số mới lưu trên iPhone khi người dùng bấm nút '+' -> 'Cập nhật danh bạ thiết bị'.",
+            "tech": "Yêu cầu quyền CNContactStore đang bật, đọc danh bạ máy và upsert vào SQLite mà không ghi đè các liên hệ đã có trên Server."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/UserContactService.swift"]
+          }
+        },
+        {
+          "id": "ct-server-sync",
+          "label": "Đồng bộ hai chiều với Server VBot",
+          "kind": "external",
+          "audience": "all",
+          "summary": {
+            "overview": "Đẩy các liên hệ có biểu tượng Điện thoại lên Server VBot để đổi sang biểu tượng VBot; khi đăng nhập máy mới tự động tải về và gộp thông minh (ưu tiên bản trên Server nếu trùng số).",
+            "tech": "Gọi API đồng bộ đẩy danh sách chưa synced và tải GET /api/user-contact/get-all để replaceServerContacts / merge theo số điện thoại chuẩn hóa."
+          },
+          "techDetail": {
+            "apisOrEvents": ["GET /api/user-contact/get-all", "APIService+UserContact sync"],
+            "codeRefs": [
+              "VBot/Service/API/Endpoints/APIService+UserContact.swift",
+              "VBot/Service/UserContactService.swift"
+            ]
+          }
+        },
+        {
+          "id": "ct-failed-phones",
+          "label": "Mở Bottom Sheet xử lý các số không hợp lệ (failed_phones)",
+          "kind": "error",
+          "audience": "all",
+          "summary": {
+            "overview": "Nếu trong danh bạ máy có số điện thoại bị sai định dạng không đẩy lên Server được, hệ thống liệt kê rõ và cho phép bấm 'Xoá' hàng loạt ngay trong 1 bước.",
+            "tech": "Hiển thị danh sách failed_phones từ phản hồi API trong Bottom Sheet (tích sẵn tối đa 50 số) để gọi deleteContactsByLocalKeys."
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-cs-1", "source": "ct-perm-check", "target": "ct-perm-revoked", "label": "Đã có dữ liệu nhưng tắt quyền" },
+        { "id": "e-cs-2", "source": "ct-perm-check", "target": "ct-device-import", "label": "Có quyền & quét thêm từ máy" },
+        { "id": "e-cs-3", "source": "ct-perm-revoked", "target": "ct-server-sync", "label": "Bấm Đồng bộ lên app" },
+        { "id": "e-cs-4", "source": "ct-device-import", "target": "ct-server-sync", "label": "Bấm Đồng bộ lên app" },
+        { "id": "e-cs-5", "source": "ct-server-sync", "target": "ct-failed-phones", "label": "Có số điện thoại lỗi" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-contact-sync-happy",
+          "name": "Quét danh bạ máy và đồng bộ lên Server VBot",
+          "description": "Cập nhật số mới từ iPhone rồi đẩy lên tài khoản VBot để dùng trên nhiều thiết bị.",
+          "audience": "all",
+          "nodeIds": ["ct-perm-check", "ct-device-import", "ct-server-sync"],
+          "edgeIds": ["e-cs-2", "e-cs-4"]
+        },
+        {
+          "id": "sc-contact-revoked-perm",
+          "name": "Đã nạp danh bạ nhưng sau đó tắt quyền iPhone",
+          "description": "App giữ nguyên danh bạ trong bộ nhớ và vẫn cho đồng bộ lên Server mà không hỏi quyền lại.",
+          "audience": "all",
+          "nodeIds": ["ct-perm-check", "ct-perm-revoked", "ct-server-sync"],
+          "edgeIds": ["e-cs-1", "e-cs-3"]
+        }
+      ]
+    },
+    "contact-crud-batch": {
+      "title": "Thao tác Thêm / Sửa / Xoá hàng loạt & Gọi nhanh",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["ct-plus-menu"],
+      "nodes": [
+        {
+          "id": "ct-plus-menu",
+          "label": "Mở menu '+', Vuốt trái hoặc Nhấn giữ dòng liên hệ",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Người dùng bấm nút '+' góc phải để Thêm liên hệ / Xoá nhiều, hoặc vuốt trái / nhấn giữ 0.45s ngay trên dòng liên hệ để thao tác nhanh.",
+            "tech": "Hỗ trợ Popover menu từ nút '+', Swipe trái (Sửa/Đồng bộ/Xoá) và Long-press 0.45s bật Multi-Select Bar (giới hạn 50 mục/lần)."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"]
+          }
+        },
+        {
+          "id": "ct-action-type",
+          "label": "Chọn thao tác: Thêm/Sửa/Xoá hay Gọi điện?",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Tùy nhu cầu, người dùng lưu chỉnh sửa danh bạ (hoặc xoá tối đa 50 số cùng lúc) hoặc thực hiện cuộc gọi tới liên hệ đó.",
+            "tech": "Phân nhánh giữa REST API CRUD và hành động Bridge make_call."
+          }
+        },
+        {
+          "id": "ct-crud-api",
+          "label": "Lưu thay đổi hoặc Xoá tối đa 50 liên hệ cùng lúc",
+          "kind": "external",
+          "audience": "all",
+          "summary": {
+            "overview": "Cập nhật thông tin liên hệ mới hoặc xoá đồng thời cả các số trên máy lẫn trên Server VBot tối đa 50 liên hệ mỗi đợt.",
+            "tech": "Gọi POST /user-contact/insert, /update, /delete kết hợp deleteContactsByLocalKeys trong SQLite qua UserContactService."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/user-contact/detail",
+              "POST /api/user-contact/insert",
+              "POST /api/user-contact/update",
+              "POST /api/user-contact/delete"
+            ],
+            "codeRefs": [
+              "VBot/Service/UserContactService.swift",
+              "VBot/Service/API/Endpoints/APIService+UserContact.swift"
+            ]
+          }
+        },
+        {
+          "id": "ct-quick-call",
+          "label": "Gọi ngay từ Liên hệ hoặc Bàn phím nổi",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Bấm nút Gọi trên dòng liên hệ (hoặc mở Bàn phím số nổi góc dưới phải để thấy gợi ý tên khớp) và chuyển thẳng sang màn hình gọi.",
+            "tech": "Bắn lệnh make_call kèm sẵn tên liên hệ và số điện thoại sang luồng gọi đi để giữ nguyên tên hiển thị."
+          },
+          "relatedNodeIds": ["call-out-start"]
+        }
+      ],
+      "edges": [
+        { "id": "e-cb-1", "source": "ct-plus-menu", "target": "ct-action-type" },
+        { "id": "e-cb-2", "source": "ct-action-type", "target": "ct-crud-api", "label": "Thêm / Sửa / Xoá <= 50" },
+        { "id": "e-cb-3", "source": "ct-action-type", "target": "ct-quick-call", "label": "Gọi điện" }
+      ]
+    },
+    "contact-forward-v2": {
+      "title": "Danh bạ chuyển tiếp (Contact V2)",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["ctv2-open"],
+      "nodes": [
+        {
+          "id": "ctv2-open",
+          "label": "Mở Tab Chuyển tiếp hoặc Danh bạ trong cuộc gọi",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Truy cập danh sách các đơn vị/tổ chức chuyển tiếp ở Tab thứ 2 trên thanh điều hướng hoặc ngay trong popup Chuyển tiếp khi đang nghe máy.",
+            "tech": "ContactForwardViewController (nhúng Mini App vb-ma-contact-forward) và ContactV2ViewController (dùng trong modal chuyển tiếp cuộc gọi)."
+          },
+          "media": [
+            {
+              "src": "/media/contacts/contact-v2.webp",
+              "caption": "Màn hình tra cứu Danh bạ chuyển tiếp theo địa bàn",
+              "type": "image",
+              "frame": "phone",
+              "audience": "all"
+            }
+          ],
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
+              "VBot/Controller/NewController/ContactV2/ContactV2ViewController.swift"
+            ]
+          }
+        },
+        {
+          "id": "ctv2-filter",
+          "label": "Tìm kiếm & Lọc nâng cao theo địa bàn / đơn vị",
+          "kind": "process",
+          "audience": "all",
+          "summary": {
+            "overview": "Tìm theo tên đơn vị, số điện thoại hoặc lọc nhanh theo Tỉnh/Thành, Phường/Xã, nhóm đơn vị hành chính.",
+            "tech": "ContactV2AdvancedFilterBottomSheet lọc dữ liệu qua ContactV2Repository và SQLite cache địa phương."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/ContactV2/ContactV2AdvancedFilterBottomSheet.swift",
+              "VBot/Service/ContactV2/ContactV2Repository.swift"
+            ]
+          }
+        },
+        {
+          "id": "ctv2-action",
+          "label": "Thêm/Sửa đơn vị hoặc Bấm gọi / Chuyển tiếp trực tiếp",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Cập nhật thông tin đơn vị (theo phân quyền) hoặc bấm nút gọi/chuyển cuộc gọi ngay tới số điện thoại của đơn vị đó.",
+            "tech": "Mở ContactV2FormViewController để thêm/sửa, hoặc truyền số đích sang luồng chuyển tiếp cuộc gọi (Blind Transfer)."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Controller/NewController/ContactV2/ContactV2FormViewController.swift"]
+          },
+          "relatedNodeIds": ["call-tr-open"]
+        }
+      ],
+      "edges": [
+        { "id": "e-v2-1", "source": "ctv2-open", "target": "ctv2-filter" },
+        { "id": "e-v2-2", "source": "ctv2-filter", "target": "ctv2-action" }
+      ]
+    }
+  }
+}
