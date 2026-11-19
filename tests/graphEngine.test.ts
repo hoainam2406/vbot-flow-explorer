@@ -169,4 +169,81 @@ describe('graphEngine', () => {
     expect(jsonText).not.toContain('executeGetLocal');
     expect(jsonText).not.toContain('getLocalContactsState');
   });
+
+  it('strips tech-only miniapp representative nodes, nested subtrees, and relatedNodeIds in sanitizeForPublic and overview mode', () => {
+    const modWithMiniApp: FlowModuleFile = {
+      schemaVersion: '1.0',
+      moduleId: 'mod-call',
+      subtrees: {
+        'mod-call': {
+          title: 'Chi tiết Gọi',
+          layoutHint: 'flow',
+          entryNodeIds: ['n1', 'ma-demo'],
+          nodes: [
+            {
+              id: 'n1',
+              label: 'Nhận Push',
+              kind: 'external',
+              audience: 'all',
+              summary: { overview: 'Push' },
+              relatedNodeIds: ['ma-demo'],
+            },
+            {
+              id: 'ma-demo',
+              label: 'Mini App: Danh bạ cá nhân',
+              kind: 'miniapp' as SubtreeDefinition['nodes'][number]['kind'],
+              audience: 'tech',
+              summary: { overview: 'Mini App demo', tech: 'Host <-> Mini App bridge' },
+            },
+          ],
+          edges: [],
+        },
+        'ma-demo': {
+          title: 'Luồng Mini App Demo',
+          layoutHint: 'flow',
+          direction: 'LR',
+          entryNodeIds: ['ma-step-1'],
+          nodes: [
+            {
+              id: 'ma-step-1',
+              label: 'Xoá SQLite từ Mini App',
+              kind: 'process',
+              audience: 'tech',
+              summary: { overview: 'Xoá local SQLite' },
+              techDetail: {
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-user-contact',
+                  embedMode: 'inline_tab',
+                  messages: [
+                    {
+                      direction: 'miniapp_to_host',
+                      name: 'user_contact_delete_local',
+                      examplePayload: '{"syncedIds":[101]}',
+                    },
+                  ],
+                },
+              } as SubtreeDefinition['nodes'][number]['techDetail'],
+            },
+          ],
+          edges: [],
+        },
+      },
+    };
+
+    const dataset = mergeDataset(manifest, [modWithMiniApp]);
+
+    const overviewFlow = buildVisibleTreeFlow(dataset, new Set(['mod-call', 'ma-demo']), 'overview');
+    expect(overviewFlow.nodes.map((n) => n.id)).toEqual(['root', 'mod-call', 'n1']);
+
+    const techFlow = buildVisibleTreeFlow(dataset, new Set(['mod-call', 'ma-demo']), 'tech');
+    expect(techFlow.nodes.map((n) => n.id)).toContain('ma-demo');
+    expect(techFlow.nodes.map((n) => n.id)).toContain('ma-step-1');
+
+    const pub = sanitizeForPublic(dataset);
+    const pubJson = JSON.stringify(pub);
+    expect(pubJson).not.toContain('ma-demo');
+    expect(pubJson).not.toContain('syncedIds');
+    expect(pubJson).not.toContain('examplePayload');
+    expect(pub.subtreesByParentId['mod-call'].nodes[0].relatedNodeIds).toBeUndefined();
+  });
 });

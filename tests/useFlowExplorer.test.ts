@@ -188,4 +188,33 @@ describe('createFlowExplorerState', () => {
       'b1-1',
     ]);
   });
+
+  it('includes kind miniapp tech nodes in search only in tech mode', () => {
+    const withMiniAppNode: MergedFlowDataset = {
+      ...sampleDataset,
+      subtreesByParentId: {
+        ...sampleDataset.subtreesByParentId,
+        b2: {
+          title: 'Sub 2',
+          layoutHint: 'flow',
+          entryNodeIds: ['ma-user-contact'],
+          nodes: [
+            {
+              id: 'ma-user-contact',
+              label: 'Mini App: Danh bạ cá nhân (vb-ma-user-contact)',
+              kind: 'miniapp' as MergedFlowDataset['rootNode']['kind'],
+              audience: 'tech',
+              summary: { overview: 'Mini App Danh bạ' },
+            },
+          ],
+          edges: [],
+        },
+      },
+    };
+
+    expect(searchFlowNodes(withMiniAppNode, 'Danh bạ cá nhân', 'overview')).toEqual([]);
+    expect(searchFlowNodes(withMiniAppNode, 'Danh bạ cá nhân', 'tech').map((h) => h.node.id)).toEqual([
+      'ma-user-contact',
+    ]);
+  });
 });

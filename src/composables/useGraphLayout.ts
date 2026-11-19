@@ -84,7 +84,7 @@ export function computeDagreGraphLayout(
   const dims = new Map<string, { w: number; h: number }>();
   for (const node of flowNodes) {
     const hasMedia = (node.media?.length ?? 0) > 0;
-    const w = node.kind === 'module' ? 250 : 230;
+    const w = node.kind === 'module' || node.kind === 'miniapp' ? 250 : 230;
     const h = showMedia && hasMedia ? 196 : 100;
     dims.set(node.id, { w, h });
     g.setNode(node.id, { width: w, height: h });

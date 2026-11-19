@@ -25,6 +25,11 @@ const KIND_STYLE_MAP: Record<NodeKind, { label: string; card: string; badge: str
     card: 'border-indigo-300 bg-indigo-50/95',
     badge: 'bg-indigo-600 text-white',
   },
+  miniapp: {
+    label: 'Mini App',
+    card: 'border-cyan-400 bg-cyan-50/95',
+    badge: 'bg-cyan-600 text-white',
+  },
   action: {
     label: 'Thao tác',
     card: 'border-blue-300 bg-blue-50/95',
@@ -138,7 +143,7 @@ const onToggleBranch = () => {
           Kỹ thuật
         </span>
         <span
-          v-if="enableTechMode && hasMiniAppBridge"
+          v-if="enableTechMode && hasMiniAppBridge && props.data.kind !== 'miniapp'"
           class="inline-flex shrink-0 items-center rounded-md border border-cyan-300 bg-cyan-50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-800"
         >
           Mini App

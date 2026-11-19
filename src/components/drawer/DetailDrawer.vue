@@ -18,6 +18,7 @@ const enableTechMode = __ENABLE_TECH_MODE__;
 
 const KIND_BADGE_MAP: Record<NodeKind, { label: string; cls: string }> = {
   module: { label: 'Module', cls: 'bg-indigo-600 text-white' },
+  miniapp: { label: 'Mini App', cls: 'bg-cyan-600 text-white' },
   action: { label: 'Thao tác', cls: 'bg-blue-600 text-white' },
   process: { label: 'Xử lý', cls: 'bg-violet-600 text-white' },
   decision: { label: 'Điều kiện', cls: 'bg-amber-500 text-white' },
@@ -44,9 +45,11 @@ const isFocusedHere = computed(
 
 const relatedNodes = computed(() => {
   const ids = node.value?.relatedNodeIds ?? [];
+  const mode = explorer.audienceMode.value;
   return ids
     .map((id) => explorer.findNode(id))
-    .filter((target): target is NonNullable<typeof target> => Boolean(target));
+    .filter((target): target is NonNullable<typeof target> => Boolean(target))
+    .filter((target) => mode === 'tech' || target.audience === 'all');
 });
 </script>
 

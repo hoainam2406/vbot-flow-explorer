@@ -182,4 +182,82 @@ describe('validateDataset', () => {
     };
     expect(validateDataset(validManifest, [withInvalidBridge]).length).toBeGreaterThan(0);
   });
+
+  it('supports kind miniapp and optional examplePayload / exampleResponse JSON examples', () => {
+    const withMiniAppKind = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Mini App: Danh bạ cá nhân',
+              kind: 'miniapp',
+              audience: 'tech',
+              summary: { overview: 'Đại diện Mini App' },
+              techDetail: {
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-user-contact',
+                  embedMode: 'inline_tab',
+                  messages: [
+                    {
+                      direction: 'miniapp_to_host',
+                      name: 'user_contact_delete_local',
+                      hostFn: 'UserContactMiniAppBridgeHelper.executeDeleteLocal',
+                      miniAppFn: 'deleteLocalContactsViaHost(syncedIds, unsyncedLocalKeys)',
+                      examplePayload: '{\n  "request_id": "req_04",\n  "action": "user_contact_delete_local"\n}',
+                      exampleResponse: '{\n  "request_id": "req_04",\n  "success": true,\n  "deletedCount": 2\n}',
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [withMiniAppKind])).toEqual([]);
+
+    const parsedWithExample = BridgeMessageSchema.parse({
+      direction: 'miniapp_to_host',
+      name: 'user_contact_delete_local',
+      examplePayload: '{"request_id":"req_04"}',
+      exampleResponse: '{"success":true}',
+    });
+    expect(parsedWithExample.examplePayload).toBe('{"request_id":"req_04"}');
+    expect(parsedWithExample.exampleResponse).toBe('{"success":true}');
+
+    const withEmptyExamplePayload = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Empty Example',
+              kind: 'miniapp',
+              audience: 'tech',
+              summary: { overview: 'Bad' },
+              techDetail: {
+                miniAppBridge: {
+                  miniAppId: 'vb-ma-user-contact',
+                  embedMode: 'inline_tab',
+                  messages: [
+                    {
+                      direction: 'miniapp_to_host',
+                      name: 'user_contact_get_local',
+                      examplePayload: '',
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [withEmptyExamplePayload]).length).toBeGreaterThan(0);
+  });
 });

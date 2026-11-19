@@ -8,9 +8,11 @@
       "direction": "LR",
       "entryNodeIds": [
         "contact-personal",
+        "ma-user-contact",
         "contact-sync-perm",
         "contact-crud-batch",
-        "contact-forward-v2"
+        "contact-forward-v2",
+        "ma-contact-forward"
       ],
       "nodes": [
         {
@@ -216,6 +218,43 @@
               ]
             }
           }
+        },
+        {
+          "id": "ma-user-contact",
+          "label": "Mini App: Danh bạ cá nhân (vb-ma-user-contact)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Lá đại diện Mini App Danh bạ cá nhân (vb-ma-user-contact) nhúng trong Tab 3: bấm '+12' để bung 4 luồng giao tiếp Host ↔ Mini App (Nạp danh bạ máy, Thêm/Sửa, Xoá & Chống lặp, Gọi nhanh) và chạy 4 kịch bản ví dụ.",
+            "tech": "Host iOS (UserContactsMiniAppViewController + UserContactMiniAppBridgeHelper) giữ SQLite user_contacts theo uid và CNContactStore; Mini App Svelte (hostBridge.ts + userContactStore.svelte.ts) gọi REST API Thêm/Sửa/Xoá trên Server trước rồi gọi Bridge đồng bộ ngược lại Host SQLite."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift",
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts",
+              "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts"
+            ]
+          },
+          "relatedNodeIds": ["contact-personal", "miniapp-list"]
+        },
+        {
+          "id": "ma-contact-forward",
+          "label": "Mini App: Danh bạ chuyển tiếp (vb-ma-contact-forward)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Lá đại diện Mini App Danh bạ chuyển tiếp (vb-ma-contact-forward) nhúng ở Tab 1 và mở modal 'add': bấm '+4' để xem luồng mở Tab/Modal, refresh_data, kiểm tra quyền CRM và make_call.",
+            "tech": "ContactForwardViewController nhúng WebView embedded và mở modal toàn màn hình startParam='add' (hoặc open_mini_app 'edit/{id}' từ contact-item.svelte)."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
+              "vb-ma-contact-forward/src/routes/+page.svelte",
+              "vb-ma-contact-forward/src/lib/components/contact-item.svelte"
+            ]
+          },
+          "relatedNodeIds": ["contact-forward-v2", "miniapp-list"]
         }
       ],
       "edges": []
@@ -674,6 +713,621 @@
       "edges": [
         { "id": "e-v2-1", "source": "ctv2-open", "target": "ctv2-filter" },
         { "id": "e-v2-2", "source": "ctv2-filter", "target": "ctv2-action" }
+      ]
+    },
+    "ma-user-contact": {
+      "title": "Luồng giao tiếp Host ↔ Mini App Danh bạ cá nhân (4 ví dụ thực tế)",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": [
+        "mauc-init",
+        "mauc-plus-menu",
+        "mauc-delete-server",
+        "mauc-call-click"
+      ],
+      "nodes": [
+        {
+          "id": "mauc-init",
+          "label": "1. Host nhúng WebView Danh bạ (loadMiniApp)",
+          "kind": "action",
+          "audience": "tech",
+          "summary": {
+            "overview": "Host iOS khởi tạo Mini App Danh bạ cá nhân ở chế độ nhúng tab (startParam: 'embedded') và truyền bộ màu giao diện.",
+            "tech": "UserContactsMiniAppViewController.loadMiniApp() gọi VbMa.shared.createMiniAppViewController(...) rồi gắn WKWebView vào miniAppContainer cùng UINavigationBar native phía trên."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController",
+                  "hostFn": "UserContactsMiniAppViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
+                  "payload": "{ id, locale, startParam, extraData: { theme_params, themeParams } }",
+                  "examplePayload": "{\n  \"id\": \"vb-ma-user-contact\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": {\n      \"bg_color\": \"#FFFFFF\",\n      \"text_color\": \"#111827\"\n    }\n  }\n}",
+                  "note": "Khi Mini App báo 'ready', SDK mở khóa hàng đợi sự kiện và đẩy refresh_data / theme_changed vào JS."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-get-local",
+          "label": "2. Mini App đọc SQLite theo uid từ Host",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Ngay khi khởi chạy, Mini App yêu cầu Host trả toàn bộ danh bạ đang lưu cục bộ trong SQLite của tài khoản hiện tại.",
+            "tech": "userContactStore.init() gọi getLocalContactsState() -> request_host_action('user_contact_get_local'); Host đọc SQLite user_contacts theo uid cùng trạng thái quyền CNContactStore."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts",
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "postEvent('request_host_action') → MiniAppService.onHostActionRequested → executeGetLocal",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_get_local",
+                  "hostFn": "MiniAppService.onHostActionRequested(...) → UserContactMiniAppBridgeHelper.executeGetLocal(requestId:uid:)",
+                  "miniAppFn": "userContactStore.init() → getLocalContactsState() → postEvent(\"request_host_action\")",
+                  "payload": "{ request_id, action: 'user_contact_get_local', payload: {} }",
+                  "response": "{ request_id, success, uid, permissionStatus, hasImportedDevice, contacts[] }",
+                  "examplePayload": "{\n  \"request_id\": \"req_01\",\n  \"action\": \"user_contact_get_local\",\n  \"payload\": {}\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_01\",\n  \"success\": true,\n  \"uid\": \"u_8842\",\n  \"permissionStatus\": \"not_determined\",\n  \"hasImportedDevice\": false,\n  \"contacts\": []\n}",
+                  "note": "Sau đó Store gọi tiếp refreshServerContactsViaHost() để gộp danh bạ Server; nếu permissionStatus == 'not_determined' mới chuyển sang quét danh bạ iPhone."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-import-device",
+          "label": "3. Host quét danh bạ iPhone (CNContactStore) & lưu SQLite",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Host iOS đọc danh bạ từ máy iPhone, lưu vào SQLite theo tài khoản rồi trả mảng contacts[] mới về Mini App.",
+            "tech": "Chỉ tự chạy khi permissionStatus == 'not_determined' ở lần đầu hoặc khi người dùng chủ động bấm 'Cập nhật danh bạ thiết bị' trên menu '+' (giữ nguyên danh bạ đã lưu nếu user tắt quyền sau đó)."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift",
+              "VBot/Service/UserContactService.swift",
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "UserContactMiniAppBridgeHelper.handleAction → UserContactService.fetchDeviceContacts",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_import_device",
+                  "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.fetchDeviceContacts(requestPermissionIfNeeded:) → executeGetLocal(...)",
+                  "miniAppFn": "importDeviceContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_import_device\")",
+                  "payload": "{ request_id, action: 'user_contact_import_device', payload: { requestPermission?: Bool } }",
+                  "response": "{ request_id, success, granted, uid, permissionStatus, hasImportedDevice, contacts[] }",
+                  "examplePayload": "{\n  \"request_id\": \"req_02\",\n  \"action\": \"user_contact_import_device\",\n  \"payload\": {\n    \"requestPermission\": true\n  }\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_02\",\n  \"success\": true,\n  \"granted\": true,\n  \"uid\": \"u_8842\",\n  \"permissionStatus\": \"authorized\",\n  \"hasImportedDevice\": true,\n  \"contacts\": [\n    {\n      \"id\": 0,\n      \"localKey\": \"dev_0912345678\",\n      \"uid\": \"u_8842\",\n      \"fullName\": \"Nguyễn Văn A\",\n      \"phone\": \"0912345678\",\n      \"avatarColor\": \"#2563EB\",\n      \"isSynced\": false,\n      \"sectionLetter\": \"N\"\n    }\n  ]\n}",
+                  "note": "Liên hệ chỉ mới có trên máy mang id = 0, isSynced = false, localKey = 'dev_<phone>'."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-render-list",
+          "label": "4. Mini App nhận contacts[] & hiển thị A-Z",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Mini App chuẩn hóa mảng contacts[], phân nhóm A-Z và hiển thị icon Điện thoại (chưa sync) hoặc VBot (đã sync).",
+            "tech": "applyHostResponse(res) + normalizeBridgeContacts() + groupContactsByAlphabet(); nếu danh sách trống và bị từ chối quyền, cho phép gọi openAppSettingsViaHost() ('user_contact_open_settings')."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "applyHostResponse(res) / openAppSettingsViaHost()",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_open_settings",
+                  "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UIApplication.shared.open(UIApplication.openSettingsURLString)",
+                  "miniAppFn": "openAppSettingsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_open_settings\")",
+                  "payload": "{ request_id, action: 'user_contact_open_settings', payload: {} }",
+                  "response": "{ request_id, success }",
+                  "examplePayload": "{\n  \"request_id\": \"req_06\",\n  \"action\": \"user_contact_open_settings\",\n  \"payload\": {}\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_06\",\n  \"success\": true\n}",
+                  "note": "Chỉ kích hoạt khi danh sách trống hoàn toàn và user bấm nút mở Cài đặt quyền Danh bạ iOS."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-plus-menu",
+          "label": "1. Host bấm '+' native → bật Popover menu Mini App",
+          "kind": "action",
+          "audience": "tech",
+          "summary": {
+            "overview": "Người dùng chạm nút '+' trên thanh tiêu đề iOS; Host đẩy sự kiện sang Mini App để mở menu Thêm / Đồng bộ / Xoá nhiều.",
+            "tech": "UserContactsMiniAppViewController.handlePlusTapped() gọi miniAppVC?.emitEvent('toggle_actions_menu'); phía JS onToggleActionsMenu() gọi toggleActionsMenu()."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "UIBarButtonItem (+) → miniAppVC.emitEvent('toggle_actions_menu')",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "toggle_actions_menu",
+                  "hostFn": "UserContactsMiniAppViewController.handlePlusTapped() → miniAppVC?.emitEvent(\"toggle_actions_menu\", data: [:])",
+                  "miniAppFn": "onToggleActionsMenu(cb) [hostBridge.ts] → userContactStore.toggleActionsMenu()",
+                  "payload": "{}",
+                  "examplePayload": "{}",
+                  "note": "Minh họa rõ sự phối hợp UI Native (UINavigationBar '+') điều khiển Popover bên trong WKWebView."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-crud-api",
+          "label": "2. Mini App gọi REST API Thêm / Sửa trên Server",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Sau khi nhập form Thêm hoặc Sửa trong Mini App, JS gọi thẳng REST API lên Server VBot bằng MiniAppToken.",
+            "tech": "userContactStore.saveContact() gọi insertSingleContact() (POST /api/user-contact/insert) hoặc updateServerContact() (POST /api/user-contact/update) kèm Bearer MiniAppToken; nếu 401 SDK tự refreshHostToken."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "POST /api/user-contact/insert",
+              "GET /api/user-contact/detail",
+              "POST /api/user-contact/update"
+            ],
+            "codeRefs": [
+              "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
+              "vb-ma-user-contact/src/lib/api/userContactApi.ts"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "saveContact() xin MiniAppToken rồi gọi REST API Server",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "request_mini_app_token",
+                  "hostFn": "MiniAppService.prewarmMiniAppTokenIfNeeded(force:) → VbMaViewController.sendEvent(\"mini_app_token_result\", payload:)",
+                  "miniAppFn": "getAuthHeader() [token.ts] → requestMiniAppToken(timeoutMs) → saveContact() gửi POST /api/user-contact/insert|/update",
+                  "payload": "{ request_id } (REST body: { uid, items: [{ full_name, phone }] } hoặc { uid, id, full_name, phone })",
+                  "response": "{ success_count, fail_count, failed_phones[] }",
+                  "examplePayload": "{\n  \"uid\": \"u_8842\",\n  \"items\": [\n    {\n      \"full_name\": \"Trần Thị B\",\n      \"phone\": \"0988111222\"\n    }\n  ]\n}",
+                  "exampleResponse": "{\n  \"status\": 200,\n  \"error\": 0,\n  \"data\": {\n    \"success_count\": 1,\n    \"fail_count\": 0,\n    \"failed_phones\": []\n  }\n}",
+                  "note": "Mini App không sửa thẳng SQLite của Host mà đẩy qua Server API trước để đảm bảo dữ liệu đồng nhất giữa mọi thiết bị."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-refresh-host",
+          "label": "3. Mini App gọi ngược Host kéo Server vào SQLite",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Ngay sau khi Thêm/Sửa thành công trên Server, Mini App yêu cầu Host tải lại dữ liệu Server về SQLite và trả danh sách mới.",
+            "tech": "saveContact() gọi refreshServerContactsViaHost() -> action 'user_contact_refresh_server'; Host chạy UserContactService.loadContacts() cập nhật SQLite rồi executeGetLocal trả contacts[] đã có srv_<id>."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift",
+              "VBot/Service/UserContactService.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "refreshServerContactsViaHost() → UserContactService.loadContacts → executeGetLocal",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_refresh_server",
+                  "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → UserContactService.shared.loadContacts(...) → executeGetLocal(...)",
+                  "miniAppFn": "saveContact() → refreshServerContactsViaHost() [hostBridge.ts] → requestHostAction(\"user_contact_refresh_server\")",
+                  "payload": "{ request_id, action: 'user_contact_refresh_server', payload: {} }",
+                  "response": "{ request_id, success, uid, permissionStatus, hasImportedDevice, contacts[] }",
+                  "examplePayload": "{\n  \"request_id\": \"req_03\",\n  \"action\": \"user_contact_refresh_server\",\n  \"payload\": {}\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_03\",\n  \"success\": true,\n  \"uid\": \"u_8842\",\n  \"permissionStatus\": \"authorized\",\n  \"hasImportedDevice\": true,\n  \"contacts\": [\n    {\n      \"id\": 102,\n      \"localKey\": \"srv_102\",\n      \"uid\": \"u_8842\",\n      \"fullName\": \"Trần Thị B\",\n      \"phone\": \"0988111222\",\n      \"avatarColor\": \"#10B981\",\n      \"isSynced\": true,\n      \"sectionLetter\": \"T\"\n    }\n  ]\n}",
+                  "note": "Bước bắt buộc để SQLite trên Host có ngay bản ghi vừa tạo/sửa, giúp cuộc gọi đến CallKit tra ra đúng tên."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-delete-server",
+          "label": "1. Mini App tách syncedIds & xoá Server trước",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Khi Xoá 1 hoặc nhiều liên hệ (tối đa 50), Mini App tách các số đã đồng bộ (syncedIds) để gọi API xoá trên Server trước.",
+            "tech": "executeDeleteItems() gọi partitionForDelete(items); nếu có syncedIds thì chạy deleteSyncedContactsInBatches() (POST /api/user-contact/delete) — lỗi Server sẽ dừng ngay, tuyệt đối không xoá SQLite local."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "POST /api/user-contact/delete"
+            ],
+            "codeRefs": [
+              "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
+              "vb-ma-user-contact/src/lib/api/userContactApi.ts"
+            ],
+            "outputs": [
+              "syncedIds: [101] (gửi POST /api/user-contact/delete với { uid: 'u_8842', ids: [101] })",
+              "unsyncedLocalKeys: ['dev_0909888777'] (chuyển sang bước Bridge xoá SQLite)"
+            ]
+          }
+        },
+        {
+          "id": "mauc-delete-host",
+          "label": "2. Mini App gọi Host xoá SQLite (user_contact_delete_local)",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Sau khi Server xác nhận xoá xong (hoặc với số chỉ có trên máy), Mini App gửi cả 2 danh sách ID sang Host để dọn sạch SQLite.",
+            "tech": "deleteLocalContactsViaHost(syncedIds, unsyncedLocalKeys) gọi executeDeleteLocal(): parseDeletePayload(), xoá syncedIds và unsyncedLocalKeys trong SQLite rồi trả deletedCount và contacts[] còn lại."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts",
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "deleteLocalContactsViaHost() → UserContactMiniAppBridgeHelper.executeDeleteLocal",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "user_contact_delete_local",
+                  "hostFn": "UserContactMiniAppBridgeHelper.handleAction(...) → executeDeleteLocal(requestId:uid:payload:) → deleteServerContacts + deleteContactsByLocalKeys",
+                  "miniAppFn": "deleteLocalContactsViaHost([101], [\"dev_0909888777\"]) [hostBridge.ts] → requestHostAction(\"user_contact_delete_local\")",
+                  "payload": "{ request_id, action: 'user_contact_delete_local', payload: { syncedIds?: Int64[], unsyncedLocalKeys?: String[] } }",
+                  "response": "{ request_id, success, uid, deletedCount, permissionStatus, hasImportedDevice, contacts[] }",
+                  "examplePayload": "{\n  \"request_id\": \"req_04\",\n  \"action\": \"user_contact_delete_local\",\n  \"payload\": {\n    \"syncedIds\": [101],\n    \"unsyncedLocalKeys\": [\"dev_0909888777\"]\n  }\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_04\",\n  \"success\": true,\n  \"uid\": \"u_8842\",\n  \"deletedCount\": 2,\n  \"permissionStatus\": \"authorized\",\n  \"hasImportedDevice\": true,\n  \"contacts\": []\n}",
+                  "note": "Trả trực tiếp mảng contacts[] còn lại để Store cập nhật UI ngay lập tức mà không cần đọc lại lần 2."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-loop-guard",
+          "label": "3. Host bắn Noti & Chống lặp (source: miniapp_bridge)",
+          "kind": "decision",
+          "audience": "tech",
+          "summary": {
+            "overview": "Host gắn nhãn 'miniapp_bridge' khi báo toàn app SQLite vừa đổi để không bắn ngược lại sự kiện vào chính Mini App vừa ra lệnh xoá.",
+            "tech": "executeDeleteLocal gắn userInfo['source'] = 'miniapp_bridge' lên reloadUserContactNoti; UserContactsMiniAppViewController bỏ qua các noti có source này và chỉ emit 'user_contacts_updated' khi SQLite đổi từ phía Native."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/UserContactMiniAppBridgeHelper.swift",
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift",
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "handleReloadUserContacts(_:) → emitEvent('user_contacts_updated')",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "user_contacts_updated",
+                  "hostFn": "UserContactsMiniAppViewController.handleReloadUserContacts(_:) → miniAppVC?.emitEvent(\"user_contacts_updated\", data:)",
+                  "miniAppFn": "onUserContactsUpdated(cb) [hostBridge.ts] → userContactStore.reloadLocal()",
+                  "payload": "{ reason: 'local_db_changed' }",
+                  "examplePayload": "{\n  \"reason\": \"local_db_changed\"\n}",
+                  "note": "Nếu thay đổi xuất phát từ Mini App (source == 'miniapp_bridge'), Host không emit lại event này — chặn đứng vòng lặp xoá → noti → reload."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-call-click",
+          "label": "1. Mini App bấm Gọi liên hệ (makeCallViaHost)",
+          "kind": "action",
+          "audience": "tech",
+          "summary": {
+            "overview": "Người dùng bấm nút Gọi trên dòng liên hệ hoặc bottom sheet chi tiết; Mini App truyền SĐT + Tên sang Host App.",
+            "tech": "userContactStore.callContact(contact) gọi makeCallViaHost() -> makeCall({ phoneNumber, displayName, avatarColor }) của @vbotma/sdk."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "vb-ma-user-contact/src/lib/stores/userContactStore.svelte.ts",
+              "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "makeCallViaHost(contact) → makeCall(params) (@vbotma/sdk)",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "make_call",
+                  "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...)",
+                  "miniAppFn": "callContact(contact) → makeCallViaHost(contact) [hostBridge.ts] → makeCall(params) (@vbotma/sdk)",
+                  "payload": "{ request_id, phoneNumber, displayName, avatarColor }",
+                  "response": "{ request_id, success }",
+                  "examplePayload": "{\n  \"request_id\": \"req_05\",\n  \"phoneNumber\": \"0912345678\",\n  \"displayName\": \"Nguyễn Văn A\",\n  \"avatarColor\": \"#2563EB\"\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_05\",\n  \"success\": true\n}",
+                  "note": "Truyền kèm displayName ngay lúc bấm gọi giúp màn hình CallKit giữ nguyên tên liên hệ."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mauc-call-native",
+          "label": "2. Host mở cuộc gọi CallKit & giữ suppliedCallerName",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Host iOS nhận lệnh make_call, mở màn hình chọn Hotline / đàm thoại Linphone và phản hồi call_result về Mini App.",
+            "tech": "MiniAppService.onRequestCall() điều hướng sang VPMAppService.makeCall(), lưu suppliedCallerName và trả VbMaViewController.sendEvent('call_result', { request_id, success: true })."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift",
+              "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-contact",
+              "embedMode": "inline_tab",
+              "transport": "MiniAppService.onRequestCall → VPMAppService.makeCall → sendEvent('call_result')",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "make_call",
+                  "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
+                  "miniAppFn": "makeCall(params) (@vbotma/sdk) nhận Promise<CallResult> từ sự kiện call_result",
+                  "payload": "{ request_id, phoneNumber, displayName, avatarColor }",
+                  "response": "{ request_id, success }",
+                  "exampleResponse": "{\n  \"request_id\": \"req_05\",\n  \"success\": true\n}",
+                  "note": "Các bước tra cứu CRM/getInfoCall2 sau đó chỉ bổ sung avatar/idCustomer mà không ghi đè suppliedCallerName."
+                }
+              ]
+            }
+          },
+          "relatedNodeIds": ["call-out-start"]
+        }
+      ],
+      "edges": [
+        { "id": "e-mauc-1", "source": "mauc-init", "target": "mauc-get-local", "label": "Mini App → Host: user_contact_get_local", "audience": "tech" },
+        { "id": "e-mauc-2", "source": "mauc-get-local", "target": "mauc-import-device", "label": "Mini App → Host: user_contact_import_device", "audience": "tech" },
+        { "id": "e-mauc-3", "source": "mauc-import-device", "target": "mauc-render-list", "label": "Host trả contacts[]", "audience": "tech" },
+        { "id": "e-mauc-4", "source": "mauc-plus-menu", "target": "mauc-crud-api", "label": "User điền form Thêm/Sửa", "audience": "tech" },
+        { "id": "e-mauc-5", "source": "mauc-crud-api", "target": "mauc-refresh-host", "label": "Mini App → Host: user_contact_refresh_server", "audience": "tech" },
+        { "id": "e-mauc-6", "source": "mauc-delete-server", "target": "mauc-delete-host", "label": "Mini App → Host: user_contact_delete_local", "audience": "tech" },
+        { "id": "e-mauc-7", "source": "mauc-delete-host", "target": "mauc-loop-guard", "label": "Host xoá DB & trả deletedCount", "audience": "tech" },
+        { "id": "e-mauc-8", "source": "mauc-call-click", "target": "mauc-call-native", "label": "Mini App → Host: make_call", "audience": "tech" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-mauc-import",
+          "name": "VD1: Host nạp danh bạ iPhone → Mini App",
+          "description": "Host nhúng WebView (loadMiniApp) → Mini App xin user_contact_get_local → yêu cầu user_contact_import_device (CNContactStore) → nhận mảng contacts[] render A-Z.",
+          "audience": "tech",
+          "nodeIds": ["mauc-init", "mauc-get-local", "mauc-import-device", "mauc-render-list"],
+          "edgeIds": ["e-mauc-1", "e-mauc-2", "e-mauc-3"]
+        },
+        {
+          "id": "sc-mauc-add-edit",
+          "name": "VD2: Mini App Thêm/Sửa → đồng bộ Host SQLite",
+          "description": "Host bấm '+' (toggle_actions_menu) → Mini App gọi REST insert/update (MiniAppToken) → gọi ngược user_contact_refresh_server để Host kéo lại vào SQLite.",
+          "audience": "tech",
+          "nodeIds": ["mauc-plus-menu", "mauc-crud-api", "mauc-refresh-host"],
+          "edgeIds": ["e-mauc-4", "e-mauc-5"]
+        },
+        {
+          "id": "sc-mauc-delete",
+          "name": "VD3: Mini App Xoá → Host xoá SQLite & chống lặp",
+          "description": "Mini App xoá Server trước (POST /delete) → gọi user_contact_delete_local({ syncedIds, unsyncedLocalKeys }) → Host xoá SQLite & gắn source='miniapp_bridge' chặn lặp.",
+          "audience": "tech",
+          "nodeIds": ["mauc-delete-server", "mauc-delete-host", "mauc-loop-guard"],
+          "edgeIds": ["e-mauc-6", "e-mauc-7"]
+        },
+        {
+          "id": "sc-mauc-call",
+          "name": "VD4: Mini App bấm Gọi → Host mở CallKit",
+          "description": "Mini App gọi makeCallViaHost() → gửi make_call({ phoneNumber, displayName }) → Host giữ suppliedCallerName & mở màn hình gọi.",
+          "audience": "tech",
+          "nodeIds": ["mauc-call-click", "mauc-call-native"],
+          "edgeIds": ["e-mauc-8"]
+        }
+      ]
+    },
+    "ma-contact-forward": {
+      "title": "Luồng giao tiếp Host ↔ Mini App Danh bạ chuyển tiếp (vb-ma-contact-forward)",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["macf-embed"],
+      "nodes": [
+        {
+          "id": "macf-embed",
+          "label": "1. Host nhúng Tab Contact Forward (startParam: embedded)",
+          "kind": "action",
+          "audience": "tech",
+          "summary": {
+            "overview": "Host iOS nhúng Mini App vb-ma-contact-forward vào Tab 1 (Chuyển tiếp) và truyền theme_params ban đầu.",
+            "tech": "ContactForwardViewController.loadMiniApp() gọi createMiniAppViewController(id: 'vb-ma-contact-forward', startParam: 'embedded'); +page.svelte đọc retrieveLaunchParams() để nạp danh sách."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
+              "vb-ma-contact-forward/src/routes/+page.svelte"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-contact-forward",
+              "embedMode": "inline_tab",
+              "transport": "ContactForwardViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController",
+                  "hostFn": "ContactForwardViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "miniAppFn": "retrieveLaunchParams() (@vbotma/sdk/svelte)",
+                  "payload": "{ id, locale, startParam: 'embedded', extraData: { theme_params, themeParams } }",
+                  "examplePayload": "{\n  \"id\": \"vb-ma-contact-forward\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": { \"bg_color\": \"#FFFFFF\" }\n  }\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "macf-add-modal",
+          "label": "2. Host bấm '+' / Mini App mở Modal Thêm/Sửa toàn màn hình",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Nút '+' trên header iOS (nếu Admin / quyền CRM CREATE) hoặc nút Sửa trong danh sách sẽ mở instance toàn màn hình mới để tránh kẹt header tab.",
+            "tech": "Host gọi openAddContactForward() (startParam: 'add', callback onClose → refreshData()); ở dòng liên hệ, handleEdit() gọi postEvent('open_mini_app', { app_id: 'vb-ma-contact-forward', path: 'edit/{id}' })."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
+              "vb-ma-contact-forward/src/lib/components/contact-item.svelte"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-contact-forward",
+              "embedMode": "modal",
+              "transport": "openAddContactForward() / postEvent('open_mini_app')",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "openAddContactForward / open_mini_app",
+                  "hostFn": "ContactForwardViewController.openAddContactForward() → MiniAppService.openMiniApp(id:startParam: 'add')",
+                  "miniAppFn": "retrieveLaunchParams() đọc startParam='add' → goto('/add') | postEvent(\"open_mini_app\", ...)",
+                  "payload": "{ startParam: 'add' } | { app_id, path, params: { editId } }",
+                  "examplePayload": "{\n  \"app_id\": \"vb-ma-contact-forward\",\n  \"path\": \"edit/402\",\n  \"params\": { \"editId\": 402 }\n}",
+                  "note": "Khi Modal Thêm/Sửa đóng lại, callback onClose của Host tự kích hoạt refreshData() trên Tab đang nhúng."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "macf-refresh",
+          "label": "3. Host phát refresh_data & theme_changed về Tab",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Khi quay lại Tab, đổi giao diện Sáng/Tối hoặc vừa đóng Modal thêm mới, Host đẩy sự kiện để Mini App tải lại danh bạ đơn vị.",
+            "tech": "ContactForwardViewController gọi miniAppVC.emitEvent('refresh_data') / syncTheme(); +page.svelte đăng ký on('refresh_data', () => contactStore.loadContacts(true))."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
+              "vb-ma-contact-forward/src/routes/+page.svelte"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-contact-forward",
+              "embedMode": "inline_tab",
+              "transport": "ContactForwardViewController.refreshData() / syncTheme()",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "hostFn": "ContactForwardViewController.refreshData() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "miniAppFn": "on(\"refresh_data\", cb) [+page.svelte] → contactStore.loadContacts(true)",
+                  "payload": "{ reason, force }",
+                  "examplePayload": "{\n  \"reason\": \"tab_activated\",\n  \"force\": true\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "macf-perm-call",
+          "label": "4. Mini App bấm Gọi đơn vị (make_call) & Kiểm tra quyền",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Nhấn nút Gọi trên từng đơn vị (UBND / Công an / Trạm y tế) để quay số nhanh qua Host CallKit kèm tên đơn vị.",
+            "tech": "contact-item.svelte gọi makeCall(item.phone, { displayName: item.name }); MiniAppService.onRequestCall() xử lý gọi và checkPermissions('CRM', actions) kiểm tra quyền."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "vb-ma-contact-forward/src/lib/components/contact-item.svelte",
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-contact-forward",
+              "embedMode": "inline_tab",
+              "transport": "makeCall() (@vbotma/sdk/svelte) → MiniAppService.onRequestCall",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "make_call",
+                  "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
+                  "miniAppFn": "handleCall() [contact-item.svelte] → makeCall(item.phone, { displayName: item.name })",
+                  "payload": "{ request_id, phoneNumber, displayName }",
+                  "response": "{ request_id, success }",
+                  "examplePayload": "{\n  \"request_id\": \"req_11\",\n  \"phoneNumber\": \"02439998888\",\n  \"displayName\": \"UBND Phường Dịch Vọng\"\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_11\",\n  \"success\": true\n}"
+                }
+              ]
+            }
+          },
+          "relatedNodeIds": ["call-out-start"]
+        }
+      ],
+      "edges": [
+        { "id": "e-macf-1", "source": "macf-embed", "target": "macf-add-modal", "label": "Mở Modal Thêm/Sửa", "audience": "tech" },
+        { "id": "e-macf-2", "source": "macf-add-modal", "target": "macf-refresh", "label": "Đóng Modal → emit refresh_data", "audience": "tech" },
+        { "id": "e-macf-3", "source": "macf-embed", "target": "macf-perm-call", "label": "Mini App → Host: make_call", "audience": "tech" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-macf-modal",
+          "name": "VD: Mở Modal Thêm/Sửa & tự làm mới Tab Contact V2",
+          "description": "Từ Tab Danh bạ chuyển tiếp mở modal full-screen ('add' hoặc open_mini_app 'edit/{id}') → khi đóng modal Host emit refresh_data để Tab tự tải lại.",
+          "audience": "tech",
+          "nodeIds": ["macf-embed", "macf-add-modal", "macf-refresh"],
+          "edgeIds": ["e-macf-1", "e-macf-2"]
+        },
+        {
+          "id": "sc-macf-call",
+          "name": "VD: Gọi trực tiếp đơn vị từ Mini App Contact V2",
+          "description": "Chạm nút gọi trên đơn vị hành chính → Mini App gọi makeCall(phone, { displayName }) → Host quay số qua CallKit.",
+          "audience": "tech",
+          "nodeIds": ["macf-embed", "macf-perm-call"],
+          "edgeIds": ["e-macf-3"]
+        }
       ]
     }
   }

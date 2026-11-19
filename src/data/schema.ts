@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 export const NodeKindSchema = z.enum([
   'module',
+  'miniapp',
   'action',
   'process',
   'decision',
@@ -27,6 +28,8 @@ export const BridgeMessageSchema = z.object({
   miniAppFn: z.string().min(1).optional(),
   payload: z.string().optional(),
   response: z.string().optional(),
+  examplePayload: z.string().min(1).optional(),
+  exampleResponse: z.string().min(1).optional(),
   note: z.string().optional(),
 });
 

@@ -262,7 +262,7 @@
       "title": "Autodial & Call Marketing",
       "layoutHint": "tree",
       "direction": "LR",
-      "entryNodeIds": ["autodial-campaign", "call-marketing-template"],
+      "entryNodeIds": ["autodial-campaign", "ma-autodial", "call-marketing-template"],
       "nodes": [
         {
           "id": "autodial-campaign",
@@ -372,6 +372,23 @@
             ]
           },
           "relatedNodeIds": ["call-out-hotline"]
+        },
+        {
+          "id": "ma-autodial",
+          "label": "Mini App: Chiến dịch Autodial (vb-ma-auto-call-campaign)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Lá đại diện Mini App Chiến dịch gọi tự động (vb-ma-auto-call-campaign): bấm '+4' để xem 4 bước giao tiếp start/pause/resume/stop_autodial và sự kiện autodial_finished / autodial_error.",
+            "tech": "Mini App điều phối lệnh qua request_host_action -> AutodialManager.shared.handleAction; Host giữ WebSocket & máy trạng thái gọi nối tiếp."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/AutodialManager.swift",
+              "VBot/Service/MiniAppService.swift"
+            ]
+          },
+          "relatedNodeIds": ["autodial-campaign", "miniapp-list"]
         }
       ],
       "edges": []
@@ -380,7 +397,7 @@
       "title": "Tính năng & Mini App Hub",
       "layoutHint": "tree",
       "direction": "LR",
-      "entryNodeIds": ["miniapp-list", "agent-status-capsule", "monitoring-whisper"],
+      "entryNodeIds": ["miniapp-list", "agent-status-capsule", "monitoring-whisper", "ma-monitoring"],
       "nodes": [
         {
           "id": "miniapp-list",
@@ -428,7 +445,15 @@
                 }
               ]
             }
-          }
+          },
+          "relatedNodeIds": [
+            "ma-user-contact",
+            "ma-contact-forward",
+            "ma-history-call",
+            "ma-2fa-setting",
+            "ma-autodial",
+            "ma-monitoring"
+          ]
         },
         {
           "id": "agent-status-capsule",
@@ -491,6 +516,23 @@
               ]
             }
           }
+        },
+        {
+          "id": "ma-monitoring",
+          "label": "Mini App: Giám sát cuộc gọi (vb-ma-monitoring)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Lá đại diện Mini App Giám sát cuộc gọi (vb-ma-monitoring): bấm '+3' để xem luồng gửi monitor_call (nghe lén / nhắc thầm), khóa slot nguyên tử và nhận monitor_call_state_changed.",
+            "tech": "MiniAppService.onMonitorCall kết hợp MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot trước khi quay SIP 1#/2#/4#/5#<transId>."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift",
+              "VBot/Service/MiniAppMonitoringCoordinator.swift"
+            ]
+          },
+          "relatedNodeIds": ["monitoring-whisper", "miniapp-list"]
         }
       ],
       "edges": []
@@ -499,7 +541,7 @@
       "title": "Lịch sử cuộc gọi & Hotline",
       "layoutHint": "tree",
       "direction": "LR",
-      "entryNodeIds": ["call-history-recording", "hotline-project"],
+      "entryNodeIds": ["call-history-recording", "ma-history-call", "hotline-project"],
       "nodes": [
         {
           "id": "call-history-recording",
@@ -580,6 +622,22 @@
               "VBot/Controller/NewController/ProjectAccount/qListProjectViewController.swift"
             ]
           }
+        },
+        {
+          "id": "ma-history-call",
+          "label": "Mini App: Lịch sử cuộc gọi (vb-ma-user-history-call)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Lá đại diện Mini App Lịch sử cuộc gọi (vb-ma-user-history-call) nhúng trong Tab Gần đây: bấm '+4' để xem luồng đổi tab filter_changed, refresh_data sau khi tắt cuộc gọi và gọi lại make_call.",
+            "tech": "UserHistoryCallViewController giữ UISegmentedControl native để emit filter_changed và gom cờ callEndedRefreshPending cho refresh_data."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"
+            ]
+          },
+          "relatedNodeIds": ["call-history-recording", "miniapp-list"]
         }
       ],
       "edges": []
@@ -642,6 +700,423 @@
         }
       ],
       "edges": []
+    },
+    "ma-history-call": {
+      "title": "Luồng giao tiếp Host ↔ Mini App Lịch sử cuộc gọi (vb-ma-user-history-call)",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["mahc-init"],
+      "nodes": [
+        {
+          "id": "mahc-init",
+          "label": "1. Host nhúng Tab Gần đây (createMiniAppViewController)",
+          "kind": "action",
+          "audience": "tech",
+          "summary": {
+            "overview": "Host iOS nhúng Mini App vb-ma-user-history-call vào Tab Lịch sử và giữ FloatingDialPad phía trên.",
+            "tech": "UserHistoryCallViewController.loadMiniApp() gọi VbMa.shared.createMiniAppViewController(id: 'vb-ma-user-history-call', startParam: 'embedded')."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-history-call",
+              "embedMode": "inline_tab",
+              "transport": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController",
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "createMiniAppViewController",
+                  "hostFn": "UserHistoryCallViewController.loadMiniApp() → VbMa.shared.createMiniAppViewController(...)",
+                  "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
+                  "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }",
+                  "examplePayload": "{\n  \"id\": \"vb-ma-user-history-call\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": { \"bg_color\": \"#FFFFFF\" }\n  }\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mahc-filter",
+          "label": "2. Host đổi Segmented Control → emit filter_changed",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Khi user bấm nút lọc Tất cả / Cuộc gọi nhỡ trên thanh tiêu đề iOS, Host đẩy sự kiện vào Mini App để đổi bộ lọc tức thì.",
+            "tech": "handleSegmentChange(_:) gọi miniAppVC?.emitEvent('filter_changed', data: ['type': 'all' | 'missed'])."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-history-call",
+              "embedMode": "inline_tab",
+              "transport": "UISegmentedControl → emitEvent('filter_changed')",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "filter_changed",
+                  "hostFn": "UserHistoryCallViewController.handleSegmentChange(_:) → miniAppVC?.emitEvent(\"filter_changed\", data:)",
+                  "miniAppFn": "on(\"filter_changed\", cb) (@vbotma/sdk)",
+                  "payload": "{ type: 'all' | 'missed' }",
+                  "examplePayload": "{\n  \"type\": \"missed\"\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mahc-refresh",
+          "label": "3. Kết thúc cuộc gọi / Mở Tab → emit refresh_data",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Khi một cuộc gọi vừa kết thúc, Host đánh dấu cờ chờ để tự làm mới nhật ký ngay khi Tab Gần đây hiện lên.",
+            "tech": "markCallEndedRefreshPending() đặt callEndedRefreshPending = true; onTabActivated() gọi applyPendingBundleUpdate() rồi emitEvent('refresh_data', { reason: 'call_ended', force: true })."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-history-call",
+              "embedMode": "inline_tab",
+              "transport": "onTabActivated() / markCallEndedRefreshPending() → emitEvent('refresh_data')",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "refresh_data",
+                  "hostFn": "UserHistoryCallViewController.onTabActivated() / markCallEndedRefreshPending() → miniAppVC.emitEvent(\"refresh_data\", data:)",
+                  "miniAppFn": "on(\"refresh_data\", cb) (@vbotma/sdk)",
+                  "payload": "{ reason: 'call_ended' | 'tab_activated', force: Bool }",
+                  "examplePayload": "{\n  \"reason\": \"call_ended\",\n  \"force\": true\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mahc-callback",
+          "label": "4. Mini App kiểm tra quyền ghi âm & Gọi lại (make_call)",
+          "kind": "external",
+          "audience": "tech",
+          "summary": {
+            "overview": "Trong nhật ký cuộc gọi, Mini App hỏi quyền nghe ghi âm và bấm gọi lại số cũ qua Host App.",
+            "tech": "checkPermissions('CALL', ['VIEW', 'RECORDING']) kiểm tra quyền qua VPMRoleService; makeCall() kích hoạt gọi ra giữ nguyên tên người liên hệ."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/MiniAppService.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-user-history-call",
+              "embedMode": "inline_tab",
+              "transport": "checkPermissions / makeCall (@vbotma/sdk) → VbMaDelegate",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "check_permissions",
+                  "hostFn": "MiniAppService.onCheckPermissions(module:actions:) → sendEvent(\"permissions_result\", payload:)",
+                  "miniAppFn": "checkPermissions(\"CALL\", [\"VIEW\", \"RECORDING\"]) (@vbotma/sdk)",
+                  "payload": "{ module: 'CALL', actions: ['VIEW', 'RECORDING'] }",
+                  "response": "{ VIEW: Bool, RECORDING: Bool }",
+                  "examplePayload": "{\n  \"module\": \"CALL\",\n  \"actions\": [\"VIEW\", \"RECORDING\"]\n}",
+                  "exampleResponse": "{\n  \"VIEW\": true,\n  \"RECORDING\": true\n}"
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "make_call",
+                  "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
+                  "miniAppFn": "makeCall(params) (@vbotma/sdk)",
+                  "payload": "{ request_id, phoneNumber, displayName }",
+                  "response": "{ request_id, success }",
+                  "examplePayload": "{\n  \"request_id\": \"req_31\",\n  \"phoneNumber\": \"0912345678\",\n  \"displayName\": \"Nguyễn Văn A\"\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_31\",\n  \"success\": true\n}"
+                }
+              ]
+            }
+          },
+          "relatedNodeIds": ["call-out-start"]
+        }
+      ],
+      "edges": [
+        { "id": "e-mahc-1", "source": "mahc-init", "target": "mahc-filter", "label": "Host → Mini App: filter_changed", "audience": "tech" },
+        { "id": "e-mahc-2", "source": "mahc-init", "target": "mahc-refresh", "label": "Host → Mini App: refresh_data", "audience": "tech" },
+        { "id": "e-mahc-3", "source": "mahc-refresh", "target": "mahc-callback", "label": "Mini App → Host: check_permissions / make_call", "audience": "tech" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-mahc-filter",
+          "name": "VD: Lọc Cuộc gọi nhỡ từ thanh Native",
+          "description": "Chọn tab Cuộc gọi nhỡ trên thanh UISegmentedControl iOS → Host emit filter_changed({ type: 'missed' }).",
+          "audience": "tech",
+          "nodeIds": ["mahc-init", "mahc-filter"],
+          "edgeIds": ["e-mahc-1"]
+        },
+        {
+          "id": "sc-mahc-postcall",
+          "name": "VD: Tự refresh sau cuộc gọi & Bấm gọi lại",
+          "description": "Cuộc gọi kết thúc → Host phát refresh_data({ reason: 'call_ended', force: true }) → User xem log & gọi lại qua make_call.",
+          "audience": "tech",
+          "nodeIds": ["mahc-init", "mahc-refresh", "mahc-callback"],
+          "edgeIds": ["e-mahc-2", "e-mahc-3"]
+        }
+      ]
+    },
+    "ma-autodial": {
+      "title": "Luồng giao tiếp Host ↔ Mini App Autodial (vb-ma-auto-call-campaign)",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["maad-start"],
+      "nodes": [
+        {
+          "id": "maad-start",
+          "label": "1. Mini App gửi start_autodial khởi chạy chiến dịch",
+          "kind": "action",
+          "audience": "tech",
+          "summary": {
+            "overview": "Nhân viên chọn Hotline và bấm Bắt đầu chiến dịch trên Mini App; lệnh start_autodial kích hoạt WebSocket quay số trên Host.",
+            "tech": "AutodialManager.shared.handleAction('start_autodial') kiểm tra không có cuộc gọi active khác rồi chuyển idle -> connecting -> requesting_next."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-auto-call-campaign",
+              "embedMode": "modal",
+              "transport": "postEvent('request_host_action') → AutodialManager.shared.handleAction",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "start_autodial",
+                  "hostFn": "MiniAppService.onHostActionRequested(...) → AutodialManager.shared.handleAction(...) → start(autoDialId:hotline:campaignName:)",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"start_autodial\", payload }) + on(\"host_action_result\", cb)",
+                  "payload": "{ request_id, action: 'start_autodial', payload: { autoDialId, hotline, campaignName? } }",
+                  "response": "{ request_id, success, state, currentAutoDialId, totalCalled, currentPhone }",
+                  "examplePayload": "{\n  \"request_id\": \"req_41\",\n  \"action\": \"start_autodial\",\n  \"payload\": {\n    \"autoDialId\": 701,\n    \"hotline\": \"19001234\",\n    \"campaignName\": \"Chăm sóc KH T11\"\n  }\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_41\",\n  \"success\": true,\n  \"state\": \"connecting\",\n  \"currentAutoDialId\": 701,\n  \"totalCalled\": 0,\n  \"currentPhone\": \"\"\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "maad-control",
+          "label": "2. Mini App điều khiển Tạm dừng / Tiếp tục / Dừng & Lấy trạng thái",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Trong lúc chạy chiến dịch, Mini App gửi lệnh Pause, Resume, Stop hoặc đồng bộ lại snapshot tiến độ từ Host.",
+            "tech": "AutodialManager.handleAction xử lý pause_autodial, resume_autodial, stop_autodial và get_autodial_state -> toStateMap()."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-auto-call-campaign",
+              "embedMode": "modal",
+              "transport": "AutodialManager.handleAction → pause() / resume() / stop() / toStateMap()",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "pause_autodial / resume_autodial / stop_autodial / get_autodial_state",
+                  "hostFn": "AutodialManager.shared.handleAction(...) → pause() / resume() / stop() / toStateMap()",
+                  "miniAppFn": "postEvent(\"request_host_action\", { request_id, action: \"pause_autodial\" | \"resume_autodial\" | \"stop_autodial\" | \"get_autodial_state\" })",
+                  "payload": "{ request_id, action }",
+                  "response": "{ request_id, success, state, totalCalled, currentPhone }",
+                  "examplePayload": "{\n  \"request_id\": \"req_42\",\n  \"action\": \"get_autodial_state\",\n  \"payload\": {}\n}",
+                  "exampleResponse": "{\n  \"request_id\": \"req_42\",\n  \"success\": true,\n  \"state\": \"paused\",\n  \"currentAutoDialId\": 701,\n  \"totalCalled\": 18,\n  \"currentPhone\": \"0912345678\"\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "maad-finish",
+          "label": "3a. Host đẩy autodial_finished khi hết số",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Khi chiến dịch đã quay hết toàn bộ danh sách số điện thoại, Host tự báo về để Mini App hiện màn hình hoàn tất.",
+            "tech": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent('autodial_finished', data:)."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-auto-call-campaign",
+              "embedMode": "modal",
+              "transport": "AutodialManager.handleAutoDialFinished() → emitMiniAppEvent",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "autodial_finished",
+                  "hostFn": "AutodialManager.handleAutoDialFinished() → MiniAppService.shared.emitMiniAppEvent(\"autodial_finished\", data:) → VbMa.shared.emitEvent(...)",
+                  "miniAppFn": "on(\"autodial_finished\", cb) (@vbotma/sdk)",
+                  "payload": "{ autoDialId, campaignName }",
+                  "examplePayload": "{\n  \"autoDialId\": 701,\n  \"campaignName\": \"Chăm sóc KH T11\"\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "maad-error",
+          "label": "3b. Host đẩy autodial_error nếu đứt Socket / Lỗi chiến dịch",
+          "kind": "error",
+          "audience": "tech",
+          "summary": {
+            "overview": "Nếu kết nối chiến dịch gặp lỗi không khôi phục được, Host đẩy thông báo lỗi rõ ràng về Mini App.",
+            "tech": "AutodialManager.handleAutoDialError(_:) → emitMiniAppEvent('autodial_error', { autoDialId, message })."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/AutodialManager.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-auto-call-campaign",
+              "embedMode": "modal",
+              "transport": "AutodialManager.handleAutoDialError(_:) → emitMiniAppEvent",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "autodial_error",
+                  "hostFn": "AutodialManager.handleAutoDialError(_:) → MiniAppService.shared.emitMiniAppEvent(\"autodial_error\", data:) → VbMa.shared.emitEvent(...)",
+                  "miniAppFn": "on(\"autodial_error\", cb) (@vbotma/sdk)",
+                  "payload": "{ autoDialId, message }",
+                  "examplePayload": "{\n  \"autoDialId\": 701,\n  \"message\": \"Mất kết nối máy chủ chiến dịch Autodial\"\n}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-maad-1", "source": "maad-start", "target": "maad-control", "label": "Mini App → Host: pause/resume/get_state", "audience": "tech" },
+        { "id": "e-maad-2", "source": "maad-control", "target": "maad-finish", "label": "Host → Mini App: autodial_finished", "audience": "tech" },
+        { "id": "e-maad-3", "source": "maad-control", "target": "maad-error", "label": "Host → Mini App: autodial_error", "audience": "tech" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-maad-run",
+          "name": "VD: Chạy & Hoàn tất chiến dịch Autodial",
+          "description": "Mini App gọi start_autodial → theo dõi/tạm dừng qua get_autodial_state → Host kết thúc hết số emit autodial_finished.",
+          "audience": "tech",
+          "nodeIds": ["maad-start", "maad-control", "maad-finish"],
+          "edgeIds": ["e-maad-1", "e-maad-2"]
+        },
+        {
+          "id": "sc-maad-error",
+          "name": "VD: Xử lý lỗi chiến dịch Autodial",
+          "description": "Chiến dịch đang chạy gặp lỗi WebSocket → Host emit autodial_error({ autoDialId, message }) về Mini App.",
+          "audience": "tech",
+          "nodeIds": ["maad-start", "maad-control", "maad-error"],
+          "edgeIds": ["e-maad-1", "e-maad-3"]
+        }
+      ]
+    },
+    "ma-monitoring": {
+      "title": "Luồng giao tiếp Host ↔ Mini App Giám sát cuộc gọi (vb-ma-monitoring)",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": ["mamon-request"],
+      "nodes": [
+        {
+          "id": "mamon-request",
+          "label": "1. Mini App gửi monitor_call (Nghe lén / Nhắc thầm / Xen vào)",
+          "kind": "action",
+          "audience": "tech",
+          "summary": {
+            "overview": "Quản lý chọn 1 cuộc gọi đang diễn ra trên Mini App Giám sát để nghe lén (listen) hoặc nhắc thầm nhân viên (whisper).",
+            "tech": "Mini App gọi postEvent('monitor_call', { request_id, action, transId, ... }) kèm hotline, agentName, customerPhone."
+          },
+          "techDetail": {
+            "codeRefs": ["VBot/Service/MiniAppService.swift"],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-monitoring",
+              "embedMode": "modal",
+              "transport": "postEvent('monitor_call') → MiniAppService.onMonitorCall",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "monitor_call",
+                  "hostFn": "MiniAppService.onMonitorCall(requestId:action:transId:payload:) → sendEvent(\"monitor_call_result\", payload:)",
+                  "miniAppFn": "postEvent(\"monitor_call\", { request_id, action, transId, hotline, agentName, customerPhone })",
+                  "payload": "{ request_id, action: 'listen'|'capture'|'capture_bot'|'whisper', transId, hotline?, agentName?, customerPhone? }",
+                  "examplePayload": "{\n  \"request_id\": \"req_51\",\n  \"action\": \"whisper\",\n  \"transId\": \"tr_99120\",\n  \"hotline\": \"19001234\",\n  \"agentName\": \"Nhân viên A\",\n  \"customerPhone\": \"0912345678\"\n}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mamon-acquire",
+          "label": "2. Host khóa Slot nguyên tử, kiểm Micro & quay SIP 1#/2#/4#/5#",
+          "kind": "process",
+          "audience": "tech",
+          "summary": {
+            "overview": "Host kiểm tra máy không có cuộc gọi CallKit nào khác đang chiếm kênh thoại, kiểm tra quyền Micro rồi nối SIP giám sát.",
+            "tech": "MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot kiểm tra CallKit/SIP; nếu bận trả CALL_BUSY, nếu trống trả CONNECTING và gọi VPMAppService.startMonitoringCall()."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppMonitoringCoordinator.swift",
+              "VBot/Service/VbMonitoringCallHelper.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-monitoring",
+              "embedMode": "modal",
+              "transport": "tryAcquireMonitoringSlot → sendEvent('monitor_call_result')",
+              "messages": [
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "monitor_call_result",
+                  "hostFn": "MiniAppMonitoringCoordinator.tryAcquireMonitoringSlot → VbMonitoringCallHelper.buildMonitorCallResultPayload(...)",
+                  "miniAppFn": "on(\"monitor_call_result\", cb) (@vbotma/sdk)",
+                  "response": "{ request_id, action, transId, status }",
+                  "exampleResponse": "{\n  \"request_id\": \"req_51\",\n  \"action\": \"whisper\",\n  \"transId\": \"tr_99120\",\n  \"status\": \"CONNECTING\"\n}",
+                  "note": "Nếu đang có cuộc gọi thường trên CallKit hoặc đã giữ 1 phiên giám sát khác, Host trả status = 'CALL_BUSY'."
+                }
+              ]
+            }
+          }
+        },
+        {
+          "id": "mamon-state",
+          "label": "3. Host đẩy monitor_call_state_changed theo vòng đời SIP",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Trong khi nghe giám sát hoặc khi kết thúc/từ chối Micro, Host phát sự kiện cập nhật trạng thái tức thì về Mini App.",
+            "tech": "NewCallViewController và VPMAppService gọi MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:)."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift",
+              "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
+            ],
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-monitoring",
+              "embedMode": "modal",
+              "transport": "MiniAppService.sendMonitorCallStateChanged → emitMiniAppEvent",
+              "messages": [
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "monitor_call_state_changed",
+                  "hostFn": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:) → emitMiniAppEvent(\"monitor_call_state_changed\", data:)",
+                  "miniAppFn": "on(\"monitor_call_state_changed\", cb) (@vbotma/sdk)",
+                  "payload": "{ request_id, state, reason? }",
+                  "examplePayload": "{\n  \"request_id\": \"req_51\",\n  \"state\": \"CONNECTED\"\n}",
+                  "note": "Khi dập máy hoặc bị từ chối quyền Micro, Host phát state = 'DISCONNECTED' kèm reason (VD 'PERMISSION_DENIED' / 'ENDED')."
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "edges": [
+        { "id": "e-mamon-1", "source": "mamon-request", "target": "mamon-acquire", "label": "Host trả status CONNECTING / CALL_BUSY", "audience": "tech" },
+        { "id": "e-mamon-2", "source": "mamon-acquire", "target": "mamon-state", "label": "Host → Mini App: monitor_call_state_changed", "audience": "tech" }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-mamon-whisper",
+          "name": "VD: Nhắc thầm (Whisper) cuộc gọi qua Bridge",
+          "description": "Mini App gửi monitor_call({ action: 'whisper', transId: 'tr_99120' }) → Host giữ slot & trả CONNECTING → phát monitor_call_state_changed({ state: 'CONNECTED' }).",
+          "audience": "tech",
+          "nodeIds": ["mamon-request", "mamon-acquire", "mamon-state"],
+          "edgeIds": ["e-mamon-1", "e-mamon-2"]
+        }
+      ]
     }
   }
 }

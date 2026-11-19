@@ -117,4 +117,18 @@ describe('computeDagreLayout', () => {
     const gap = cancelNode.position.x - (decisionNode.position.x + decisionNode.data.estimatedWidth);
     expect(gap).toBeGreaterThanOrEqual(200);
   });
+
+  it('allocates wider 250px width for miniapp representative nodes', () => {
+    const nodes: FlowNodeData[] = [
+      {
+        id: 'ma-node',
+        label: 'Mini App: Danh bạ cá nhân (vb-ma-user-contact)',
+        kind: 'miniapp' as FlowNodeData['kind'],
+        audience: 'tech',
+        summary: { overview: 'Mini App' },
+      },
+    ];
+    const layoutNodes = computeDagreLayout(nodes, [], { direction: 'LR' });
+    expect(layoutNodes[0].data.estimatedWidth).toBe(250);
+  });
 });
