@@ -450,8 +450,8 @@ console.log('makeCall:', res.success, res.reason);`,
               codeRef: 'VBot/Service/MiniAppService.swift',
             },
             hostAndroid: {
-              fn: 'makeDirectCall() / ChooseHotlineCallBottomSheet',
-              detail: 'Nếu chưa có hotline chỉ định & dự án có ≥2 hotline, Android bật ChooseHotlineCallBottomSheet cho user chọn.',
+              fn: 'MiniAppHelper.handleRequestCall → showHotlinePicker / makeDirectCall()',
+              detail: 'Nếu chưa có hotline mặc định & dự án không phải 1 hotline duy nhất, Android bật ChooseHotlineCallBottomSheet (showHotlinePicker) chờ user chọn hoặc Hủy trước khi gọi makeDirectCall() trả Result<Unit>.',
               codeRef: 'VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt',
             },
           },
@@ -473,8 +473,8 @@ console.log('makeCall:', res.success, res.reason);`,
               codeRef: 'vb-ma-ios-sdk/VbMaSDK/UI/VbMaViewController.swift',
             },
             hostAndroid: {
-              fn: 'VbMABridge.sendEvent("call_result", json)',
-              detail: 'Phát callback sau delay 200ms (kể cả khi vừa mở ChooseHotlineCallBottomSheet).',
+              fn: 'MiniAppHelper.handleRequestCall → settle(...) → VbMABridge.sendEvent("call_result", json)',
+              detail: 'Dùng AtomicBoolean one-shot (đã bỏ timer 200ms): chỉ trả success=true ngay sau khi makeDirectCall() thành công; đóng ChooseHotlineCallBottomSheet không chọn trả USER_CANCELLED, thiếu hotline trả NO_HOTLINE, lỗi khởi tạo trả ERROR.',
               codeRef: 'VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt',
             },
             responsePacket: {
@@ -485,8 +485,6 @@ console.log('makeCall:', res.success, res.reason);`,
                 2,
               ),
             },
-            parityWarning:
-              'Lệch Parity: Trên Android, nếu bật ChooseHotlineCallBottomSheet thì timer 200ms vẫn trả call_result(success=true) dù người dùng có thể bấm Hủy sau đó.',
           },
         ],
       },
@@ -673,7 +671,7 @@ console.log('makeCall:', res.success, res.reason);`,
             dashed: true,
             arrowLabel: 'host_action_result { state, totalCalled, currentPhone, error? }',
             explanation:
-              'Mini App khôi phục UI thanh tiến độ hoặc phát hiện state === "error" (rất hữu ích trên iOS khi hết 3 lần retry WS mà iOS chưa emit autodial_error).',
+              'Mini App khôi phục UI thanh tiến độ hoặc phát hiện state === "error" khi vừa mở lại WebView sau khi chạy ngầm.',
             hostIos: {
               fn: 'buildSuccessActionResponse(requestId)',
               detail: 'Trả snapshot toStateMap() kèm request_id.',
@@ -990,8 +988,8 @@ postEvent('get_supported_actions' as any, { request_id: capReqId });`,
             explanation:
               'Nếu mất kết nối khi đang không bận gọi, Host tự reconnect tối đa 3 lần theo cấp số nhân (2s, 4s, 8s); nếu server trả error != 0 hoặc hết 3 lần thử, chiến dịch dừng ở trạng thái error.',
             hostIos: {
-              fn: 'AutodialManager.handleConnectionFailure() / parseSocketMessage()',
-              detail: 'Nhánh server error gọi handleAutoDialError(); nhánh hết 3 lần reconnect hoặc thiếu session_id/WS URL chỉ set state = .error.',
+              fn: 'AutodialManager.handleConnectionFailure() / connectWebSocket() / parseSocketMessage() → handleAutoDialError(_:)',
+              detail: 'Đều gọi handleAutoDialError() ở cả nhánh lỗi server, thiếu session_id, WS URL không hợp lệ lẫn hết 3 lần reconnect (2s/4s/8s).',
               codeRef: 'VBot/Service/AutodialManager.swift',
             },
             hostAndroid: {
@@ -1002,20 +1000,20 @@ postEvent('get_supported_actions' as any, { request_id: capReqId });`,
           },
           {
             stepNumber: 4,
-            title: 'Host đẩy autodial_error về Mini App (+ fallback polling iOS)',
+            title: 'Host đẩy autodial_error về Mini App',
             phase: 'host_push',
             from: 'host',
             to: 'miniapp',
             dashed: true,
             arrowLabel: 'emitEvent("autodial_error", { autoDialId, message })',
             explanation:
-              'Mini App bắt sự kiện autodial_error để báo người dùng. Kết hợp thêm get_autodial_state khi cần vì iOS chưa gọi handleAutoDialError() ở nhánh rớt WS quá 3 lần hoặc thiếu session_id.',
+              'Cả Host iOS và Android đều đẩy sự kiện autodial_error về Mini App ở mọi nhánh lỗi (server error, thiếu session_id, WS URL không hợp lệ và hết 3 lần reconnect). Mini App vẫn nên gọi get_autodial_state khi mở lại màn hình để đồng bộ nếu lỗi xảy ra lúc WebView đang đóng.',
             miniAppCode: `on('autodial_error', ({ autoDialId, message }) => {
   showErrorToast(message);
 });`,
             hostIos: {
               fn: 'AutodialManager.handleAutoDialError(_:) → emitMiniAppEvent("autodial_error")',
-              detail: 'Chỉ phát khi parseSocketMessage() gặp responseData["error"] != 0.',
+              detail: 'Phát đầy đủ event autodial_error cho mọi kịch bản lỗi server, thiếu session_id, WS URL không hợp lệ và hết 3 lần reconnect.',
               codeRef: 'VBot/Service/AutodialManager.swift',
             },
             hostAndroid: {
@@ -1031,8 +1029,6 @@ postEvent('get_supported_actions' as any, { request_id: capReqId });`,
                 2,
               ),
             },
-            parityWarning:
-              'Lệch Parity: Hết 3 lần retry WS (2s/4s/8s) hoặc thiếu session_id/WS URL, Android đẩy autodial_error còn iOS mới cập nhật state = .error. Mini App nên kết hợp get_autodial_state kiểm tra res.state === "error" || res.error.',
           },
         ],
       },
@@ -1465,9 +1461,9 @@ if (!res.success) {
           codeRef: 'VBot/Service/MiniAppService.swift',
         },
         hostAndroid: {
-          fn: 'MiniAppHelper.onRequestCall → ChooseHotlineCallBottomSheet / makeDirectCall(...)',
+          fn: 'MiniAppHelper.handleRequestCall → showHotlinePicker (ChooseHotlineCallBottomSheet) / makeDirectCall(...)',
           detail:
-            'Nếu active call đang tồn tại thì endCall() chờ 200ms; gắn CallModel.miniAppDisplayName và mở NewCallActivity + VBotPhone.startOutgoingCall("$hotline*$idProject*$phone").',
+            'Dùng AtomicBoolean one-shot guard; nếu chưa có hotline mặc định & không phải 1 hotline duy nhất sẽ bật ChooseHotlineCallBottomSheet đợi user chọn/hủy. Khi gọi: nếu active call đang tồn tại thì endCall() chờ 200ms; gắn CallModel.miniAppDisplayName, mở NewCallActivity + VBotPhone.startOutgoingCall("$hotline*$idProject*$phone") và trả Result<Unit>.',
           codeRef: 'VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt',
         },
       },
@@ -1500,13 +1496,13 @@ if (!res.success) {
           codeRef: 'VBot/Service/MiniAppService.swift',
         },
         hostAndroid: {
-          fn: 'MiniAppHelper.onRequestCall → Handler.postDelayed({ callback(...) }, 200)',
+          fn: 'MiniAppHelper.handleRequestCall → settle(...) → VbMABridge.sendEvent("call_result", json)',
           detail:
-            'LUÔN trả success: true sau 200ms kể cả khi mới mở ChooseHotlineCallBottomSheet (user có thể bấm hủy chọn hotline sau đó).',
+            'Đã bỏ timer 200ms. Settle đúng 1 lần (AtomicBoolean): trả success: true ngay khi makeDirectCall() thành công; trả success: false với reason "USER_CANCELLED" nếu đóng ChooseHotlineCallBottomSheet, "NO_HOTLINE" nếu không có hotline, hoặc "ERROR" nếu lỗi.',
           codeRef: 'VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt',
         },
         parityWarning:
-          'Lệch Parity: Trên Android, call_result trả success=true ngay sau 200ms mở BottomSheet chọn Hotline chứ không đợi user bấm số gọi hay Hủy. Vì vậy Mini App không nên giả định success=true là cuộc gọi đã nối máy.',
+          'Khác biệt mã reason: iOS validate MISSING_PHONE_NUMBER rồi trả success=true ngay sau khi dispatch VPMAppService.makeCall; Android (đã bỏ timer 200ms) chờ ChooseHotlineCallBottomSheet rồi trả success=true hoặc reason USER_CANCELLED / NO_HOTLINE / ERROR.',
       },
       {
         stepNumber: 4,
@@ -2544,8 +2540,9 @@ console.log('Admin?', isAdmin(), 'Embed param:', startParam);`,
     responseEvent: 'call_result',
     responseJson: JSON.stringify({ request_id: 'req-c1', success: true, reason: null }, null, 2),
     iosHandler: 'MiniAppService.onRequestCall → VPMAppService.makeCall',
-    androidHandler: 'MiniAppHelper.onRequestCall → ChooseHotlineCallBottomSheet / makeDirectCall',
-    parityNote: 'Android phát call_result(success=true) sau 200ms dù user chưa chọn xong Hotline ở BottomSheet.',
+    androidHandler: 'MiniAppHelper.onRequestCall → handleRequestCall → showHotlinePicker (ChooseHotlineCallBottomSheet) / makeDirectCall',
+    parityNote:
+      'Android đã bỏ timer 200ms: dùng AtomicBoolean one-shot chờ ChooseHotlineCallBottomSheet rồi trả success=true sau makeDirectCall hoặc reason USER_CANCELLED / NO_HOTLINE / ERROR. iOS validate MISSING_PHONE_NUMBER rồi trả success=true sau khi dispatch VPMAppService.makeCall.',
     usedByApps: ['vb-ma-autodial', 'vb-ma-crm', 'vb-ma-user-contact', 'vb-ma-user-history-call', 'vb-ma-contact-forward'],
   },
   {
@@ -2603,7 +2600,6 @@ console.log('Admin?', isAdmin(), 'Embed param:', startParam);`,
     responseJson: JSON.stringify({ autoDialId: 151, campaignName: 'CSKH', message: 'Mất kết nối WebSocket' }, null, 2),
     iosHandler: 'AutodialManager.handleAutoDialFinished / handleAutoDialError → MiniAppService.emitMiniAppEvent',
     androidHandler: 'AutodialManager.handleAutoDialFinished / handleAutoDialError → VbMaSDK.emitEvent',
-    parityNote: 'iOS khi hết 3 lần retry WS hoặc thiếu session_id chưa gọi handleAutoDialError() để đẩy autodial_error.',
     usedByApps: ['vb-ma-autodial'],
   },
   // ── User Contact Actions & Events ───────────────────────────────
@@ -3012,8 +3008,6 @@ export const MINI_APP_CATALOG: MiniAppCatalogEntry[] = [
     ],
     simulatorFlowId: 'flow-autodial',
     relatedNodeId: 'ma-autodial',
-    parityNote:
-      'iOS khi hết 3 lần reconnect WebSocket hoặc thiếu session_id chưa phát autodial_error; Android trả call_result(success=true) sau 200ms khi bật sheet chọn Hotline cho make_call.',
   },
   {
     id: 'vb-ma-blacklist',
@@ -3232,33 +3226,6 @@ export const MINI_APP_CATALOG: MiniAppCatalogEntry[] = [
 ];
 
 export const BRIDGE_PARITY_ALERTS: BridgeParityAlert[] = [
-  {
-    id: 'pa-autodial-err',
-    title: 'iOS chưa đẩy event autodial_error khi hết 3 lần reconnect WebSocket',
-    severity: 'high',
-    scope: 'vb-ma-autodial (Quay số tự động)',
-    iosBehavior:
-      'Hết 3 lần thử lại WS hoặc thiếu session_id / WS URL chỉ cập nhật state = .error (không gọi handleAutoDialError nên JS không nhận được event autodial_error).',
-    androidBehavior:
-      'Gọi handleAutoDialError() ở mọi tình huống lỗi để phát event autodial_error xuống Mini App.',
-    recommendationForMiniApp:
-      'Ngoài on("autodial_error"), hãy kết hợp gọi get_autodial_state khi resume/mở lại màn hình và kiểm tra res.state === "error" || res.error.',
-    simulatorFlowId: 'flow-autodial',
-    relatedNodeId: 'ma-autodial',
-  },
-  {
-    id: 'pa-make-call-200ms',
-    title: 'Android trả call_result(success = true) sau 200ms dù user chưa chọn xong Hotline',
-    severity: 'high',
-    scope: 'make_call (Global SDK Call)',
-    iosBehavior: 'Gọi thẳng VPMAppService.makeCall rồi phản hồi call_result.',
-    androidBehavior:
-      'Nếu dự án có ≥2 hotline và chưa đặt mặc định, Android bật ChooseHotlineCallBottomSheet nhưng timer 200ms đã trả call_result(success: true).',
-    recommendationForMiniApp:
-      'Không giả định success=true nghĩa là cuộc gọi chắc chắn đã kết nối. Dùng refresh_data(reason: "call_ended") để cập nhật hậu cuộc gọi.',
-    simulatorFlowId: 'flow-make-call',
-    relatedNodeId: 'call-out-start',
-  },
   {
     id: 'pa-token-prewarm',
     title: 'Android chưa pre-warm MiniAppToken lúc mở app',

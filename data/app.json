@@ -145,12 +145,12 @@
             "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
             "hostFnByPlatform": {
               "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\")",
-              "android": "MiniAppHelper.onRequestCall(...) → makeDirectCall(...) / ChooseHotlineCallBottomSheet → VBotPhone.startOutgoingCall(to)"
+              "android": "MiniAppHelper.onRequestCall → handleRequestCall → showHotlinePicker (ChooseHotlineCallBottomSheet) / makeDirectCall → VBotPhone.startOutgoingCall(to)"
             },
             "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
             "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall, avatar, hotline }",
-            "response": "{ request_id, success, reason? }",
-            "parityNote": "Trên Android, MiniAppHelper.onRequestCall luôn gọi callback(success = true) sau 200ms kể cả khi mới mở ChooseHotlineCallBottomSheet; ngoài ra cả Android (MiniAppHelper) lẫn iOS (MiniAppService) đều cố tình không đăng ký CallActionBridgeHelper.SUPPORTED_ACTIONS do UI in-call là Native."
+            "response": "{ request_id, success, reason?: 'MISSING_PHONE_NUMBER' | 'USER_CANCELLED' | 'NO_HOTLINE' | 'ERROR', message? }",
+            "parityNote": "Android (MiniAppHelper.handleRequestCall) đã bỏ delay 200ms và đợi kết quả ChooseHotlineCallBottomSheet (trả success=true sau makeDirectCall hoặc USER_CANCELLED / NO_HOTLINE / ERROR); iOS (MiniAppService.onRequestCall) validate MISSING_PHONE_NUMBER rồi trả success=true ngay sau khi dispatch VPMAppService.makeCall. Ngoài ra cả Android lẫn iOS đều cố tình không đăng ký CallActionBridgeHelper.SUPPORTED_ACTIONS do UI in-call là Native."
           }
         ]
       }
@@ -516,7 +516,7 @@
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
                   "hostFnByPlatform": {
                     "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...)",
-                    "android": "MiniAppHelper.onRequestCall(...) → makeDirectCall(...) / ChooseHotlineCallBottomSheet → VBotPhone.startOutgoingCall"
+                    "android": "MiniAppHelper.onRequestCall → handleRequestCall → ChooseHotlineCallBottomSheet / makeDirectCall → VBotPhone.startOutgoingCall"
                   },
                   "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
                   "payload": "{ request_id, callee_info | phoneNumber, displayName, typeCall }",

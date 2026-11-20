@@ -580,7 +580,7 @@
             "tech": "AutodialManager điều khiển máy trạng thái: idle -> connecting -> requesting_next -> calling -> cooldown -> loop (hoặc paused / finished / stopped / error), nhận 5 lệnh Bridge từ Mini App (start/stop/pause/resume/get_autodial_state). Prod v0.3.2 (/api/apps/global) · Caps: CHIEN_DICH[*], HOTLINE[XEM], THANH_VIEN[XEM]."
           },
           "techDetail": {
-            "platformDiffNote": "Cả 2 HĐH giữ nguyên contract 5 action + 2 event (cùng ping 10s, cooldown 2s, reconnect 3 lần 2s/4s/8s). TUY NHIÊN iOS khi hết 3 lần reconnect WS hoặc thiếu session_id/WS URL chỉ set state = .error mà KHÔNG gọi handleAutoDialError() nên không emit autodial_error như Android; ngoài ra Android tách 5 hàm handle*Autodial trong MiniAppHelper (không có AutodialManager.handleAction).",
+            "platformDiffNote": "Cả 2 HĐH đã đồng bộ đầy đủ contract 5 action + 2 event (cùng ping 10s, cooldown 2s, reconnect 3 lần 2s/4s/8s và cùng gọi handleAutoDialError() phát autodial_error ở mọi nhánh lỗi: server error, thiếu session_id, WS URL không hợp lệ và hết 3 lần reconnect). Chỉ khác tổ chức mã Host: iOS gom vào AutodialManager.shared.handleAction(), còn Android tách 5 hàm handle*Autodial trong MiniAppHelper.",
             "apisOrEvents": [
               "get_supported_actions",
               "get_session_info",
@@ -602,7 +602,7 @@
             ],
             "byPlatform": {
               "ios": {
-                "summary": "AutodialManager.swift (URLSessionWebSocketTask) quản lý state machine idle->connecting->requesting_next->calling->cooldown và tạo gọi qua TelephoneSDK (PJSIP); lưu ý khi hết 3 lần reconnect hoặc thiếu session_id/WS URL chỉ set state = .error (chưa gọi handleAutoDialError).",
+                "summary": "AutodialManager.swift (URLSessionWebSocketTask) quản lý state machine idle->connecting->requesting_next->calling->cooldown, tạo gọi qua TelephoneSDK (PJSIP) và gọi handleAutoDialError() phát autodial_error đầy đủ khi server báo lỗi, thiếu session_id, WS URL không hợp lệ hoặc hết 3 lần reconnect (2s/4s/8s).",
                 "codeRefs": [
                   "VBot/Service/AutodialManager.swift"
                 ]
@@ -2192,7 +2192,7 @@
             "tech": "Gọi makeCall() từ @vbotma/sdk -> iOS VPMAppService.makeCall (suppliedCallerName) / Android makeDirectCall hoặc ChooseHotlineCallBottomSheet (miniAppDisplayName) -> trả call_result."
           },
           "techDetail": {
-            "platformDiffNote": "Parity Gap: Khi dự án có ≥2 hotline và chưa chọn mặc định, Android mở ChooseHotlineCallBottomSheet nhưng timer 200ms đã trả call_result(success=true) dù người dùng chưa bấm gọi.",
+            "platformDiffNote": "Cả 2 HĐH đều hỗ trợ quay số lẻ qua make_call: iOS dùng VPMAppService.makeCall + suppliedCallerName; Android dùng MiniAppHelper.handleRequestCall đợi ChooseHotlineCallBottomSheet nếu chưa có hotline mặc định rồi gọi makeDirectCall + miniAppDisplayName (đã bỏ timer 200ms, trả USER_CANCELLED / NO_HOTLINE / ERROR khi hủy hoặc lỗi).",
             "codeRefs": [
               "VBot/Service/MiniAppService.swift",
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
@@ -2444,10 +2444,9 @@
           "audience": "tech",
           "summary": {
             "overview": "Nếu kết nối chiến dịch gặp lỗi không khôi phục được, Host đẩy thông báo lỗi rõ ràng về Mini App.",
-            "tech": "Android AutodialManager.handleAutoDialError() emit 'autodial_error' sau khi thử reconnect 3 lần (2s/4s/8s) thất bại; iOS hiện mới đổi state = .error ở nhánh hết reconnect / thiếu session_id (chưa gọi handleAutoDialError)."
+            "tech": "Cả iOS và Android đều gọi AutodialManager.handleAutoDialError() để chuyển state=error, hủy reconnect/đóng socket và emit 'autodial_error' khi server trả error != 0, thiếu session_id, WS URL không hợp lệ hoặc hết 3 lần reconnect (2s/4s/8s)."
           },
           "techDetail": {
-            "platformDiffNote": "Parity Gap: Khi hết 3 lần reconnect WS hoặc thiếu session_id/WS URL, Android gọi handleAutoDialError() -> emit autodial_error; iOS AutodialManager.swift chỉ set state = .error mà chưa gọi handleAutoDialError().",
             "codeRefs": [
               "VBot/Service/AutodialManager.swift"
             ],

@@ -297,7 +297,7 @@ export function buildScenarioSequence(
         title: `#${step.stepNumber} call_result`,
         subtitle:
           platformMode === 'android'
-            ? 'VbMaSDK emit call_result (~200ms)'
+            ? 'MiniAppHelper.handleRequestCall → emit "call_result"'
             : 'VbMaViewController.sendEvent("call_result")',
         dashed: true,
         isSelfCall: false,

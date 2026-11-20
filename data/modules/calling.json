@@ -592,7 +592,7 @@
             }
           ],
           "techDetail": {
-            "platformDiffNote": "Android nhận make_call qua VbMaSDKDelegate.onRequestCall -> MiniAppHelper.makeDirectCall (9 tham số), gán CallModel.miniAppDisplayName, mở thẳng NewCallActivity (không qua UtilsKotlin.createCall) và trả event \"call_result\" sau ~200ms để WebView không bị ngắt bridge khi chuyển Activity.",
+            "platformDiffNote": "Android nhận make_call qua VbMaSDKDelegate.onRequestCall -> MiniAppHelper.handleRequestCall (AtomicBoolean one-shot): nếu chưa có hotline mặc định & không phải 1 hotline duy nhất sẽ mở ChooseHotlineCallBottomSheet đợi user chọn/hủy, rồi mới gọi MiniAppHelper.makeDirectCall (9 tham số, trả Result<Unit>), gán CallModel.miniAppDisplayName, mở thẳng NewCallActivity (không qua UtilsKotlin.createCall) và trả \"call_result\" ngay theo kết quả (success=true, USER_CANCELLED, NO_HOTLINE hoặc ERROR).",
             "inputs": ["name (tên truyền từ Mini App / Danh bạ nếu có)", "phone", "isVPM", "typeCall"],
             "codeRefs": [
               "VBot/Controller/NewController/CallVC/MainDialPad/qMainDiaPadViewController.swift",
@@ -601,7 +601,7 @@
             ],
             "byPlatform": {
               "android": {
-                "summary": "Dialpad (NumberPadActivity) / Danh bạ đi qua UtilsKotlin.createCall -> CreateCallActivity; Mini App đi qua VbMaSDKDelegate.onRequestCall -> MiniAppHelper.makeDirectCall (tự dựng LoadDataManager.callModel, mở NewCallActivity, gọi thẳng vBotPhone.startOutgoingCall và delay ~200ms trả call_result).",
+                "summary": "Dialpad (NumberPadActivity) / Danh bạ đi qua UtilsKotlin.createCall -> CreateCallActivity; Mini App đi qua VbMaSDKDelegate.onRequestCall -> MiniAppHelper.handleRequestCall -> showHotlinePicker (ChooseHotlineCallBottomSheet) / makeDirectCall (tự dựng LoadDataManager.callModel, mở NewCallActivity, gọi thẳng vBotPhone.startOutgoingCall và trả call_result ngay theo kết quả thực tế).",
                 "inputs": ["phoneNumber", "displayName (từ Mini App / Autodial)", "typeCall"],
                 "edgeCases": [
                   "CallModel.miniAppDisplayName chỉ gán khi gọi từ Mini App hoặc Autodial, không gán khi bấm từ Dialpad / Danh bạ native"
@@ -620,7 +620,7 @@
               "transport": "VbMaDelegate.onRequestCall → VPMAppService.makeCall",
               "transportByPlatform": {
                 "ios": "VbMaDelegate.onRequestCall → MiniAppService.onRequestCall → VPMAppService.makeCall",
-                "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.makeDirectCall → NewCallActivity / VBotPhone.startOutgoingCall"
+                "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.handleRequestCall → ChooseHotlineCallBottomSheet / makeDirectCall → NewCallActivity / VBotPhone.startOutgoingCall"
               },
               "messages": [
                 {
@@ -629,13 +629,13 @@
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
                   "hostFnByPlatform": {
                     "ios": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
-                    "android": "MiniAppHelper.makeDirectCall(9 tham số) → LoadDataManager.callModel → NewCallActivity & VBotPhone.startOutgoingCall(to) → VbMaSDK emit \"call_result\" (sau ~200ms)"
+                    "android": "MiniAppHelper.handleRequestCall → showHotlinePicker (ChooseHotlineCallBottomSheet) / makeDirectCall(9 tham số) → LoadDataManager.callModel → NewCallActivity & VBotPhone.startOutgoingCall(to) → VbMaSDK emit \"call_result\""
                   },
                   "miniAppFn": "makeCall(params) (@vbotma/sdk) → postEvent(\"make_call\") + on(\"call_result\", cb)",
                   "payload": "Nested: { request_id, callee_info: { phoneNumber, displayName, typeCall, avatar, avatarColor } } hoặc Flat: { request_id, phoneNumber, displayName } (cả 2 HĐH đều chưa đọc hotline/hotlineNumber/customerId)",
-                  "response": "iOS: { request_id, success: Bool, reason?: 'MISSING_PHONE_NUMBER' } | Android: luôn callback { request_id, success: true } sau 200ms (không validate phoneNumber rỗng; chỉ có reason: 'ERROR' trong catch)",
+                  "response": "iOS: { request_id, success: Bool, reason?: 'MISSING_PHONE_NUMBER' } | Android: { request_id, requestId, success: Bool, reason?: 'USER_CANCELLED' | 'NO_HOTLINE' | 'ERROR', message? } (chờ ChooseHotlineCallBottomSheet nếu cần, không còn delay 200ms)",
                   "note": "typeCall == 'app_to_app' → gọi nội bộ VPM; ngược lại → gọi Hotline ra ngoài và bảo toàn suppliedCallerName / miniAppDisplayName.",
-                  "parityNote": "iOS gửi \"call_result\" đồng bộ sau khi dispatch VPMAppService.makeCall (và có validate MISSING_PHONE_NUMBER); Android delay ~200ms trước khi gửi \"call_result\" (chỉ có reason ERROR trong catch) và mở thẳng NewCallActivity qua vBotPhone.startOutgoingCall. Android giữ CallModel.miniAppDisplayName cho Mini App còn iOS dùng suppliedCallerName chung."
+                  "parityNote": "iOS gửi \"call_result\" sau khi dispatch VPMAppService.makeCall (có validate MISSING_PHONE_NUMBER); Android (MiniAppHelper.handleRequestCall) dùng AtomicBoolean one-shot đợi ChooseHotlineCallBottomSheet nếu chưa có hotline mặc định rồi gọi makeDirectCall trả success=true hoặc USER_CANCELLED / NO_HOTLINE / ERROR (đã bỏ timer 200ms). Android giữ CallModel.miniAppDisplayName cho Mini App còn iOS dùng suppliedCallerName chung."
                 }
               ]
             }

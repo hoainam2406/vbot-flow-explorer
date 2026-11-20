@@ -198,7 +198,7 @@
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
                   "hostFnByPlatform": {
                     "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall(...) → sendEvent(\"call_result\")",
-                    "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.makeDirectCall (CallModel.miniAppDisplayName -> NewCallActivity) → emit \"call_result\" (~200ms)"
+                    "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.handleRequestCall → ChooseHotlineCallBottomSheet / makeDirectCall (CallModel.miniAppDisplayName -> NewCallActivity) → emit \"call_result\""
                   },
                   "miniAppFn": "makeCallViaHost(contact) [hostBridge.ts] → makeCall(...) (@vbotma/sdk)",
                   "payload": "{ request_id, callee_info | phoneNumber, displayName }",
@@ -1656,17 +1656,17 @@
           "audience": "tech",
           "summary": {
             "overview": "Host nhận lệnh make_call, mở màn hình chọn Hotline / đàm thoại và phản hồi call_result về Mini App.",
-            "tech": "iOS lưu suppliedCallerName (TelephoneSDK PJSIP / CallKit); Android gọi MiniAppHelper.makeDirectCall lưu CallModel.miniAppDisplayName -> NewCallActivity / VBotPhone.startOutgoingCall (PJSIP) và emit call_result sau ~200ms."
+            "tech": "iOS lưu suppliedCallerName (TelephoneSDK PJSIP / CallKit); Android gọi MiniAppHelper.handleRequestCall → ChooseHotlineCallBottomSheet / makeDirectCall lưu CallModel.miniAppDisplayName -> NewCallActivity / VBotPhone.startOutgoingCall (PJSIP) và emit call_result ngay theo kết quả."
           },
           "techDetail": {
-            "platformDiffNote": "Android nhận make_call qua MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName rồi phát \"call_result\" sau ~200ms để không mất callback khi chuyển sang NewCallActivity.",
+            "platformDiffNote": "Android nhận make_call qua MiniAppHelper.handleRequestCall (đợi ChooseHotlineCallBottomSheet nếu chưa có hotline mặc định) → MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName, mở NewCallActivity và phát \"call_result\" ngay theo kết quả (success=true / USER_CANCELLED / NO_HOTLINE / ERROR).",
             "codeRefs": [
               "VBot/Service/MiniAppService.swift",
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallOut.swift"
             ],
             "byPlatform": {
               "android": {
-                "summary": "MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName, mở NewCallActivity / VBotPhone.startOutgoingCall (PJSIP) và emit \"call_result\" sau ~200ms.",
+                "summary": "MiniAppHelper.handleRequestCall đợi ChooseHotlineCallBottomSheet (nếu cần), gọi makeDirectCall gán CallModel.miniAppDisplayName, mở NewCallActivity / VBotPhone.startOutgoingCall (PJSIP) và emit \"call_result\" ngay theo kết quả.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
@@ -1680,7 +1680,7 @@
               "transport": "MiniAppService.onRequestCall → VPMAppService.makeCall → sendEvent('call_result')",
               "transportByPlatform": {
                 "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall → sendEvent('call_result')",
-                "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.makeDirectCall → emit 'call_result' (~200ms)"
+                "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.handleRequestCall → makeDirectCall → emit 'call_result'"
               },
               "messages": [
                 {
@@ -1689,14 +1689,14 @@
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → VbMaViewController.sendEvent(\"call_result\", payload:)",
                   "hostFnByPlatform": {
                     "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall → VbMaViewController.sendEvent(\"call_result\")",
-                    "android": "MiniAppHelper.makeDirectCall → VBotPhone.startOutgoingCall → VbMaSDK emit \"call_result\" (~200ms)"
+                    "android": "MiniAppHelper.handleRequestCall → ChooseHotlineCallBottomSheet / makeDirectCall → VBotPhone.startOutgoingCall → VbMaSDK emit \"call_result\""
                   },
                   "miniAppFn": "makeCall(params) (@vbotma/sdk) nhận Promise<CallResult> từ sự kiện call_result",
                   "payload": "{ request_id, phoneNumber, displayName, avatarColor }",
                   "response": "{ request_id, success }",
                   "exampleResponse": "{\n  \"request_id\": \"req_05\",\n  \"success\": true\n}",
                   "note": "Tên hiển thị truyền sẵn được giữ nguyên ưu tiên cao nhất trong suốt cuộc gọi.",
-                  "parityNote": "iOS trả call_result đồng bộ; Android delay ~200ms trước khi chuyển Activity và giữ tên qua CallModel.miniAppDisplayName."
+                  "parityNote": "iOS trả call_result sau khi dispatch VPMAppService.makeCall (có validate MISSING_PHONE_NUMBER); Android đợi chọn Hotline ở ChooseHotlineCallBottomSheet (nếu chưa có mặc định) rồi trả call_result ngay sau makeDirectCall (hoặc USER_CANCELLED / NO_HOTLINE / ERROR) và giữ tên qua CallModel.miniAppDisplayName."
                 }
               ]
             }
@@ -1915,14 +1915,14 @@
             "tech": "contact-item.svelte gọi makeCall(item.phone, { displayName: item.name }); Host xử lý gọi (iOS CallKit / Android MiniAppHelper.makeDirectCall -> PJSIP)."
           },
           "techDetail": {
-            "platformDiffNote": "Android gọi MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName rồi mở NewCallActivity / VBotPhone.startOutgoingCall và emit \"call_result\" sau ~200ms.",
+            "platformDiffNote": "Android gọi MiniAppHelper.handleRequestCall (đợi ChooseHotlineCallBottomSheet nếu cần) → MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName, mở NewCallActivity / VBotPhone.startOutgoingCall và emit \"call_result\" ngay theo kết quả.",
             "codeRefs": [
               "vb-ma-contact-forward/src/lib/components/contact-item.svelte",
               "VBot/Service/MiniAppService.swift"
             ],
             "byPlatform": {
               "android": {
-                "summary": "VbMaSDKDelegate.onRequestCall -> MiniAppHelper.makeDirectCall gán CallModel.miniAppDisplayName và trả \"call_result\" sau ~200ms.",
+                "summary": "VbMaSDKDelegate.onRequestCall -> MiniAppHelper.handleRequestCall -> ChooseHotlineCallBottomSheet / makeDirectCall gán CallModel.miniAppDisplayName và trả \"call_result\" theo kết quả thực tế.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
@@ -1944,7 +1944,7 @@
                   "hostFn": "MiniAppService.onRequestCall(payload:) → VPMAppService.makeCall(...) → sendEvent(\"call_result\", payload:)",
                   "hostFnByPlatform": {
                     "ios": "MiniAppService.onRequestCall → VPMAppService.makeCall(...) → sendEvent(\"call_result\")",
-                    "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.makeDirectCall → emit \"call_result\" (~200ms)"
+                    "android": "VbMaSDKDelegate.onRequestCall → MiniAppHelper.handleRequestCall → makeDirectCall → emit \"call_result\""
                   },
                   "miniAppFn": "handleCall() [contact-item.svelte] → makeCall(item.phone, { displayName: item.name })",
                   "payload": "{ request_id, phoneNumber, displayName }",

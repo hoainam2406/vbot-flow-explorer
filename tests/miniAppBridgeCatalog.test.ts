@@ -136,7 +136,9 @@ describe('miniAppBridgeCatalog', () => {
       expect(specText).toContain(expected);
     }
 
-    expect(BRIDGE_PARITY_ALERTS.length).toBeGreaterThanOrEqual(5);
+    expect(BRIDGE_PARITY_ALERTS.length).toBeGreaterThanOrEqual(3);
+    expect(BRIDGE_PARITY_ALERTS.some((a) => a.id === 'pa-autodial-err')).toBe(false);
+    expect(BRIDGE_PARITY_ALERTS.some((a) => a.id === 'pa-make-call-200ms')).toBe(false);
     for (const alert of BRIDGE_PARITY_ALERTS) {
       if (alert.relatedNodeId) {
         expect(findNodeById(dataset, alert.relatedNodeId)).toBeDefined();
@@ -144,6 +146,8 @@ describe('miniAppBridgeCatalog', () => {
     }
 
     const md = exportMiniAppBridgeMarkdown();
+    expect(md).not.toContain('Handler.postDelayed');
+    expect(md).not.toContain('timer 200ms đã trả');
     expect(md).toContain('## 1. Kiến trúc tổng quan');
     expect(md).toContain('## 2. Luồng chạy thử chi tiết');
     expect(md).toContain('Bắt đầu (start_autodial)');
