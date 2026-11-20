@@ -7,7 +7,7 @@ import {
   type Edge,
   type Node,
 } from '@vue-flow/core';
-import type { FlowEdgeData, FlowNodeData } from '../data/schema';
+import type { FlowEdgeData, FlowNodeData, NodeKind } from '../data/schema';
 
 export interface LayoutOptions {
   direction?: 'LR' | 'TB';
@@ -342,8 +342,12 @@ function buildRoundedPolylinePath(points: EdgePoint[], radius = 12): string {
 }
 
 export function buildRoutedEdgePath(params: RoutedEdgePathParams): RoutedEdgePathResult {
+  const isVertical =
+    params.sourcePosition === Position.Bottom || params.sourcePosition === Position.Top;
   const waypoints = params.route?.points ?? [];
-  const needsWaypointRouting = waypoints.length > 3 || params.targetX <= params.sourceX;
+  const needsWaypointRouting = isVertical
+    ? waypoints.length > 3 && params.targetY <= params.sourceY
+    : waypoints.length > 3 || params.targetX <= params.sourceX;
 
   if (!needsWaypointRouting) {
     const [path, labelX, labelY] = getSmoothStepPath({
@@ -356,6 +360,30 @@ export function buildRoutedEdgePath(params: RoutedEdgePathParams): RoutedEdgePat
       borderRadius: params.borderRadius ?? 10,
     });
     return { path, labelX, labelY };
+  }
+
+  if (isVertical) {
+    const stub = 24;
+    const inner = waypoints.length >= 3 ? waypoints.slice(1, -1) : [];
+    const sideX =
+      inner.length > 0
+        ? inner[0].x
+        : Math.max(params.sourceX, params.targetX) + 88;
+    const rawVertices: EdgePoint[] = [
+      { x: params.sourceX, y: params.sourceY },
+      { x: params.sourceX, y: params.sourceY + stub },
+      { x: sideX, y: params.sourceY + stub },
+      { x: sideX, y: params.targetY - stub },
+      { x: params.targetX, y: params.targetY - stub },
+      { x: params.targetX, y: params.targetY },
+    ];
+    const vertices = cleanOrthogonalVertices(rawVertices);
+    const path = buildRoundedPolylinePath(vertices, params.borderRadius ?? 12);
+    return {
+      path,
+      labelX: sideX,
+      labelY: (params.sourceY + params.targetY) / 2,
+    };
   }
 
   const inner =
@@ -427,6 +455,12 @@ export function buildRoutedEdgePath(params: RoutedEdgePathParams): RoutedEdgePat
   return { path, labelX, labelY };
 }
 
+export interface ToVueFlowEdgesOptions {
+  isDark?: boolean;
+  nodeKindById?: ReadonlyMap<string, NodeKind>;
+  lineageEdgeIds?: ReadonlySet<string> | null;
+}
+
 export function toVueFlowEdges(
   flowEdges: FlowEdgeData[],
   highlightedEdgeIds?: Set<string>,
@@ -434,7 +468,12 @@ export function toVueFlowEdges(
   edgeRoutes?: Record<string, EdgeRoute>,
   currentStepEdgeId?: string | null,
   upcomingEdgeIds?: Set<string>,
+  options: ToVueFlowEdgesOptions = {},
 ): Edge[] {
+  const isDark = options.isDark ?? false;
+  const nodeKindById = options.nodeKindById;
+  const lineageEdgeIds = options.lineageEdgeIds ?? null;
+  const hasLineageFilter = !dimOthers && Boolean(lineageEdgeIds && lineageEdgeIds.size > 0);
   const hasStepMode =
     Boolean(currentStepEdgeId) || Boolean(upcomingEdgeIds && upcomingEdgeIds.size > 0);
 
@@ -442,30 +481,71 @@ export function toVueFlowEdges(
     const isCurrentEdge = Boolean(currentStepEdgeId && edge.id === currentStepEdgeId);
     const isHighlighted = highlightedEdgeIds?.has(edge.id) ?? false;
     const isUpcoming = Boolean(!isCurrentEdge && !isHighlighted && upcomingEdgeIds?.has(edge.id));
+    const isLineageHit = Boolean(hasLineageFilter && lineageEdgeIds?.has(edge.id));
 
-    const strokeColor = !dimOthers
-      ? '#94a3b8'
-      : isCurrentEdge || isHighlighted
-        ? '#2563eb'
-        : isUpcoming
-          ? '#93c5fd'
-          : '#cbd5e1';
+    const sourceKind = nodeKindById?.get(edge.source);
+    const targetKind = nodeKindById?.get(edge.target);
+    const isErrorEdge = targetKind === 'error';
+    const isMiniAppEdge = sourceKind === 'miniapp' || targetKind === 'miniapp';
 
-    const style = !dimOthers
-      ? { stroke: strokeColor, strokeWidth: 1.7 }
-      : hasStepMode
-        ? isCurrentEdge
-          ? { stroke: strokeColor, strokeWidth: 3.2, opacity: 1 }
-          : isHighlighted
-            ? { stroke: strokeColor, strokeWidth: 2.4, opacity: 1 }
-            : isUpcoming
-              ? { stroke: strokeColor, strokeWidth: 2, opacity: 0.78 }
-              : { stroke: strokeColor, strokeWidth: 1.2, opacity: 0.22 }
-        : {
-            stroke: strokeColor,
-            strokeWidth: isHighlighted ? 2.6 : 1.3,
-            opacity: isHighlighted ? 1 : 0.28,
-          };
+    let strokeColor: string;
+    let strokeWidth = 1.6;
+    let opacity = 1;
+    let strokeDasharray: string | undefined;
+    let pulse = false;
+    let glow = false;
+
+    if (dimOthers) {
+      if (isCurrentEdge) {
+        strokeColor = isDark ? '#38bdf8' : '#2563eb';
+        strokeWidth = 3.2;
+        pulse = true;
+        glow = true;
+      } else if (isHighlighted) {
+        strokeColor = isDark ? '#60a5fa' : '#2563eb';
+        strokeWidth = 2.4;
+        glow = !hasStepMode;
+        pulse = !hasStepMode;
+      } else if (isUpcoming) {
+        strokeColor = isDark ? '#3b82f6' : '#93c5fd';
+        strokeWidth = 2;
+        opacity = isDark ? 0.65 : 0.78;
+      } else {
+        strokeColor = isDark ? '#334155' : '#cbd5e1';
+        strokeWidth = 1.2;
+        opacity = isDark ? 0.2 : 0.22;
+      }
+    } else if (hasLineageFilter) {
+      if (isLineageHit) {
+        strokeColor = isDark ? '#22d3ee' : '#4f46e5';
+        strokeWidth = 2.5;
+        pulse = true;
+        glow = true;
+      } else {
+        strokeColor = isDark ? '#334155' : '#cbd5e1';
+        strokeWidth = 1.2;
+        opacity = 0.22;
+      }
+    } else if (isErrorEdge) {
+      strokeColor = isDark ? '#fb7185' : '#f43f5e';
+      strokeWidth = 1.65;
+      strokeDasharray = '5 4';
+    } else if (isMiniAppEdge) {
+      strokeColor = isDark ? '#22d3ee' : '#0891b2';
+      strokeWidth = 1.8;
+    } else {
+      strokeColor = isDark ? '#475569' : '#94a3b8';
+      strokeWidth = 1.65;
+    }
+
+    const style: Record<string, string | number> = {
+      stroke: strokeColor,
+      strokeWidth,
+      opacity,
+    };
+    if (strokeDasharray) {
+      style.strokeDasharray = strokeDasharray;
+    }
 
     return {
       id: edge.id,
@@ -476,6 +556,8 @@ export function toVueFlowEdges(
       animated: hasStepMode ? isCurrentEdge : isHighlighted,
       data: {
         route: edgeRoutes?.[edge.id],
+        pulse,
+        glow,
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,

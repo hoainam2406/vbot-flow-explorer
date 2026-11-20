@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
+import { useToast } from '../../composables/useToast';
 import { copyTextToClipboard, downloadTextFile, slugifyFilename } from '../../core/downloadHelper';
 import {
   getNodeDisplayLabel,
@@ -36,6 +37,7 @@ if (!explorer) {
   throw new Error('FLOW_EXPLORER_KEY must be provided');
 }
 
+const { pushToast } = useToast();
 const enableTechMode = __ENABLE_TECH_MODE__;
 
 const KIND_BADGE_MAP: Record<NodeKind, { label: string; cls: string }> = {
@@ -124,6 +126,7 @@ const handleCopyMd = async () => {
   const ok = await copyTextToClipboard(md);
   if (ok) {
     copiedMd.value = true;
+    pushToast('Đã sao chép nội dung Markdown', 'success');
     if (copyResetTimer) clearTimeout(copyResetTimer);
     copyResetTimer = setTimeout(() => {
       copiedMd.value = false;
@@ -137,6 +140,7 @@ const handleDownloadMd = async () => {
   const md = await buildCurrentNodeMarkdown();
   if (!md) return;
   downloadTextFile(`${slugifyFilename(displayLabel.value)}.md`, md);
+  pushToast('Đã tải tài liệu Markdown (.md)', 'success');
 };
 
 const handleCopyLink = async () => {
@@ -144,6 +148,7 @@ const handleCopyLink = async () => {
   const ok = await copyTextToClipboard(window.location.href);
   if (ok) {
     copiedLink.value = true;
+    pushToast('Đã sao chép đường dẫn tới mục này', 'success');
     if (linkResetTimer) clearTimeout(linkResetTimer);
     linkResetTimer = setTimeout(() => {
       copiedLink.value = false;
@@ -160,15 +165,15 @@ onBeforeUnmount(() => {
 <template>
   <aside
     v-if="node"
-    class="z-10 flex h-full w-full shrink-0 flex-col border-l border-slate-200 bg-white shadow-xl transition-[width] duration-200"
+    class="z-10 flex h-full w-full shrink-0 flex-col border-l border-slate-200 bg-white shadow-xl transition-[width] duration-200 max-sm:fixed max-sm:inset-y-0 max-sm:right-0 max-sm:z-30 dark:border-slate-800 dark:bg-[#0d1424]"
     :class="drawerWidthClass"
   >
-    <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+    <div class="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
       <div class="min-w-0 flex-1">
         <button
           v-if="previousNodeLabel"
           type="button"
-          class="mb-2 inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
+          class="mb-2 inline-flex max-w-full items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-medium text-slate-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/15 dark:hover:text-cyan-300"
           :title="`Quay lại: ${previousNodeLabel}`"
           @click="explorer.goBack()"
         >
@@ -186,12 +191,12 @@ onBeforeUnmount(() => {
           </span>
           <span
             v-if="isTechNode"
-            class="inline-flex items-center rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700"
+            class="inline-flex items-center rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
           >
             Kỹ thuật
           </span>
         </div>
-        <h2 class="text-base leading-snug font-bold text-slate-900">
+        <h2 class="text-base leading-snug font-bold text-slate-900 dark:text-slate-100">
           {{ displayLabel }}
         </h2>
       </div>
@@ -201,17 +206,17 @@ onBeforeUnmount(() => {
           type="button"
           :aria-label="copiedLink ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn tới mục này'"
           :title="copiedLink ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn tới mục này'"
-          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           @click="handleCopyLink"
         >
-          <Check v-if="copiedLink" class="h-4 w-4 text-emerald-600" />
+          <Check v-if="copiedLink" class="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           <Link2 v-else class="h-4 w-4" />
         </button>
 
         <button
           type="button"
           aria-label="Đóng chi tiết"
-          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          class="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
           @click="explorer.selectedNodeId.value = null"
         >
           <X class="h-4 w-4" />
@@ -224,7 +229,7 @@ onBeforeUnmount(() => {
         <button
           v-if="hasSubtree && childCount > 0"
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/12 dark:text-cyan-300 dark:hover:bg-cyan-500/20"
           @click="explorer.toggleExpand(node.id)"
         >
           <GitBranch class="h-3.5 w-3.5" />
@@ -237,8 +242,8 @@ onBeforeUnmount(() => {
           class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition"
           :class="
             isFocusedHere
-              ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
-              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300'
+              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800'
           "
           @click="explorer.setFocusRoot(isFocusedHere ? null : node.id)"
         >
@@ -249,10 +254,10 @@ onBeforeUnmount(() => {
 
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800"
           @click="handleCopyMd"
         >
-          <Check v-if="copiedMd" class="h-3.5 w-3.5 text-emerald-600" />
+          <Check v-if="copiedMd" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
           <FileText v-else class="h-3.5 w-3.5" />
           {{
             copiedMd
@@ -267,7 +272,7 @@ onBeforeUnmount(() => {
 
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800"
           @click="handleDownloadMd"
         >
           <Download class="h-3.5 w-3.5" />
@@ -281,10 +286,10 @@ onBeforeUnmount(() => {
       />
 
       <section class="space-y-1.5">
-        <h3 class="text-xs font-bold tracking-wide text-slate-500 uppercase">
+        <h3 class="text-xs font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
           Mô tả tổng quan
         </h3>
-        <p class="text-sm leading-relaxed text-slate-700">
+        <p class="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
           {{ node.summary.overview }}
         </p>
       </section>
@@ -297,8 +302,8 @@ onBeforeUnmount(() => {
         @open-miniapp-bridge="emit('openMiniappBridge', $event)"
       />
 
-      <section v-if="relatedNodes.length > 0" class="space-y-2 border-t border-slate-100 pt-4">
-        <h3 class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-slate-500 uppercase">
+      <section v-if="relatedNodes.length > 0" class="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+        <h3 class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
           <Link2 class="h-3.5 w-3.5" />
           Liên kết chéo
         </h3>
@@ -307,7 +312,7 @@ onBeforeUnmount(() => {
             v-for="target in relatedNodes"
             :key="target.id"
             type="button"
-            class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+            class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-300"
             @click="explorer.jumpToNode(target.id)"
           >
             {{ getNodeDisplayLabel(target, explorer.audienceMode.value) }}

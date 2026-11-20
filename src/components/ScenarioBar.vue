@@ -33,6 +33,8 @@ const currentStepIndex = computed(() => {
 });
 const currentStep = computed(() => timeline.value?.steps[currentStepIndex.value] ?? null);
 
+const formatStepPad = (n: number) => String(n).padStart(2, '0');
+
 const stopAutoPlay = () => {
   if (playTimer) {
     clearInterval(playTimer);
@@ -93,17 +95,17 @@ const onStepMove = (delta: 1 | -1) => {
 <template>
   <div
     v-if="scenarios.length > 0"
-    class="pointer-events-auto absolute bottom-4 left-4 z-10 max-w-2xl rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-lg backdrop-blur"
+    class="pointer-events-auto absolute bottom-4 left-4 z-10 max-w-2xl rounded-2xl border border-slate-200/90 bg-white/92 p-3 shadow-lg backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/90"
   >
     <div class="mb-2 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-slate-500 uppercase">
-        <Play class="h-3.5 w-3.5 text-blue-600" />
+      <div class="flex items-center gap-1.5 text-[11px] font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+        <Play class="h-3.5 w-3.5 text-blue-600 dark:text-cyan-400" />
         <span>Chạy thử kịch bản ({{ scenarios.length }})</span>
       </div>
       <button
         v-if="activeScenario"
         type="button"
-        class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+        class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         @click="explorer.selectScenario(null)"
       >
         <X class="h-3 w-3" />
@@ -119,8 +121,8 @@ const onStepMove = (delta: 1 | -1) => {
         class="rounded-full border px-3 py-1 text-xs font-medium transition"
         :class="
           explorer.activeScenarioId.value === sc.id
-            ? 'border-blue-600 bg-blue-600 text-white shadow-xs'
-            : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300 hover:bg-blue-50'
+            ? 'border-blue-600 bg-blue-600 text-white shadow-xs dark:border-cyan-400 dark:bg-cyan-500 dark:text-slate-950'
+            : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300 hover:bg-blue-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/10'
         "
         @click="toggleScenario(sc.id)"
       >
@@ -128,31 +130,33 @@ const onStepMove = (delta: 1 | -1) => {
       </button>
     </div>
 
-    <div v-if="activeScenario" class="mt-2.5 space-y-2 border-t border-slate-100 pt-2">
-      <p v-if="activeScenario.description" class="text-xs leading-relaxed text-slate-600">
+    <div v-if="activeScenario" class="mt-2.5 space-y-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+      <p v-if="activeScenario.description" class="text-xs leading-relaxed text-slate-600 dark:text-slate-300">
         {{ activeScenario.description }}
       </p>
 
       <div v-if="totalSteps > 0" class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex items-center gap-1.5">
-          <div class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+          <div class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800/80">
             <button
               type="button"
               aria-label="Bước trước"
+              title="Bước trước ([)"
               :disabled="currentStepIndex <= 0"
-              class="rounded-md p-1 text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35"
+              class="rounded-md p-1 text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
               @click="onStepMove(-1)"
             >
               <ChevronLeft class="h-3.5 w-3.5" />
             </button>
-            <span class="px-2 text-[11px] font-semibold text-slate-700">
-              Bước {{ currentStepIndex + 1 }} / {{ totalSteps }}
+            <span class="px-2 font-mono text-[11px] font-semibold text-slate-700 dark:text-slate-200">
+              {{ formatStepPad(currentStepIndex + 1) }} / {{ formatStepPad(totalSteps) }}
             </span>
             <button
               type="button"
               aria-label="Bước tiếp"
+              title="Bước tiếp (])"
               :disabled="currentStepIndex >= totalSteps - 1"
-              class="rounded-md p-1 text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35"
+              class="rounded-md p-1 text-slate-600 transition hover:bg-white hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
               @click="onStepMove(1)"
             >
               <ChevronRight class="h-3.5 w-3.5" />
@@ -165,8 +169,8 @@ const onStepMove = (delta: 1 | -1) => {
             class="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition"
             :class="
               isAutoPlaying
-                ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
-                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300'
+                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700'
             "
             @click="toggleAutoPlay"
           >
@@ -178,7 +182,7 @@ const onStepMove = (delta: 1 | -1) => {
 
         <button
           type="button"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-700 transition hover:bg-blue-100 dark:border-cyan-500/35 dark:bg-cyan-500/12 dark:text-cyan-300 dark:hover:bg-cyan-500/20"
           @click="explorer.openScenarioDialog()"
         >
           <Workflow class="h-3.5 w-3.5" />
@@ -188,15 +192,15 @@ const onStepMove = (delta: 1 | -1) => {
 
       <div
         v-if="currentStep"
-        class="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-700"
+        class="flex flex-wrap items-center gap-1.5 rounded-lg bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
       >
-        <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 text-[10px] font-bold text-white">
+        <span class="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-blue-600 px-1 font-mono text-[10px] font-bold text-white dark:bg-cyan-500 dark:text-slate-950">
           {{ currentStep.stepNumber }}
         </span>
-        <span v-if="currentStep.incomingEdgeLabel" class="font-medium text-blue-700">
+        <span v-if="currentStep.incomingEdgeLabel" class="font-medium text-blue-700 dark:text-cyan-300">
           [{{ currentStep.incomingEdgeLabel }}] →
         </span>
-        <span class="font-semibold text-slate-900">{{ currentStep.displayLabel }}</span>
+        <span class="font-semibold text-slate-900 dark:text-slate-100">{{ currentStep.displayLabel }}</span>
       </div>
     </div>
   </div>

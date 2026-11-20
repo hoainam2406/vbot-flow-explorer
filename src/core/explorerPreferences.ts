@@ -139,3 +139,67 @@ export function resolveInitialExplorerState(
     selectedNodeId,
   };
 }
+
+export type ThemeMode = 'dark' | 'light';
+export type LayoutDirection = 'LR' | 'TB';
+
+export const THEME_STORAGE_KEY = 'vbot-flow-theme-v1';
+export const LAYOUT_DIRECTION_STORAGE_KEY = 'vbot-flow-layout-dir-v1';
+
+export function loadSavedTheme(
+  storage: Pick<Storage, 'getItem'> | null = getDefaultStorage(),
+): ThemeMode | null {
+  if (!storage) return null;
+  try {
+    const val = storage.getItem(THEME_STORAGE_KEY);
+    return val === 'dark' || val === 'light' ? val : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveTheme(
+  theme: ThemeMode,
+  storage: Pick<Storage, 'setItem'> | null = getDefaultStorage(),
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(THEME_STORAGE_KEY, theme);
+  } catch {
+    // Bỏ qua lỗi trình duyệt chặn storage
+  }
+}
+
+export function resolveInitialTheme(
+  allowTechMode: boolean,
+  savedTheme: ThemeMode | null,
+): ThemeMode {
+  if (savedTheme === 'dark' || savedTheme === 'light') {
+    return savedTheme;
+  }
+  return allowTechMode ? 'dark' : 'light';
+}
+
+export function loadSavedLayoutDirection(
+  storage: Pick<Storage, 'getItem'> | null = getDefaultStorage(),
+): LayoutDirection | null {
+  if (!storage) return null;
+  try {
+    const val = storage.getItem(LAYOUT_DIRECTION_STORAGE_KEY);
+    return val === 'LR' || val === 'TB' ? val : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLayoutDirection(
+  direction: LayoutDirection,
+  storage: Pick<Storage, 'setItem'> | null = getDefaultStorage(),
+): void {
+  if (!storage) return;
+  try {
+    storage.setItem(LAYOUT_DIRECTION_STORAGE_KEY, direction);
+  } catch {
+    // Bỏ qua lỗi trình duyệt chặn storage
+  }
+}

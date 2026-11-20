@@ -8,8 +8,9 @@ import {
   computeDagreGraphLayout,
   computeDagreLayout,
   computeNodesBounds,
+  toVueFlowEdges,
 } from '../src/composables/useGraphLayout';
-import type { FlowEdgeData, FlowNodeData } from '../src/data/schema';
+import type { FlowEdgeData, FlowNodeData, NodeKind } from '../src/data/schema';
 
 describe('computeDagreLayout', () => {
   it('places child nodes to the right of root in LR direction and expands height when media shown', () => {
@@ -190,5 +191,73 @@ describe('computeDagreLayout', () => {
         expect(actualCallKids).toEqual(expectedCallKids);
       }
     }
+  });
+
+  it('routes vertical TB edges when targetX < sourceX without horizontal back-edge wrap and styles dark/semantic/lineage edges', () => {
+    const verticalForward = buildRoutedEdgePath({
+      sourceX: 300,
+      sourceY: 120,
+      sourcePosition: Position.Bottom,
+      targetX: 120,
+      targetY: 280,
+      targetPosition: Position.Top,
+    });
+    expect(verticalForward.path).toContain('M300');
+    expect(verticalForward.labelY).toBe(200);
+
+    const verticalBack = buildRoutedEdgePath({
+      sourceX: 200,
+      sourceY: 320,
+      sourcePosition: Position.Bottom,
+      targetX: 150,
+      targetY: 100,
+      targetPosition: Position.Top,
+      route: {
+        points: [
+          { x: 200, y: 320 },
+          { x: 340, y: 260 },
+          { x: 340, y: 180 },
+          { x: 150, y: 100 },
+        ],
+      },
+    });
+    expect(verticalBack.labelX).toBe(340);
+
+    const edges: FlowEdgeData[] = [
+      { id: 'e-norm', source: 'n1', target: 'n2' },
+      { id: 'e-mini', source: 'n1', target: 'n3' },
+      { id: 'e-err', source: 'n1', target: 'n4' },
+    ];
+    const kindMap = new Map<string, NodeKind>([
+      ['n1', 'module'],
+      ['n2', 'action'],
+      ['n3', 'miniapp'],
+      ['n4', 'error'],
+    ]);
+
+    const darkIdle = toVueFlowEdges(edges, undefined, false, undefined, null, undefined, {
+      isDark: true,
+      nodeKindById: kindMap,
+    });
+    expect((darkIdle[0].style as Record<string, unknown>).stroke).toBe('#475569');
+    expect((darkIdle[1].style as Record<string, unknown>).stroke).toBe('#22d3ee');
+    expect((darkIdle[2].style as Record<string, unknown>).stroke).toBe('#fb7185');
+    expect((darkIdle[2].style as Record<string, unknown>).strokeDasharray).toBe('5 4');
+
+    const lineageHighlighted = toVueFlowEdges(
+      edges,
+      undefined,
+      false,
+      undefined,
+      null,
+      undefined,
+      {
+        isDark: true,
+        nodeKindById: kindMap,
+        lineageEdgeIds: new Set(['e-mini']),
+      },
+    );
+    expect((lineageHighlighted[1].data as { pulse?: boolean; glow?: boolean }).pulse).toBe(true);
+    expect((lineageHighlighted[0].style as Record<string, unknown>).opacity).toBe(0.22);
   });
 });

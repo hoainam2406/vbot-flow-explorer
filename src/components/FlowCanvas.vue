@@ -6,11 +6,11 @@ import {
   useVueFlow,
   type EdgeComponent,
   type EdgeTypesObject,
+  type GraphNode,
   type NodeComponent,
   type NodeTypesObject,
 } from '@vue-flow/core';
 import { Background } from '@vue-flow/background';
-import { Controls } from '@vue-flow/controls';
 import { MiniMap } from '@vue-flow/minimap';
 import { FLOW_EXPLORER_KEY, getCameraTargetNodeIds } from '../composables/useFlowExplorer';
 import {
@@ -18,14 +18,19 @@ import {
   computeNodesBounds,
   toVueFlowEdges,
 } from '../composables/useGraphLayout';
+import { useTheme } from '../composables/useTheme';
 import { buildScenarioTimeline } from '../core/scenarioFlowEngine';
+import type { NodeKind } from '../data/schema';
 import RoutedFlowEdge from './edges/RoutedFlowEdge.vue';
 import AppFlowNode from './nodes/AppFlowNode.vue';
+import CanvasFloatingDock from './CanvasFloatingDock.vue';
 import CanvasGuideOverlay from './CanvasGuideOverlay.vue';
 import ScenarioBar from './ScenarioBar.vue';
+import TelemetryHud from './TelemetryHud.vue';
 
 const emit = defineEmits<{
   openGuide: [];
+  openParity: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -33,7 +38,13 @@ if (!explorer) {
   throw new Error('FLOW_EXPLORER_KEY must be provided');
 }
 
-const { dimensions, fitView, setViewport } = useVueFlow();
+const { isDark } = useTheme();
+const { dimensions, fitView, setViewport, viewport, zoomIn, zoomOut, zoomTo } = useVueFlow();
+
+const isTechView = computed(
+  () => __ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech',
+);
+const zoomPercent = computed(() => Math.round((viewport.value?.zoom ?? 1) * 100));
 
 const nodeTypes: NodeTypesObject = {
   appFlow: markRaw(AppFlowNode) as NodeComponent,
@@ -97,9 +108,17 @@ const edgeHighlightState = computed(() => {
   return { visitedIds, currentStepEdgeId, upcomingIds };
 });
 
+const nodeKindById = computed(() => {
+  const map = new Map<string, NodeKind>();
+  for (const node of explorer.visibleFlow.value.nodes) {
+    map.set(node.id, node.kind);
+  }
+  return map;
+});
+
 const graphLayout = computed(() =>
   computeDagreGraphLayout(explorer.visibleFlow.value.nodes, explorer.visibleFlow.value.edges, {
-    direction: 'LR',
+    direction: explorer.layoutDirection.value,
     showCanvasMedia: explorer.showCanvasMedia.value,
   }),
 );
@@ -114,8 +133,28 @@ const layoutEdges = computed(() =>
     graphLayout.value.edgeRoutes,
     edgeHighlightState.value.currentStepEdgeId,
     edgeHighlightState.value.upcomingIds,
+    {
+      isDark: isDark.value,
+      nodeKindById: nodeKindById.value,
+      lineageEdgeIds: explorer.hoveredLineage.value?.edgeIds ?? null,
+    },
   ),
 );
+
+const MINIMAP_COLORS: Record<NodeKind, string> = {
+  module: '#6366f1',
+  miniapp: '#06b6d4',
+  action: '#3b82f6',
+  process: '#8b5cf6',
+  decision: '#f59e0b',
+  external: '#10b981',
+  error: '#f43f5e',
+};
+
+const minimapNodeColor = (node: GraphNode): string => {
+  const kind = (node.data as { kind?: NodeKind } | undefined)?.kind;
+  return kind ? (MINIMAP_COLORS[kind] ?? '#64748b') : '#64748b';
+};
 
 const nextFrame = () =>
   new Promise<void>((resolve) => {
@@ -160,13 +199,23 @@ watch(
   },
 );
 
+watch(
+  () => explorer.fitRequestSeq.value,
+  () => {
+    void fitView({ padding: 0.22, duration: 350 });
+  },
+);
+
 const onPaneReady = () => {
   void runCameraFocus(0);
 };
 </script>
 
 <template>
-  <div class="relative h-full w-full bg-slate-50">
+  <div
+    class="vbot-canvas-surface relative h-full w-full"
+    :class="isTechView ? 'vbot-canvas-surface--tech' : ''"
+  >
     <VueFlow
       :nodes="layoutNodes"
       :edges="layoutEdges"
@@ -181,21 +230,33 @@ const onPaneReady = () => {
       @pane-ready="onPaneReady"
       @pane-click="explorer.selectedNodeId.value = null"
     >
-      <Background color="#cbd5e1" :gap="20" />
-      <Controls
-        position="bottom-right"
-        :show-interactive="false"
-        :fit-view-params="{ padding: 0.22, duration: 350 }"
-      />
+      <Background :color="isDark ? '#1e293b' : '#cbd5e1'" :gap="22" :size="1.2" />
       <MiniMap
+        v-if="!explorer.zenMode.value"
         position="top-right"
         pannable
         zoomable
-        class="!rounded-xl !border !border-slate-200 !shadow-sm"
+        :node-color="minimapNodeColor"
+        :mask-color="isDark ? 'rgba(9, 13, 22, 0.72)' : 'rgba(241, 245, 249, 0.72)'"
+        class="!rounded-xl !border !border-slate-200/90 !bg-white/85 !shadow-md !backdrop-blur-md dark:!border-slate-700/80 dark:!bg-slate-900/85"
       />
     </VueFlow>
 
-    <CanvasGuideOverlay @open-guide="emit('openGuide')" />
-    <ScenarioBar />
+    <div
+      v-if="!explorer.zenMode.value"
+      class="pointer-events-none absolute top-3 left-3 z-10 flex max-w-2xl flex-col items-start gap-2"
+    >
+      <TelemetryHud @open-parity="emit('openParity')" />
+      <CanvasGuideOverlay @open-guide="emit('openGuide')" />
+    </div>
+
+    <ScenarioBar v-if="!explorer.zenMode.value" />
+    <CanvasFloatingDock
+      :zoom-percent="zoomPercent"
+      @zoom-in="void zoomIn({ duration: 180 })"
+      @zoom-out="void zoomOut({ duration: 180 })"
+      @reset-zoom="void zoomTo(1, { duration: 220 })"
+      @fit-view="void runCameraFocus(350)"
+    />
   </div>
 </template>

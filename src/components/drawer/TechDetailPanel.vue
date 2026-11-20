@@ -12,8 +12,11 @@ import {
   PlayCircle,
 } from 'lucide-vue-next';
 import type { MiniAppBridgeLaunchContext } from '../MiniAppBridgeModal.vue';
+import JsonCodeBlock from '../JsonCodeBlock.vue';
+import { useToast } from '../../composables/useToast';
 import { MINI_APP_CATALOG } from '../../data/miniAppBridgeCatalog';
 import { copyTextToClipboard } from '../../core/downloadHelper';
+import { detectCodeRefLanguage } from '../../core/jsonHighlight';
 import type {
   BridgeMessage,
   FlowNodeData,
@@ -77,6 +80,7 @@ const resolveContextForMiniApp = (
   return { tab: 'simulator', flowId: 'flow-token-401', miniAppId };
 };
 
+const { pushToast } = useToast();
 const expandedMap = ref<Record<number, boolean>>({});
 const copiedKey = ref<string | null>(null);
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
@@ -85,6 +89,7 @@ const copyValue = async (key: string, value: string) => {
   const ok = await copyTextToClipboard(value);
   if (ok) {
     copiedKey.value = key;
+    pushToast('Đã sao chép vào clipboard', 'success');
     if (copyResetTimer) clearTimeout(copyResetTimer);
     copyResetTimer = setTimeout(() => {
       copiedKey.value = null;
@@ -191,19 +196,19 @@ const miniAppBridgeView = computed(() => {
       from: 'Host App',
       to: 'Mini App (JS)',
       tag: 'Khởi tạo',
-      cls: 'border-indigo-200 bg-indigo-50 text-indigo-700',
+      cls: 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-300',
     },
     host_to_miniapp: {
       from: 'Host App',
       to: 'Mini App (JS)',
       tag: 'Sự kiện',
-      cls: 'border-emerald-200 bg-emerald-50 text-emerald-700',
+      cls: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300',
     },
     miniapp_to_host: {
       from: 'Mini App (JS)',
       to: 'Host App',
       tag: 'Gọi lệnh',
-      cls: 'border-blue-200 bg-blue-50 text-blue-700',
+      cls: 'border-blue-200 bg-blue-50 text-blue-700 dark:border-sky-500/35 dark:bg-sky-500/15 dark:text-sky-300',
     },
   };
 
@@ -382,31 +387,31 @@ const techSections = computed<RenderedTechSection[]>(() => {
 <template>
   <div
     v-if="isCompare"
-    class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2 text-xs text-indigo-950"
+    class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2 text-xs text-indigo-950 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200"
   >
     <span class="inline-flex items-center gap-1.5 font-bold">
-      <Columns2 class="h-3.5 w-3.5 text-indigo-600" />
+      <Columns2 class="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
       Chế độ đối chiếu iOS (Swift) ↔ Android (Kotlin/Java)
     </span>
-    <span class="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+    <span class="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-slate-800 dark:text-indigo-300">
       Cột trái: iOS · Cột phải: Android
     </span>
   </div>
 
   <div
     v-if="singlePlatformNotice"
-    class="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-900"
+    class="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs font-medium text-amber-900 dark:border-amber-500/35 dark:bg-amber-500/10 dark:text-amber-300"
   >
     {{ singlePlatformNotice }}
   </div>
 
   <div
     v-if="platformDiffNote"
-    class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs leading-relaxed text-amber-950"
+    class="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/35 dark:bg-amber-500/10 dark:text-amber-200"
   >
-    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+    <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
     <div>
-      <div class="text-[11px] font-bold tracking-wide text-amber-800 uppercase">
+      <div class="text-[11px] font-bold tracking-wide text-amber-800 uppercase dark:text-amber-300">
         Điểm khác biệt iOS ↔ Android
       </div>
       <p class="mt-0.5">{{ platformDiffNote }}</p>
@@ -415,32 +420,32 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
   <section
     v-if="isCompare && (iosSummary || androidSummary)"
-    class="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5"
+    class="space-y-2 rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 dark:border-slate-800 dark:bg-slate-900/70"
   >
-    <h3 class="text-xs font-bold tracking-wide text-slate-700 uppercase">
+    <h3 class="text-xs font-bold tracking-wide text-slate-700 uppercase dark:text-slate-300">
       Chi tiết xử lý kỹ thuật (iOS vs Android)
     </h3>
     <div class="grid grid-cols-1 gap-2.5 md:grid-cols-2">
-      <div class="rounded-lg border border-slate-300 bg-white p-3">
-        <div class="mb-1 text-[10px] font-bold tracking-wide text-slate-700 uppercase">
+      <div class="rounded-lg border border-slate-300 bg-white p-3 dark:border-slate-700/80 dark:bg-slate-900">
+        <div class="mb-1 text-[10px] font-bold tracking-wide text-slate-700 uppercase dark:text-indigo-300">
           iOS (Swift)
         </div>
-        <p v-if="iosSummary" class="text-xs leading-relaxed text-slate-700">
+        <p v-if="iosSummary" class="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
           {{ iosSummary }}
         </p>
-        <p v-else class="text-xs italic text-slate-400">
+        <p v-else class="text-xs italic text-slate-400 dark:text-slate-500">
           Không áp dụng trên iOS (chỉ Android)
         </p>
       </div>
 
-      <div class="rounded-lg border border-emerald-200 bg-emerald-50/35 p-3">
-        <div class="mb-1 text-[10px] font-bold tracking-wide text-emerald-700 uppercase">
+      <div class="rounded-lg border border-emerald-200 bg-emerald-50/35 p-3 dark:border-emerald-500/30 dark:bg-emerald-500/8">
+        <div class="mb-1 text-[10px] font-bold tracking-wide text-emerald-700 uppercase dark:text-emerald-300">
           Android (Kotlin / Java)
         </div>
-        <p v-if="androidSummary" class="text-xs leading-relaxed text-slate-700">
+        <p v-if="androidSummary" class="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
           {{ androidSummary }}
         </p>
-        <p v-else class="text-xs italic text-slate-400">
+        <p v-else class="text-xs italic text-slate-400 dark:text-slate-500">
           Không áp dụng trên Android (chỉ iOS)
         </p>
       </div>
@@ -449,29 +454,29 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
   <section
     v-else-if="!isCompare && singleTechSummary"
-    class="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5"
+    class="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 dark:border-slate-800 dark:bg-slate-900/70"
   >
-    <h3 class="text-xs font-bold tracking-wide text-slate-700 uppercase">
+    <h3 class="text-xs font-bold tracking-wide text-slate-700 uppercase dark:text-slate-300">
       Chi tiết xử lý kỹ thuật ({{ activeSinglePlatform === 'ios' ? 'iOS' : 'Android' }})
     </h3>
-    <p class="text-xs leading-relaxed text-slate-700">
+    <p class="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
       {{ singleTechSummary }}
     </p>
   </section>
 
   <section
     v-if="miniAppBridgeView"
-    class="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50/40 p-3.5"
+    class="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50/40 p-3.5 dark:border-cyan-500/30 dark:bg-cyan-500/8"
   >
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-cyan-900 uppercase">
-        <ArrowLeftRight class="h-3.5 w-3.5 text-cyan-700" />
+      <h3 class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-cyan-900 uppercase dark:text-cyan-300">
+        <ArrowLeftRight class="h-3.5 w-3.5 text-cyan-700 dark:text-cyan-400" />
         Giao tiếp Host App ↔ Mini App
       </h3>
       <div class="flex flex-wrap items-center gap-1.5">
         <button
           type="button"
-          class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 transition hover:bg-indigo-100"
+          class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
           @click="
             emit('openMiniappBridge', resolveContextForMiniApp(miniAppBridgeView.miniAppId, props.node.id))
           "
@@ -479,7 +484,7 @@ const techSections = computed<RenderedTechSection[]>(() => {
           <PlayCircle class="h-3 w-3" />
           Chạy thử & Spec ↗
         </button>
-        <span class="rounded-md border border-cyan-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-cyan-800">
+        <span class="rounded-md border border-cyan-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-cyan-800 dark:border-cyan-500/30 dark:bg-slate-900 dark:text-cyan-300">
           {{ miniAppBridgeView.embedLabel }}
         </span>
       </div>
@@ -487,8 +492,8 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
     <div class="space-y-1.5 text-xs">
       <div class="flex flex-wrap items-center gap-1.5">
-        <span class="font-medium text-slate-600">Mini App ID:</span>
-        <code class="rounded border border-cyan-200 bg-white px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-800">
+        <span class="font-medium text-slate-600 dark:text-slate-400">Mini App ID:</span>
+        <code class="rounded border border-cyan-200 bg-white px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-800 dark:border-cyan-500/30 dark:bg-slate-900 dark:text-cyan-300">
           {{ miniAppBridgeView.miniAppId }}
         </code>
       </div>
@@ -497,19 +502,19 @@ const techSections = computed<RenderedTechSection[]>(() => {
         v-if="isCompare && miniAppBridgeView.hasTransportDiff"
         class="grid grid-cols-1 gap-2 md:grid-cols-2"
       >
-        <div class="rounded border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] text-slate-700">
-          <span class="font-bold text-slate-700">Transport iOS:</span>
+        <div class="rounded border border-slate-200 bg-white/90 px-2.5 py-1.5 text-[11px] text-slate-700 dark:border-slate-700/80 dark:bg-slate-900/90 dark:text-slate-300">
+          <span class="font-bold text-slate-700 dark:text-indigo-300">Transport iOS:</span>
           <span class="ml-1">{{ miniAppBridgeView.transportIos || 'Không áp dụng' }}</span>
         </div>
-        <div class="rounded border border-emerald-200 bg-emerald-50/50 px-2.5 py-1.5 text-[11px] text-slate-700">
-          <span class="font-bold text-emerald-700">Transport Android:</span>
+        <div class="rounded border border-emerald-200 bg-emerald-50/50 px-2.5 py-1.5 text-[11px] text-slate-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-slate-300">
+          <span class="font-bold text-emerald-700 dark:text-emerald-300">Transport Android:</span>
           <span class="ml-1">{{ miniAppBridgeView.transportAndroid || 'Không áp dụng' }}</span>
         </div>
       </div>
 
       <p
         v-else-if="isCompare ? miniAppBridgeView.transportIos : miniAppBridgeView.singleTransport"
-        class="text-[11px] leading-relaxed text-slate-600"
+        class="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300"
       >
         {{ isCompare ? miniAppBridgeView.transportIos : miniAppBridgeView.singleTransport }}
       </p>
@@ -519,11 +524,11 @@ const techSections = computed<RenderedTechSection[]>(() => {
       <li
         v-for="(msg, idx) in miniAppBridgeView.messages"
         :key="`${msg.direction}-${msg.name}-${idx}`"
-        class="overflow-hidden rounded-lg border border-slate-200 bg-white text-xs shadow-2xs"
+        class="overflow-hidden rounded-lg border border-slate-200 bg-white text-xs shadow-2xs dark:border-slate-700/80 dark:bg-slate-900/90"
       >
         <button
           type="button"
-          class="flex w-full items-start justify-between gap-2 p-2.5 text-left transition hover:bg-slate-50"
+          class="flex w-full items-start justify-between gap-2 p-2.5 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/70"
           :aria-expanded="isMessageOpen(idx, miniAppBridgeView.messages.length)"
           @click="toggleMessage(idx, miniAppBridgeView.messages.length)"
         >
@@ -537,17 +542,17 @@ const techSections = computed<RenderedTechSection[]>(() => {
                 <ArrowRight class="h-2.5 w-2.5 shrink-0" />
                 <span>{{ msg.dirTo }}</span>
               </span>
-              <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
+              <span class="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 {{ msg.dirTag }}
               </span>
               <span
                 v-if="msg.parityNote"
-                class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+                class="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300"
               >
                 Lệch parity
               </span>
             </div>
-            <div class="font-mono text-[12px] font-bold break-all text-slate-900">
+            <div class="font-mono text-[12px] font-bold break-all text-slate-900 dark:text-slate-100">
               {{ msg.name }}
             </div>
           </div>
@@ -563,39 +568,39 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
         <div
           v-if="isMessageOpen(idx, miniAppBridgeView.messages.length)"
-          class="space-y-2.5 border-t border-slate-100 px-2.5 pt-2.5 pb-3"
+          class="space-y-2.5 border-t border-slate-100 px-2.5 pt-2.5 pb-3 dark:border-slate-800"
         >
           <div v-if="isCompare" class="space-y-1.5">
             <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-              <div class="rounded-md border border-indigo-100 bg-indigo-50/50 px-2.5 py-1.5">
-                <div class="text-[10px] font-bold tracking-wide text-indigo-700 uppercase">
+              <div class="rounded-md border border-indigo-100 bg-indigo-50/50 px-2.5 py-1.5 dark:border-indigo-500/30 dark:bg-indigo-500/10">
+                <div class="text-[10px] font-bold tracking-wide text-indigo-700 uppercase dark:text-indigo-300">
                   Hàm Host iOS (Swift)
                 </div>
                 <code
                   v-if="msg.iosHostFn"
-                  class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800"
+                  class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800 dark:text-slate-200"
                 >
                   {{ msg.iosHostFn }}
                 </code>
-                <span v-else class="mt-0.5 block text-[11px] italic text-slate-400">
+                <span v-else class="mt-0.5 block text-[11px] italic text-slate-400 dark:text-slate-500">
                   Không áp dụng trên iOS
                 </span>
               </div>
 
-              <div class="rounded-md border border-emerald-200 bg-emerald-50/45 px-2.5 py-1.5">
-                <div class="text-[10px] font-bold tracking-wide text-emerald-700 uppercase">
+              <div class="rounded-md border border-emerald-200 bg-emerald-50/45 px-2.5 py-1.5 dark:border-emerald-500/30 dark:bg-emerald-500/10">
+                <div class="text-[10px] font-bold tracking-wide text-emerald-700 uppercase dark:text-emerald-300">
                   Hàm Host Android (Kotlin / Java)
                 </div>
                 <code
                   v-if="msg.androidHostFn"
-                  class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800"
+                  class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800 dark:text-slate-200"
                 >
                   {{ msg.androidHostFn }}
                 </code>
-                <span v-else-if="msg.parityNote" class="mt-0.5 block text-[11px] font-medium text-rose-700">
+                <span v-else-if="msg.parityNote" class="mt-0.5 block text-[11px] font-medium text-rose-700 dark:text-rose-300">
                   Chưa triển khai / Không gọi trên Android
                 </span>
-                <span v-else class="mt-0.5 block text-[11px] italic text-slate-400">
+                <span v-else class="mt-0.5 block text-[11px] italic text-slate-400 dark:text-slate-500">
                   {{ singleOnlyPlatform === 'ios' ? 'Không áp dụng trên Android' : 'Chưa tách riêng' }}
                 </span>
               </div>
@@ -603,12 +608,12 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
             <div
               v-if="msg.miniAppFn"
-              class="rounded-md border border-cyan-100 bg-cyan-50/50 px-2.5 py-1.5"
+              class="rounded-md border border-cyan-100 bg-cyan-50/50 px-2.5 py-1.5 dark:border-cyan-500/30 dark:bg-cyan-500/10"
             >
-              <div class="text-[10px] font-bold tracking-wide text-cyan-700 uppercase">
+              <div class="text-[10px] font-bold tracking-wide text-cyan-700 uppercase dark:text-cyan-300">
                 Hàm phía Mini App (JS / SDK — dùng chung iOS & Android)
               </div>
-              <code class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800">
+              <code class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800 dark:text-slate-200">
                 {{ msg.miniAppFn }}
               </code>
             </div>
@@ -620,35 +625,35 @@ const techSections = computed<RenderedTechSection[]>(() => {
               class="rounded-md border px-2.5 py-1.5"
               :class="
                 activeSinglePlatform === 'ios'
-                  ? 'border-indigo-100 bg-indigo-50/50'
-                  : 'border-emerald-200 bg-emerald-50/45'
+                  ? 'border-indigo-100 bg-indigo-50/50 dark:border-indigo-500/30 dark:bg-indigo-500/10'
+                  : 'border-emerald-200 bg-emerald-50/45 dark:border-emerald-500/30 dark:bg-emerald-500/10'
               "
             >
               <div
                 class="text-[10px] font-bold tracking-wide uppercase"
-                :class="activeSinglePlatform === 'ios' ? 'text-indigo-700' : 'text-emerald-700'"
+                :class="activeSinglePlatform === 'ios' ? 'text-indigo-700 dark:text-indigo-300' : 'text-emerald-700 dark:text-emerald-300'"
               >
                 {{ singleHostLabel }}
               </div>
               <code
                 v-if="msg.singleHostFn"
-                class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800"
+                class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800 dark:text-slate-200"
               >
                 {{ msg.singleHostFn }}
               </code>
-              <span v-else class="mt-0.5 block text-[11px] font-medium text-rose-700">
+              <span v-else class="mt-0.5 block text-[11px] font-medium text-rose-700 dark:text-rose-300">
                 Chưa triển khai / Không gọi trên Android
               </span>
             </div>
 
             <div
               v-if="msg.miniAppFn"
-              class="rounded-md border border-cyan-100 bg-cyan-50/50 px-2.5 py-1.5"
+              class="rounded-md border border-cyan-100 bg-cyan-50/50 px-2.5 py-1.5 dark:border-cyan-500/30 dark:bg-cyan-500/10"
             >
-              <div class="text-[10px] font-bold tracking-wide text-cyan-700 uppercase">
+              <div class="text-[10px] font-bold tracking-wide text-cyan-700 uppercase dark:text-cyan-300">
                 Hàm phía Mini App (JS / SDK)
               </div>
-              <code class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800">
+              <code class="mt-0.5 block font-mono text-[11px] leading-snug break-all text-slate-800 dark:text-slate-200">
                 {{ msg.miniAppFn }}
               </code>
             </div>
@@ -656,7 +661,7 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
           <p
             v-if="msg.parityNote"
-            class="rounded-md border border-rose-200 bg-rose-50/75 px-2.5 py-1.5 text-[11px] leading-relaxed text-rose-900"
+            class="rounded-md border border-rose-200 bg-rose-50/75 px-2.5 py-1.5 text-[11px] leading-relaxed text-rose-900 dark:border-rose-500/35 dark:bg-rose-500/10 dark:text-rose-200"
           >
             <span class="font-bold">Ghi chú Parity iOS ↔ Android: </span>
             {{ msg.parityNote }}
@@ -664,65 +669,59 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
           <div v-if="msg.examplePayload || msg.payload" class="space-y-1">
             <div class="flex flex-wrap items-center justify-between gap-1 text-[11px]">
-              <span class="font-semibold text-slate-700">
+              <span class="font-semibold text-slate-700 dark:text-slate-300">
                 {{ msg.examplePayload ? 'Ví dụ dữ liệu truyền vào (JSON)' : 'Tham số truyền (Schema)' }}
               </span>
               <button
                 v-if="msg.examplePayload"
                 type="button"
-                class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 @click="copyValue(`payload-${idx}`, msg.examplePayload)"
               >
-                <Check v-if="copiedKey === `payload-${idx}`" class="h-3 w-3 text-emerald-600" />
+                <Check v-if="copiedKey === `payload-${idx}`" class="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                 <Copy v-else class="h-3 w-3" />
                 {{ copiedKey === `payload-${idx}` ? 'Đã copy' : 'Copy' }}
               </button>
             </div>
-            <pre
-              v-if="msg.examplePayload"
-              class="overflow-x-auto rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] leading-relaxed text-slate-100"
-            ><code>{{ msg.examplePayload }}</code></pre>
+            <JsonCodeBlock v-if="msg.examplePayload" :code="msg.examplePayload" />
             <div
               v-if="msg.payload"
-              class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600"
+              class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300"
             >
-              <span v-if="msg.examplePayload" class="font-medium text-slate-500">Schema: </span>
-              <code class="font-mono break-all text-slate-700">{{ msg.payload }}</code>
+              <span v-if="msg.examplePayload" class="font-medium text-slate-500 dark:text-slate-400">Schema: </span>
+              <code class="font-mono break-all text-slate-700 dark:text-slate-200">{{ msg.payload }}</code>
             </div>
           </div>
 
           <div v-if="msg.exampleResponse || msg.response" class="space-y-1">
             <div class="flex flex-wrap items-center justify-between gap-1 text-[11px]">
-              <span class="font-semibold text-slate-700">
+              <span class="font-semibold text-slate-700 dark:text-slate-300">
                 {{ msg.exampleResponse ? 'Ví dụ dữ liệu trả về (JSON)' : 'Dữ liệu trả về (Schema)' }}
               </span>
               <button
                 v-if="msg.exampleResponse"
                 type="button"
-                class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+                class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
                 @click="copyValue(`response-${idx}`, msg.exampleResponse)"
               >
-                <Check v-if="copiedKey === `response-${idx}`" class="h-3 w-3 text-emerald-600" />
+                <Check v-if="copiedKey === `response-${idx}`" class="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
                 <Copy v-else class="h-3 w-3" />
                 {{ copiedKey === `response-${idx}` ? 'Đã copy' : 'Copy' }}
               </button>
             </div>
-            <pre
-              v-if="msg.exampleResponse"
-              class="overflow-x-auto rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] leading-relaxed text-emerald-200"
-            ><code>{{ msg.exampleResponse }}</code></pre>
+            <JsonCodeBlock v-if="msg.exampleResponse" :code="msg.exampleResponse" />
             <div
               v-if="msg.response"
-              class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600"
+              class="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800/70 dark:text-slate-300"
             >
-              <span v-if="msg.exampleResponse" class="font-medium text-slate-500">Schema: </span>
-              <code class="font-mono break-all text-slate-700">{{ msg.response }}</code>
+              <span v-if="msg.exampleResponse" class="font-medium text-slate-500 dark:text-slate-400">Schema: </span>
+              <code class="font-mono break-all text-slate-700 dark:text-slate-200">{{ msg.response }}</code>
             </div>
           </div>
 
           <p
             v-if="msg.note"
-            class="rounded-md border border-amber-200/80 bg-amber-50/70 px-2.5 py-1.5 text-[11px] leading-relaxed text-slate-700"
+            class="rounded-md border border-amber-200/80 bg-amber-50/70 px-2.5 py-1.5 text-[11px] leading-relaxed text-slate-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
           >
             {{ msg.note }}
           </p>
@@ -737,71 +736,89 @@ const techSections = computed<RenderedTechSection[]>(() => {
       :key="section.key"
       class="space-y-1.5"
     >
-      <h3 class="text-xs font-bold tracking-wide text-slate-500 uppercase">
+      <h3 class="text-xs font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
         {{ section.title }}
       </h3>
 
       <div v-if="section.isSplit" class="grid grid-cols-1 gap-2.5 md:grid-cols-2">
         <div class="space-y-1.5">
-          <div class="text-[10px] font-bold tracking-wide text-slate-600 uppercase">
+          <div class="text-[10px] font-bold tracking-wide text-slate-600 uppercase dark:text-indigo-300">
             iOS
           </div>
           <ul v-if="section.iosItems.length > 0" class="space-y-1.5">
             <li
               v-for="item in section.iosItems"
               :key="`ios-${item}`"
-              class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+              class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300"
               :class="[
-                section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed',
+                section.mono ? 'font-mono break-all text-slate-800 dark:text-slate-200' : 'leading-relaxed',
                 section.key === 'codeRefs' ? 'flex items-start justify-between gap-2' : '',
               ]"
             >
-              <span :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 break-all' : ''">{{ item }}</span>
+              <div :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 space-y-1' : ''">
+                <span
+                  v-if="section.key === 'codeRefs' && detectCodeRefLanguage(item)"
+                  class="mr-1.5 inline-flex items-center rounded border px-1.5 py-0.2 font-sans text-[9.5px] font-bold"
+                  :class="detectCodeRefLanguage(item)!.cls"
+                >
+                  {{ detectCodeRefLanguage(item)!.label }}
+                </span>
+                <span class="break-all">{{ item }}</span>
+              </div>
               <button
                 v-if="section.key === 'codeRefs'"
                 type="button"
-                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 :title="copiedKey === `ios-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
                 @click="copyValue(`ios-ref-${item}`, item)"
               >
-                <Check v-if="copiedKey === `ios-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600" />
+                <Check v-if="copiedKey === `ios-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 <Copy v-else class="h-3.5 w-3.5" />
               </button>
             </li>
           </ul>
-          <p v-else class="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs italic text-slate-400">
+          <p v-else class="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs italic text-slate-400 dark:border-slate-700 dark:text-slate-500">
             Không có
           </p>
         </div>
 
         <div class="space-y-1.5">
-          <div class="text-[10px] font-bold tracking-wide text-emerald-700 uppercase">
+          <div class="text-[10px] font-bold tracking-wide text-emerald-700 uppercase dark:text-emerald-300">
             Android
           </div>
           <ul v-if="section.androidItems.length > 0" class="space-y-1.5">
             <li
               v-for="item in section.androidItems"
               :key="`and-${item}`"
-              class="rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs text-slate-700"
+              class="rounded-lg border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs text-slate-700 dark:border-emerald-500/30 dark:bg-emerald-500/8 dark:text-slate-300"
               :class="[
-                section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed',
+                section.mono ? 'font-mono break-all text-slate-800 dark:text-slate-200' : 'leading-relaxed',
                 section.key === 'codeRefs' ? 'flex items-start justify-between gap-2' : '',
               ]"
             >
-              <span :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 break-all' : ''">{{ item }}</span>
+              <div :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 space-y-1' : ''">
+                <span
+                  v-if="section.key === 'codeRefs' && detectCodeRefLanguage(item)"
+                  class="mr-1.5 inline-flex items-center rounded border px-1.5 py-0.2 font-sans text-[9.5px] font-bold"
+                  :class="detectCodeRefLanguage(item)!.cls"
+                >
+                  {{ detectCodeRefLanguage(item)!.label }}
+                </span>
+                <span class="break-all">{{ item }}</span>
+              </div>
               <button
                 v-if="section.key === 'codeRefs'"
                 type="button"
-                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700"
+                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 :title="copiedKey === `and-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
                 @click="copyValue(`and-ref-${item}`, item)"
               >
-                <Check v-if="copiedKey === `and-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600" />
+                <Check v-if="copiedKey === `and-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
                 <Copy v-else class="h-3.5 w-3.5" />
               </button>
             </li>
           </ul>
-          <p v-else class="rounded-lg border border-dashed border-emerald-200 px-3 py-2 text-xs italic text-slate-400">
+          <p v-else class="rounded-lg border border-dashed border-emerald-200 px-3 py-2 text-xs italic text-slate-400 dark:border-emerald-500/30 dark:text-slate-500">
             Không có
           </p>
         </div>
@@ -811,21 +828,30 @@ const techSections = computed<RenderedTechSection[]>(() => {
         <li
           v-for="item in section.sharedItems"
           :key="item"
-          class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700"
+          class="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300"
           :class="[
-            section.mono ? 'font-mono break-all text-slate-800' : 'leading-relaxed',
+            section.mono ? 'font-mono break-all text-slate-800 dark:text-slate-200' : 'leading-relaxed',
             section.key === 'codeRefs' ? 'flex items-start justify-between gap-2' : '',
           ]"
         >
-          <span :class="section.key === 'codeRefs' ? 'min-w-0 flex-1 break-all' : ''">{{ item }}</span>
+          <div :class="section.key === 'codeRefs' ? 'min-w-0 flex-1' : ''">
+            <span
+              v-if="section.key === 'codeRefs' && detectCodeRefLanguage(item)"
+              class="mr-1.5 inline-flex items-center rounded border px-1.5 py-0.2 font-sans text-[9.5px] font-bold"
+              :class="detectCodeRefLanguage(item)!.cls"
+            >
+              {{ detectCodeRefLanguage(item)!.label }}
+            </span>
+            <span class="break-all">{{ item }}</span>
+          </div>
           <button
             v-if="section.key === 'codeRefs'"
             type="button"
-            class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700"
+            class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             :title="copiedKey === `shared-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
             @click="copyValue(`shared-ref-${item}`, item)"
           >
-            <Check v-if="copiedKey === `shared-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600" />
+            <Check v-if="copiedKey === `shared-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
             <Copy v-else class="h-3.5 w-3.5" />
           </button>
         </li>

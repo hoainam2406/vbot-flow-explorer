@@ -2,12 +2,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   EXPLORER_PREFS_STORAGE_KEY,
+  LAYOUT_DIRECTION_STORAGE_KEY,
   ONBOARDING_DISMISSED_KEY,
+  THEME_STORAGE_KEY,
   loadOnboardingDismissed,
   loadSavedExplorerPrefs,
+  loadSavedLayoutDirection,
+  loadSavedTheme,
   resolveInitialExplorerState,
+  resolveInitialTheme,
   saveExplorerPrefs,
+  saveLayoutDirection,
   saveOnboardingDismissed,
+  saveTheme,
 } from '../src/core/explorerPreferences';
 
 function createMockStorage(initial: Record<string, string> = {}): Storage {
@@ -135,5 +142,30 @@ describe('explorerPreferences', () => {
     expect(loadSavedExplorerPrefs(throwingStorage)).toEqual({});
     expect(() => saveOnboardingDismissed(true, throwingStorage)).not.toThrow();
     expect(loadOnboardingDismissed(throwingStorage)).toBe(false);
+  });
+
+  it('resolves default theme (dark for internal, light for public), respects saved override, and persists layout direction safely', () => {
+    expect(resolveInitialTheme(true, null)).toBe('dark');
+    expect(resolveInitialTheme(false, null)).toBe('light');
+    expect(resolveInitialTheme(true, 'light')).toBe('light');
+    expect(resolveInitialTheme(false, 'dark')).toBe('dark');
+
+    const storage = createMockStorage();
+    expect(loadSavedTheme(storage)).toBeNull();
+    saveTheme('dark', storage);
+    expect(storage.getItem(THEME_STORAGE_KEY)).toBe('dark');
+    expect(loadSavedTheme(storage)).toBe('dark');
+
+    expect(loadSavedLayoutDirection(storage)).toBeNull();
+    saveLayoutDirection('TB', storage);
+    expect(storage.getItem(LAYOUT_DIRECTION_STORAGE_KEY)).toBe('TB');
+    expect(loadSavedLayoutDirection(storage)).toBe('TB');
+
+    const invalidStorage = createMockStorage({
+      [THEME_STORAGE_KEY]: 'sepia',
+      [LAYOUT_DIRECTION_STORAGE_KEY]: 'RL',
+    });
+    expect(loadSavedTheme(invalidStorage)).toBeNull();
+    expect(loadSavedLayoutDirection(invalidStorage)).toBeNull();
   });
 });

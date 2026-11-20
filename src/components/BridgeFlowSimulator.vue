@@ -15,8 +15,11 @@ import {
   Server,
   Smartphone,
 } from 'lucide-vue-next';
+import { useToast } from '../composables/useToast';
 import { copyTextToClipboard } from '../core/downloadHelper';
+import { detectCodeRefLanguage } from '../core/jsonHighlight';
 import { SVG_FONT_FAMILY, wrapSvgText } from '../core/svgHelpers';
+import JsonCodeBlock from './JsonCodeBlock.vue';
 import {
   BRIDGE_LANE_META,
   type BridgeInteractiveFlow,
@@ -39,6 +42,7 @@ const emit = defineEmits<{
   jumpNode: [nodeId: string];
 }>();
 
+const { pushToast } = useToast();
 const activeStepIndex = ref(0);
 const isPlaying = ref(false);
 const fastSpeed = ref(false);
@@ -82,32 +86,32 @@ const activeRelatedNodeId = computed(
 const PHASE_META: Record<BridgeStepPhase, { label: string; cls: string; dotColor: string }> = {
   miniapp_call: {
     label: 'Mini App gọi SDK',
-    cls: 'border-cyan-200 bg-cyan-50 text-cyan-800',
+    cls: 'border-cyan-200 bg-cyan-50 text-cyan-800 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300',
     dotColor: '#0891b2',
   },
   sdk_bridge: {
     label: 'Cầu nối VbMaSDK',
-    cls: 'border-indigo-200 bg-indigo-50 text-indigo-800',
+    cls: 'border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-300',
     dotColor: '#4f46e5',
   },
   host_process: {
     label: 'Host Native xử lý',
-    cls: 'border-blue-200 bg-blue-50 text-blue-800',
+    cls: 'border-blue-200 bg-blue-50 text-blue-800 dark:border-sky-500/35 dark:bg-sky-500/15 dark:text-sky-300',
     dotColor: '#2563eb',
   },
   server_os: {
     label: 'Server / SIP / OS',
-    cls: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+    cls: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300',
     dotColor: '#059669',
   },
   host_reply: {
     label: 'Host trả kết quả',
-    cls: 'border-violet-200 bg-violet-50 text-violet-800',
+    cls: 'border-violet-200 bg-violet-50 text-violet-800 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-300',
     dotColor: '#7c3aed',
   },
   host_push: {
     label: 'Host đẩy sự kiện',
-    cls: 'border-amber-200 bg-amber-50 text-amber-800',
+    cls: 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-300',
     dotColor: '#d97706',
   },
 };
@@ -253,6 +257,7 @@ const copyValue = async (key: string, value: string) => {
   const ok = await copyTextToClipboard(value);
   if (ok) {
     copiedKey.value = key;
+    pushToast('Đã sao chép vào clipboard', 'success');
     if (copyResetTimer) clearTimeout(copyResetTimer);
     copyResetTimer = setTimeout(() => {
       copiedKey.value = null;
@@ -286,7 +291,7 @@ onBeforeUnmount(() => {
 <template>
   <div v-if="currentFlow" class="flex h-full min-h-0 flex-col">
     <!-- Flow Selector Bar -->
-    <div class="border-b border-slate-200 bg-slate-50/70 px-4 py-2.5">
+    <div class="border-b border-slate-200 bg-slate-50/70 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
       <div class="flex flex-wrap items-center gap-1.5">
         <button
           v-for="flow in props.flows"
@@ -296,18 +301,18 @@ onBeforeUnmount(() => {
           :class="
             flow.id === currentFlow.id
               ? 'border-indigo-500 bg-indigo-600 text-white shadow-xs'
-              : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/60'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50/60 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-cyan-500/40 dark:hover:bg-slate-800'
           "
           @click="emit('selectFlow', flow.id)"
         >
           <span>{{ flow.shortTitle }}</span>
           <span
             v-if="flow.subFlows?.length"
-            class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
+            class="rounded-full px-1.5 py-0.5 font-mono text-[10px] font-bold"
             :class="
               flow.id === currentFlow.id
                 ? 'bg-indigo-500 text-white'
-                : 'bg-cyan-50 text-cyan-700'
+                : 'bg-cyan-50 text-cyan-700 dark:bg-cyan-500/15 dark:text-cyan-300'
             "
           >
             {{ flow.subFlows.length }} sơ đồ
@@ -318,9 +323,9 @@ onBeforeUnmount(() => {
       <!-- Sub-Flow / Event Selector row -->
       <div
         v-if="subFlows.length > 0"
-        class="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-cyan-100 bg-cyan-50/50 px-2.5 py-2"
+        class="mt-2 flex flex-wrap items-center gap-1.5 rounded-xl border border-cyan-100 bg-cyan-50/50 px-2.5 py-2 dark:border-cyan-500/30 dark:bg-cyan-500/8"
       >
-        <span class="mr-1 text-[11px] font-bold text-cyan-900">
+        <span class="mr-1 text-[11px] font-bold text-cyan-900 dark:text-cyan-300">
           Sơ đồ theo sự kiện ({{ subFlows.length }}):
         </span>
         <button
@@ -331,7 +336,7 @@ onBeforeUnmount(() => {
           :class="
             currentSubFlow?.id === sf.id
               ? 'border-cyan-600 bg-cyan-600 text-white shadow-xs'
-              : 'border-cyan-200 bg-white text-cyan-800 hover:border-cyan-300 hover:bg-cyan-50'
+              : 'border-cyan-200 bg-white text-cyan-800 hover:border-cyan-300 hover:bg-cyan-50 dark:border-cyan-500/35 dark:bg-slate-800 dark:text-cyan-300 dark:hover:bg-cyan-500/15'
           "
           @click="emit('selectSubFlow', sf.id)"
         >
@@ -342,23 +347,23 @@ onBeforeUnmount(() => {
       <div class="mt-2.5 flex flex-wrap items-center justify-between gap-2">
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h3 class="text-sm font-bold text-slate-900">
+            <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">
               {{ currentFlow.title }}
             </h3>
-            <span class="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-cyan-800">
+            <span class="rounded-md border border-cyan-200 bg-cyan-50 px-2 py-0.5 font-mono text-[11px] font-semibold text-cyan-800 dark:border-cyan-500/35 dark:bg-cyan-500/12 dark:text-cyan-300">
               {{ currentFlow.miniAppId }}
             </span>
             <span
               v-if="currentSubFlow"
-              class="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-indigo-700"
+              class="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-indigo-700 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-300"
             >
               {{ currentSubFlow.eventBadge }}
             </span>
-            <span class="rounded-md bg-slate-200/70 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+            <span class="rounded-md bg-slate-200/70 px-2 py-0.5 text-[10px] font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">
               {{ currentFlow.categoryBadge }}
             </span>
           </div>
-          <p class="mt-0.5 text-xs text-slate-600">
+          <p class="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
             {{ activeSummary }}
           </p>
         </div>
@@ -366,7 +371,7 @@ onBeforeUnmount(() => {
         <button
           v-if="activeRelatedNodeId"
           type="button"
-          class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700"
+          class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/15 dark:hover:text-cyan-300"
           @click="emit('jumpNode', activeRelatedNodeId)"
         >
           Xem node trên sơ đồ
@@ -376,26 +381,26 @@ onBeforeUnmount(() => {
     </div>
 
     <!-- Stepper Controls -->
-    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2">
+    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2 dark:border-slate-800 dark:bg-[#0d1424]">
       <div class="flex flex-wrap items-center gap-2">
-        <div class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+        <div class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800">
           <button
             type="button"
             aria-label="Bước trước"
             :disabled="activeStepIndex <= 0"
-            class="rounded-md p-1 text-slate-600 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+            class="rounded-md p-1 text-slate-600 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-700"
             @click="stepDelta(-1)"
           >
             <ChevronLeft class="h-4 w-4" />
           </button>
-          <span class="px-2.5 text-xs font-bold text-slate-800">
+          <span class="px-2.5 font-mono text-xs font-bold text-slate-800 dark:text-slate-200">
             Bước {{ activeStepIndex + 1 }} / {{ steps.length }}
           </span>
           <button
             type="button"
             aria-label="Bước kế tiếp"
             :disabled="activeStepIndex >= steps.length - 1"
-            class="rounded-md p-1 text-slate-600 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+            class="rounded-md p-1 text-slate-600 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-35 dark:text-slate-300 dark:hover:bg-slate-700"
             @click="stepDelta(1)"
           >
             <ChevronRight class="h-4 w-4" />
@@ -407,8 +412,8 @@ onBeforeUnmount(() => {
           class="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-semibold transition"
           :class="
             isPlaying
-              ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
-              : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+              ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300'
+              : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/12 dark:text-cyan-300 dark:hover:bg-cyan-500/20'
           "
           @click="toggleAutoPlay"
         >
@@ -420,7 +425,7 @@ onBeforeUnmount(() => {
         <button
           type="button"
           title="Đổi tốc độ tự chạy"
-          class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50"
+          class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
           @click="toggleSpeed"
         >
           <Gauge class="h-3 w-3" />
@@ -437,10 +442,10 @@ onBeforeUnmount(() => {
           class="h-2.5 rounded-full transition-all"
           :class="
             idx === activeStepIndex
-              ? 'w-7 bg-indigo-600'
+              ? 'w-7 bg-indigo-600 dark:bg-cyan-400'
               : idx < activeStepIndex
-                ? 'w-2.5 bg-indigo-300 hover:bg-indigo-400'
-                : 'w-2.5 bg-slate-200 hover:bg-slate-300'
+                ? 'w-2.5 bg-indigo-300 hover:bg-indigo-400 dark:bg-cyan-500/60'
+                : 'w-2.5 bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600'
           "
           @click="selectStep(idx)"
         />
@@ -450,24 +455,24 @@ onBeforeUnmount(() => {
     <!-- Main 2-Column Simulator Area -->
     <div class="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,1fr)]">
       <!-- Left: Interactive Animated 4-Lane Swimlane Diagram -->
-      <div class="min-h-0 overflow-y-auto bg-slate-50/70 p-3.5 lg:border-r lg:border-slate-200">
-        <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+      <div class="min-h-0 overflow-y-auto bg-slate-50/70 p-3.5 lg:border-r lg:border-slate-200 dark:bg-[#090d16] dark:lg:border-slate-800">
+        <div class="mb-2.5 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-300">
           <div class="flex flex-wrap items-center gap-3">
             <span class="inline-flex items-center gap-1.5">
-              <span class="inline-block h-0.5 w-5 bg-slate-700" />
+              <span class="inline-block h-0.5 w-5 bg-slate-700 dark:bg-slate-300" />
               Gọi lệnh / Xử lý đi
             </span>
             <span class="inline-flex items-center gap-1.5">
-              <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-cyan-600" />
+              <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-cyan-600 dark:border-cyan-400" />
               Phản hồi / Host đẩy event
             </span>
           </div>
-          <span class="font-medium text-indigo-700">
+          <span class="font-medium text-indigo-700 dark:text-cyan-300">
             Nhấp hàng trên sơ đồ để xem Code & JSON bước đó
           </span>
         </div>
 
-        <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2 shadow-2xs">
+        <div class="vbot-svg-stage overflow-x-auto p-2 shadow-2xs">
           <svg
             :viewBox="`0 0 ${svgLayout.width} ${svgLayout.height}`"
             :style="{ maxWidth: `${svgLayout.width}px` }"
@@ -689,9 +694,9 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Right: Live Step Inspector (Code, JSON Wire, Host Swift/Kotlin, Response) -->
-      <div v-if="currentStep" class="min-h-0 space-y-3 overflow-y-auto bg-white p-4">
+      <div v-if="currentStep" class="min-h-0 space-y-3 overflow-y-auto bg-white p-4 dark:bg-[#0d1424]">
         <div class="flex flex-wrap items-center gap-2">
-          <span class="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-indigo-600 px-2 text-xs font-bold text-white">
+          <span class="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-indigo-600 px-2 font-mono text-xs font-bold text-white dark:bg-cyan-500 dark:text-slate-950">
             Bước {{ currentStep.stepNumber }}
           </span>
           <span
@@ -700,72 +705,72 @@ onBeforeUnmount(() => {
           >
             {{ PHASE_META[currentStep.phase].label }}
           </span>
-          <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-slate-600">
+          <span class="rounded bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             {{ currentStep.from }} → {{ currentStep.to }}
           </span>
         </div>
 
-        <h4 class="text-base leading-snug font-bold text-slate-900">
+        <h4 class="text-base leading-snug font-bold text-slate-900 dark:text-slate-100">
           {{ currentStep.title }}
         </h4>
 
-        <p class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs leading-relaxed text-slate-700">
+        <p class="rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs leading-relaxed text-slate-700 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-300">
           {{ currentStep.explanation }}
         </p>
 
         <!-- 1. Mini App Code (@vbotma/sdk) -->
         <div v-if="currentStep.miniAppCode" class="space-y-1">
           <div class="flex items-center justify-between gap-2 text-[11px]">
-            <span class="inline-flex items-center gap-1.5 font-bold text-cyan-800">
+            <span class="inline-flex items-center gap-1.5 font-bold text-cyan-800 dark:text-cyan-300">
               <Code2 class="h-3.5 w-3.5" />
               1. Hàm Mini App gọi (@vbotma/sdk)
             </span>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100"
+              class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               @click="copyValue(`ma-code-${currentStep.stepNumber}`, currentStep.miniAppCode)"
             >
               <Check
                 v-if="copiedKey === `ma-code-${currentStep.stepNumber}`"
-                class="h-3 w-3 text-emerald-600"
+                class="h-3 w-3 text-emerald-600 dark:text-emerald-400"
               />
               <Copy v-else class="h-3 w-3" />
               {{ copiedKey === `ma-code-${currentStep.stepNumber}` ? 'Đã copy' : 'Copy Code' }}
             </button>
           </div>
-          <pre class="overflow-x-auto rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] leading-relaxed text-cyan-100"><code>{{ currentStep.miniAppCode }}</code></pre>
+          <pre class="overflow-x-auto rounded-lg border border-slate-800/90 bg-[#0b1120] p-2.5 font-mono text-[11px] leading-relaxed text-cyan-100 dark:border-slate-700/75"><code>{{ currentStep.miniAppCode }}</code></pre>
         </div>
 
         <!-- 2. Wire Packet -->
         <div v-if="currentStep.wirePacket" class="space-y-1">
           <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-            <span class="inline-flex items-center gap-1.5 font-bold text-indigo-800">
+            <span class="inline-flex items-center gap-1.5 font-bold text-indigo-800 dark:text-indigo-300">
               <Radio class="h-3.5 w-3.5" />
               2. Gói tin qua Bridge:
-              <code class="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[10px] text-indigo-700">
+              <code class="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[10px] text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">
                 {{ currentStep.wirePacket.channel }}
               </code>
             </span>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100"
+              class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               @click="copyValue(`wire-${currentStep.stepNumber}`, currentStep.wirePacket.json)"
             >
               <Check
                 v-if="copiedKey === `wire-${currentStep.stepNumber}`"
-                class="h-3 w-3 text-emerald-600"
+                class="h-3 w-3 text-emerald-600 dark:text-emerald-400"
               />
               <Copy v-else class="h-3 w-3" />
               {{ copiedKey === `wire-${currentStep.stepNumber}` ? 'Đã copy' : 'Copy JSON' }}
             </button>
           </div>
-          <pre class="overflow-x-auto rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] leading-relaxed text-amber-100"><code>{{ currentStep.wirePacket.json }}</code></pre>
+          <JsonCodeBlock :code="currentStep.wirePacket.json" />
         </div>
 
         <!-- 3. Host Native Processing (iOS / Android) -->
         <div class="space-y-1.5">
-          <div class="flex items-center gap-1.5 text-[11px] font-bold text-blue-900">
-            <Smartphone class="h-3.5 w-3.5 text-blue-600" />
+          <div class="flex items-center gap-1.5 text-[11px] font-bold text-blue-900 dark:text-sky-300">
+            <Smartphone class="h-3.5 w-3.5 text-blue-600 dark:text-sky-400" />
             3. Xử lý phía Host App Native
           </div>
 
@@ -775,27 +780,34 @@ onBeforeUnmount(() => {
           >
             <div
               v-if="props.platformMode !== 'android'"
-              class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5 text-xs"
+              class="rounded-xl border border-indigo-200 bg-indigo-50/40 p-2.5 text-xs dark:border-indigo-500/30 dark:bg-indigo-500/10"
             >
-              <div class="text-[10px] font-bold tracking-wide text-indigo-700 uppercase">
+              <div class="text-[10px] font-bold tracking-wide text-indigo-700 uppercase dark:text-indigo-300">
                 iOS (Swift)
               </div>
-              <code class="mt-0.5 block font-mono text-[11px] font-bold break-all text-slate-900">
+              <code class="mt-0.5 block font-mono text-[11px] font-bold break-all text-slate-900 dark:text-slate-100">
                 {{ currentStep.hostIos.fn }}
               </code>
-              <p class="mt-1 text-[11px] leading-relaxed text-slate-700">
+              <p class="mt-1 text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
                 {{ currentStep.hostIos.detail }}
               </p>
               <button
                 v-if="currentStep.hostIos.codeRef"
                 type="button"
-                class="mt-1.5 inline-flex max-w-full items-center gap-1 rounded border border-indigo-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-600 transition hover:border-indigo-300"
+                class="mt-1.5 inline-flex max-w-full items-center gap-1 rounded border border-indigo-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-600 transition hover:border-indigo-300 dark:border-indigo-500/35 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-indigo-400"
                 @click="copyValue(`ios-ref-${currentStep.stepNumber}`, currentStep.hostIos.codeRef!)"
               >
+                <span
+                  v-if="detectCodeRefLanguage(currentStep.hostIos.codeRef)"
+                  class="shrink-0 rounded border px-1 py-0 font-sans text-[9px] font-bold"
+                  :class="detectCodeRefLanguage(currentStep.hostIos.codeRef)!.cls"
+                >
+                  {{ detectCodeRefLanguage(currentStep.hostIos.codeRef)!.label }}
+                </span>
                 <span class="truncate">{{ currentStep.hostIos.codeRef }}</span>
                 <Check
                   v-if="copiedKey === `ios-ref-${currentStep.stepNumber}`"
-                  class="h-2.5 w-2.5 shrink-0 text-emerald-600"
+                  class="h-2.5 w-2.5 shrink-0 text-emerald-600 dark:text-emerald-400"
                 />
                 <Copy v-else class="h-2.5 w-2.5 shrink-0 text-slate-400" />
               </button>
@@ -803,27 +815,34 @@ onBeforeUnmount(() => {
 
             <div
               v-if="props.platformMode !== 'ios'"
-              class="rounded-xl border border-emerald-200 bg-emerald-50/45 p-2.5 text-xs"
+              class="rounded-xl border border-emerald-200 bg-emerald-50/45 p-2.5 text-xs dark:border-emerald-500/30 dark:bg-emerald-500/10"
             >
-              <div class="text-[10px] font-bold tracking-wide text-emerald-700 uppercase">
+              <div class="text-[10px] font-bold tracking-wide text-emerald-700 uppercase dark:text-emerald-300">
                 Android (Kotlin)
               </div>
-              <code class="mt-0.5 block font-mono text-[11px] font-bold break-all text-slate-900">
+              <code class="mt-0.5 block font-mono text-[11px] font-bold break-all text-slate-900 dark:text-slate-100">
                 {{ currentStep.hostAndroid.fn }}
               </code>
-              <p class="mt-1 text-[11px] leading-relaxed text-slate-700">
+              <p class="mt-1 text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
                 {{ currentStep.hostAndroid.detail }}
               </p>
               <button
                 v-if="currentStep.hostAndroid.codeRef"
                 type="button"
-                class="mt-1.5 inline-flex max-w-full items-center gap-1 rounded border border-emerald-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-600 transition hover:border-emerald-300"
+                class="mt-1.5 inline-flex max-w-full items-center gap-1 rounded border border-emerald-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-600 transition hover:border-emerald-300 dark:border-emerald-500/35 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-emerald-400"
                 @click="copyValue(`and-ref-${currentStep.stepNumber}`, currentStep.hostAndroid.codeRef!)"
               >
+                <span
+                  v-if="detectCodeRefLanguage(currentStep.hostAndroid.codeRef)"
+                  class="shrink-0 rounded border px-1 py-0 font-sans text-[9px] font-bold"
+                  :class="detectCodeRefLanguage(currentStep.hostAndroid.codeRef)!.cls"
+                >
+                  {{ detectCodeRefLanguage(currentStep.hostAndroid.codeRef)!.label }}
+                </span>
                 <span class="truncate">{{ currentStep.hostAndroid.codeRef }}</span>
                 <Check
                   v-if="copiedKey === `and-ref-${currentStep.stepNumber}`"
-                  class="h-2.5 w-2.5 shrink-0 text-emerald-600"
+                  class="h-2.5 w-2.5 shrink-0 text-emerald-600 dark:text-emerald-400"
                 />
                 <Copy v-else class="h-2.5 w-2.5 shrink-0 text-slate-400" />
               </button>
@@ -834,37 +853,37 @@ onBeforeUnmount(() => {
         <!-- 4. Response / Push Event Back to Mini App -->
         <div v-if="currentStep.responsePacket" class="space-y-1">
           <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-            <span class="inline-flex items-center gap-1.5 font-bold text-emerald-800">
+            <span class="inline-flex items-center gap-1.5 font-bold text-emerald-800 dark:text-emerald-300">
               <Server class="h-3.5 w-3.5" />
               4. Event báo lại Mini App:
-              <code class="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800">
+              <code class="rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300">
                 {{ currentStep.responsePacket.eventName }}
               </code>
             </span>
             <button
               type="button"
-              class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100"
+              class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               @click="copyValue(`resp-${currentStep.stepNumber}`, currentStep.responsePacket.json)"
             >
               <Check
                 v-if="copiedKey === `resp-${currentStep.stepNumber}`"
-                class="h-3 w-3 text-emerald-600"
+                class="h-3 w-3 text-emerald-600 dark:text-emerald-400"
               />
               <Copy v-else class="h-3 w-3" />
               {{ copiedKey === `resp-${currentStep.stepNumber}` ? 'Đã copy' : 'Copy JSON' }}
             </button>
           </div>
-          <pre class="overflow-x-auto rounded-lg bg-slate-900 p-2.5 font-mono text-[11px] leading-relaxed text-emerald-200"><code>{{ currentStep.responsePacket.json }}</code></pre>
+          <JsonCodeBlock :code="currentStep.responsePacket.json" />
         </div>
 
         <!-- Parity Warning -->
         <div
           v-if="currentStep.parityWarning"
-          class="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950"
+          class="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-950 dark:border-amber-500/35 dark:bg-amber-500/10 dark:text-amber-200"
         >
-          <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+          <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
           <div>
-            <div class="text-[11px] font-bold tracking-wide text-amber-800 uppercase">
+            <div class="text-[11px] font-bold tracking-wide text-amber-800 uppercase dark:text-amber-300">
               Lưu ý lệch iOS ↔ Android
             </div>
             <p class="mt-0.5">{{ currentStep.parityWarning }}</p>

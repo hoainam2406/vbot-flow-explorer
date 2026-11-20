@@ -43,23 +43,23 @@ watch(
 
 <template>
   <div class="space-y-3">
-    <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600">
+    <div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-300">
       <div class="flex flex-wrap items-center gap-3">
         <span class="inline-flex items-center gap-1.5">
-          <span class="inline-block h-0.5 w-5 bg-slate-700" />
+          <span class="inline-block h-0.5 w-5 bg-slate-700 dark:bg-slate-300" />
           Lệnh / Gọi đi
         </span>
         <span class="inline-flex items-center gap-1.5">
-          <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-cyan-600" />
+          <span class="inline-block h-0.5 w-5 border-t-2 border-dashed border-cyan-600 dark:border-cyan-400" />
           Phản hồi / Sự kiện đẩy
         </span>
       </div>
-      <span class="font-medium text-indigo-700">
+      <span class="font-medium text-indigo-700 dark:text-cyan-300">
         Nhấp vào mũi tên để xem chi tiết & Payload
       </span>
     </div>
 
-    <div class="overflow-x-auto rounded-xl border border-slate-200 bg-slate-50/70 p-2">
+    <div class="vbot-svg-stage overflow-x-auto p-2">
       <svg
         :viewBox="`0 ${layout.headerHeight} ${layout.width} ${layout.height - layout.headerHeight}`"
         :style="{ maxWidth: `${layout.width}px` }"

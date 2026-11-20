@@ -1,8 +1,10 @@
 // tests/useFlowExplorer.test.ts
 import { describe, expect, it } from 'vitest';
 import {
+  computeNodeLineage,
   createFlowExplorerState,
   getCameraTargetNodeIds,
+  resolveKeyboardNavTarget,
 } from '../src/composables/useFlowExplorer';
 import { searchFlowNodes } from '../src/composables/useSearch';
 import type { MergedFlowDataset } from '../src/data/schema';
@@ -487,5 +489,49 @@ describe('createFlowExplorerState', () => {
     expect(state.activeScenarioId.value).toBeNull();
     expect(state.activeScenarioStepIndex.value).toBeNull();
     expect(state.scenarioDialogOpen.value).toBe(false);
+  });
+
+  it('computes hover lineage, keyboard navigation across LR/TB directions, recentNodes MRU, and zenMode', () => {
+    const state = createFlowExplorerState(sampleDataset, true);
+    state.setAudienceMode('tech');
+    state.toggleExpand('b1');
+
+    // Lineage for b1-1 includes root -> b1 -> b1-1 -> b1-tech and connecting edges
+    const lineage = computeNodeLineage(state.visibleFlow.value, 'b1-1');
+    expect(lineage.nodeIds.has('root')).toBe(true);
+    expect(lineage.nodeIds.has('b1')).toBe(true);
+    expect(lineage.nodeIds.has('b1-1')).toBe(true);
+    expect(lineage.nodeIds.has('b1-tech')).toBe(true);
+    expect(lineage.nodeIds.has('b2')).toBe(false);
+    expect(lineage.edgeIds.has('e1')).toBe(true);
+    expect(lineage.edgeIds.has('e-b1')).toBe(true);
+    expect(lineage.edgeIds.has('e2')).toBe(false);
+
+    // Keyboard navigation in LR mode
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, null, 'ArrowRight', 'LR')).toBe('root');
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'root', 'ArrowRight', 'LR')).toBe('b1');
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'b1', 'ArrowDown', 'LR')).toBe('b2');
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'b2', 'ArrowUp', 'LR')).toBe('b1');
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'b1-1', 'ArrowLeft', 'LR')).toBe('b1');
+
+    // Keyboard navigation in TB mode
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'root', 'ArrowDown', 'TB')).toBe('b1');
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'b1', 'ArrowRight', 'TB')).toBe('b2');
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'b2', 'ArrowLeft', 'TB')).toBe('b1');
+    expect(resolveKeyboardNavTarget(state.visibleFlow.value, 'b1-1', 'ArrowUp', 'TB')).toBe('b1');
+
+    // Toggle layout direction & zenMode
+    expect(state.layoutDirection.value).toBe('LR');
+    expect(state.toggleLayoutDirection()).toBe('TB');
+    expect(state.layoutDirection.value).toBe('TB');
+    expect(state.toggleZenMode()).toBe(true);
+    expect(state.zenMode.value).toBe(true);
+
+    // Recent nodes MRU & mode filtering
+    state.selectNode('b1-tech');
+    state.selectNode('b1-1');
+    expect(state.recentNodes.value.map((n) => n.id)).toEqual(['b1-1', 'b1-tech']);
+    state.setAudienceMode('overview');
+    expect(state.recentNodes.value.map((n) => n.id)).toEqual(['b1-1']);
   });
 });

@@ -9,6 +9,7 @@ import {
   type ViewMode,
   type VisibleFlowResult,
 } from '../core/graphEngine';
+import type { LayoutDirection } from '../core/explorerPreferences';
 import type {
   FlowNodeData,
   MediaItem,
@@ -16,6 +17,122 @@ import type {
   PlatformViewMode,
   Scenario,
 } from '../data/schema';
+
+export interface NodeLineageResult {
+  nodeIds: Set<string>;
+  edgeIds: Set<string>;
+}
+
+export type KeyboardNavKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
+
+export function computeNodeLineage(
+  visibleFlow: VisibleFlowResult,
+  targetNodeId: string,
+): NodeLineageResult {
+  const visibleNodeIds = new Set(visibleFlow.nodes.map((n) => n.id));
+  const nodeIds = new Set<string>();
+  const edgeIds = new Set<string>();
+
+  if (!visibleNodeIds.has(targetNodeId)) {
+    return { nodeIds, edgeIds };
+  }
+
+  nodeIds.add(targetNodeId);
+
+  // Ancestors via nodeParentMap
+  let cursor: string | undefined = visibleFlow.nodeParentMap[targetNodeId];
+  const ancGuard = new Set<string>([targetNodeId]);
+  while (cursor && !ancGuard.has(cursor)) {
+    ancGuard.add(cursor);
+    if (visibleNodeIds.has(cursor)) {
+      nodeIds.add(cursor);
+    }
+    cursor = visibleFlow.nodeParentMap[cursor];
+  }
+
+  // Descendants whose ancestor chain passes through targetNodeId
+  for (const node of visibleFlow.nodes) {
+    if (nodeIds.has(node.id)) continue;
+    let p: string | undefined = visibleFlow.nodeParentMap[node.id];
+    const descGuard = new Set<string>([node.id]);
+    while (p && !descGuard.has(p)) {
+      if (p === targetNodeId) {
+        nodeIds.add(node.id);
+        break;
+      }
+      descGuard.add(p);
+      p = visibleFlow.nodeParentMap[p];
+    }
+  }
+
+  for (const edge of visibleFlow.edges) {
+    if (!visibleNodeIds.has(edge.source) || !visibleNodeIds.has(edge.target)) {
+      continue;
+    }
+    if (
+      (nodeIds.has(edge.source) && nodeIds.has(edge.target)) ||
+      edge.source === targetNodeId ||
+      edge.target === targetNodeId
+    ) {
+      edgeIds.add(edge.id);
+      nodeIds.add(edge.source);
+      nodeIds.add(edge.target);
+    }
+  }
+
+  return { nodeIds, edgeIds };
+}
+
+export function resolveKeyboardNavTarget(
+  visibleFlow: VisibleFlowResult,
+  currentNodeId: string | null,
+  key: KeyboardNavKey,
+  direction: LayoutDirection,
+): string | null {
+  if (visibleFlow.nodes.length === 0) return null;
+
+  const visibleSet = new Set(visibleFlow.nodes.map((n) => n.id));
+  if (!currentNodeId || !visibleSet.has(currentNodeId)) {
+    return visibleFlow.nodes[0].id;
+  }
+
+  const backKey: KeyboardNavKey = direction === 'LR' ? 'ArrowLeft' : 'ArrowUp';
+  const forwardKey: KeyboardNavKey = direction === 'LR' ? 'ArrowRight' : 'ArrowDown';
+  const prevSiblingKey: KeyboardNavKey = direction === 'LR' ? 'ArrowUp' : 'ArrowLeft';
+  const nextSiblingKey: KeyboardNavKey = direction === 'LR' ? 'ArrowDown' : 'ArrowRight';
+
+  if (key === backKey) {
+    const parentId = visibleFlow.nodeParentMap[currentNodeId];
+    return parentId && visibleSet.has(parentId) ? parentId : null;
+  }
+
+  if (key === forwardKey) {
+    const directChild = visibleFlow.nodes.find(
+      (n) => visibleFlow.nodeParentMap[n.id] === currentNodeId,
+    );
+    if (directChild) return directChild.id;
+
+    const outEdge = visibleFlow.edges.find(
+      (e) => e.source === currentNodeId && visibleSet.has(e.target),
+    );
+    return outEdge ? outEdge.target : null;
+  }
+
+  const parentId = visibleFlow.nodeParentMap[currentNodeId];
+  const siblings = visibleFlow.nodes.filter(
+    (n) => visibleFlow.nodeParentMap[n.id] === parentId,
+  );
+  const idx = siblings.findIndex((n) => n.id === currentNodeId);
+  if (idx < 0) return null;
+
+  if (key === prevSiblingKey) {
+    return idx > 0 ? siblings[idx - 1].id : null;
+  }
+  if (key === nextSiblingKey) {
+    return idx < siblings.length - 1 ? siblings[idx + 1].id : null;
+  }
+  return null;
+}
 
 export interface CameraTarget {
   kind: 'all' | 'subtree' | 'node' | 'scenario_step';
@@ -106,17 +223,23 @@ export function createFlowExplorerState(
   allowTechMode: boolean,
 ) {
   const MAX_NAV_HISTORY = 25;
+  const MAX_RECENT_NODES = 8;
   const audienceMode = ref<ViewMode>('overview');
   const platformMode = ref<PlatformViewMode>('compare');
+  const layoutDirection = ref<LayoutDirection>('LR');
   const expandedIds = ref<Set<string>>(new Set());
   const accordionMode = ref(true);
   const focusRootId = ref<string | null>(null);
   const selectedNodeId = ref<string | null>(null);
+  const hoveredNodeId = ref<string | null>(null);
   const navigationHistory = ref<string[]>([]);
+  const recentNodeIds = ref<string[]>([]);
   const activeScenarioId = ref<string | null>(null);
   const activeScenarioStepIndex = ref<number | null>(null);
   const scenarioDialogOpen = ref(false);
   const showCanvasMedia = ref(false);
+  const zenMode = ref(false);
+  const fitRequestSeq = ref(0);
   let cameraSeq = 0;
   const cameraTarget = ref<CameraTarget>({ kind: 'all', seq: 0 });
 
@@ -138,11 +261,53 @@ export function createFlowExplorerState(
       next.length > MAX_NAV_HISTORY ? next.slice(next.length - MAX_NAV_HISTORY) : next;
   };
 
+  const pushRecentNode = (nodeId: string | null) => {
+    if (!nodeId) return;
+    recentNodeIds.value = [
+      nodeId,
+      ...recentNodeIds.value.filter((id) => id !== nodeId),
+    ].slice(0, MAX_RECENT_NODES);
+  };
+
   const selectNode = (nodeId: string | null, options?: { recordHistory?: boolean }) => {
     if (options?.recordHistory !== false) {
       pushHistory(selectedNodeId.value, nodeId);
     }
+    pushRecentNode(nodeId);
     selectedNodeId.value = nodeId;
+  };
+
+  const setHoveredNode = (nodeId: string | null) => {
+    hoveredNodeId.value = nodeId;
+  };
+
+  const setLayoutDirection = (direction: LayoutDirection) => {
+    if (layoutDirection.value === direction) return;
+    layoutDirection.value = direction;
+    setCameraTarget(
+      cameraTarget.value.kind,
+      cameraTarget.value.nodeId,
+      cameraTarget.value.nodeIds,
+    );
+  };
+
+  const toggleLayoutDirection = (): LayoutDirection => {
+    const next: LayoutDirection = layoutDirection.value === 'LR' ? 'TB' : 'LR';
+    setLayoutDirection(next);
+    return next;
+  };
+
+  const setZenMode = (enabled: boolean) => {
+    zenMode.value = enabled;
+  };
+
+  const toggleZenMode = (): boolean => {
+    zenMode.value = !zenMode.value;
+    return zenMode.value;
+  };
+
+  const requestFitView = () => {
+    fitRequestSeq.value += 1;
   };
 
   const setCameraTarget = (
@@ -480,16 +645,57 @@ export function createFlowExplorerState(
 
   const findNode = (nodeId: string) => findNodeById(dataset, nodeId);
 
+  const hoveredLineage = computed<NodeLineageResult | null>(() => {
+    if (!hoveredNodeId.value || activeScenario.value) return null;
+    const lineage = computeNodeLineage(visibleFlow.value, hoveredNodeId.value);
+    return lineage.nodeIds.size > 0 ? lineage : null;
+  });
+
+  const recentNodes = computed<FlowNodeData[]>(() =>
+    recentNodeIds.value
+      .filter((id) => isNodeCurrentlyVisible(id))
+      .map((id) => findNodeById(dataset, id))
+      .filter((n): n is FlowNodeData => Boolean(n)),
+  );
+
+  const totalDatasetNodeCount = computed<number>(() => {
+    const seen = new Set<string>();
+    const addIfVisible = (node: FlowNodeData) => {
+      if (seen.has(node.id)) return;
+      if (
+        isVisibleForMode(node.audience, audienceMode.value) &&
+        isVisibleForPlatform(node.platforms, audienceMode.value, platformMode.value)
+      ) {
+        seen.add(node.id);
+      }
+    };
+    addIfVisible(dataset.rootNode);
+    for (const branch of dataset.branches) {
+      addIfVisible(branch);
+    }
+    for (const sub of Object.values(dataset.subtreesByParentId)) {
+      for (const node of sub.nodes) {
+        addIfVisible(node);
+      }
+    }
+    return seen.size;
+  });
+
   return {
     dataset,
     allowTechMode,
     audienceMode,
     platformMode,
+    layoutDirection,
     expandedIds,
     accordionMode,
     focusRootId,
     selectedNodeId,
+    hoveredNodeId,
+    hoveredLineage,
     navigationHistory,
+    recentNodeIds,
+    recentNodes,
     previousNode,
     activeScenarioId,
     activeScenario,
@@ -497,14 +703,20 @@ export function createFlowExplorerState(
     activeScenarioStepNodeId,
     scenarioDialogOpen,
     showCanvasMedia,
+    zenMode,
+    fitRequestSeq,
     cameraTarget,
     visibleFlow,
+    totalDatasetNodeCount,
     selectedNode,
     breadcrumbNodes,
     setAudienceMode,
     setPlatformMode,
+    setLayoutDirection,
+    toggleLayoutDirection,
     toggleExpand,
     selectNode,
+    setHoveredNode,
     jumpToNode,
     goBack,
     setFocusRoot,
@@ -513,6 +725,9 @@ export function createFlowExplorerState(
     stepScenario,
     openScenarioDialog,
     closeScenarioDialog,
+    setZenMode,
+    toggleZenMode,
+    requestFitView,
     getChildCount,
     hasSubtree,
     findNode,

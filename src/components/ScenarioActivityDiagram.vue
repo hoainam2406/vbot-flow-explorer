@@ -67,11 +67,11 @@ watch(
 </script>
 
 <template>
-  <div v-if="props.model.steps.length === 0" class="py-12 text-center text-xs text-slate-500">
+  <div v-if="props.model.steps.length === 0" class="py-12 text-center text-xs text-slate-500 dark:text-slate-400">
     Kịch bản này hiện không có bước hiển thị trong chế độ đang chọn.
   </div>
 
-  <div v-else class="overflow-x-auto rounded-xl border border-slate-200 bg-white p-2.5 shadow-2xs">
+  <div v-else class="vbot-svg-stage overflow-x-auto p-2.5 shadow-2xs">
     <svg
       :viewBox="`0 ${layout.headerHeight} ${layout.width} ${layout.height - layout.headerHeight}`"
       :style="{ maxWidth: `${layout.width}px` }"

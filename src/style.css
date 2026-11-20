@@ -1,15 +1,153 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 @import "@vue-flow/core/dist/style.css";
 @import "@vue-flow/core/dist/theme-default.css";
 @import "@vue-flow/controls/dist/style.css";
 @import "@vue-flow/minimap/dist/style.css";
 
+@theme {
+  --font-sans: "Plus Jakarta Sans", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 html, body, #app {
   height: 100%;
   margin: 0;
-  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--font-sans);
+}
+
+.vbot-canvas-surface {
+  background-color: #f8fafc;
+  background-image: radial-gradient(ellipse 80% 45% at 50% 0%, rgba(99, 102, 241, 0.06), transparent 70%);
+}
+
+.dark .vbot-canvas-surface {
+  background-color: #090d16;
+  background-image: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(99, 102, 241, 0.12), transparent 72%);
+}
+
+.dark .vbot-canvas-surface--tech {
+  background-image: radial-gradient(ellipse 80% 50% at 50% 0%, rgba(6, 182, 212, 0.11), transparent 72%);
+}
+
+.vbot-svg-stage {
+  border-radius: 0.75rem;
+  border: 1px solid rgb(226 232 240);
+  background-color: #ffffff;
+}
+
+.dark .vbot-svg-stage {
+  border-color: rgb(51 65 85 / 0.85);
+  background-color: #f8fafc;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 8px 24px -10px rgba(0, 0, 0, 0.65);
+}
+
+.dark .vue-flow__minimap {
+  background-color: rgba(15, 23, 42, 0.86) !important;
+  border-color: rgba(51, 65, 85, 0.8) !important;
+}
+
+.dark .vue-flow__attribution {
+  background: rgba(15, 23, 42, 0.75) !important;
+  color: #64748b !important;
+}
+
+.dark .vue-flow__attribution a {
+  color: #94a3b8 !important;
+}
+
+.dark ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.dark ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.55);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.8);
 }
 
 .vue-flow__edge-labels {
   z-index: 4;
+}
+
+@keyframes vbot-node-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.45), 0 10px 25px -6px rgba(37, 99, 235, 0.32);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.25), 0 12px 30px -4px rgba(14, 165, 233, 0.4);
+  }
+}
+
+.vbot-node-active-pulse {
+  animation: vbot-node-pulse 2s ease-in-out infinite;
+}
+
+/* Transitions */
+.vbot-drawer-enter-active,
+.vbot-drawer-leave-active {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease;
+}
+
+.vbot-drawer-enter-from,
+.vbot-drawer-leave-to {
+  transform: translateX(24px);
+  opacity: 0;
+}
+
+.vbot-modal-enter-active,
+.vbot-modal-leave-active {
+  transition: opacity 180ms ease;
+}
+
+.vbot-modal-enter-active .vbot-modal-panel,
+.vbot-modal-leave-active .vbot-modal-panel {
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1), opacity 180ms ease;
+}
+
+.vbot-modal-enter-from,
+.vbot-modal-leave-to {
+  opacity: 0;
+}
+
+.vbot-modal-enter-from .vbot-modal-panel,
+.vbot-modal-leave-to .vbot-modal-panel {
+  transform: scale(0.97) translateY(6px);
+  opacity: 0;
+}
+
+.vbot-toast-enter-active,
+.vbot-toast-leave-active {
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), opacity 160ms ease;
+}
+
+.vbot-toast-enter-from,
+.vbot-toast-leave-to {
+  transform: translateY(-10px) scale(0.96);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vbot-node-active-pulse {
+    animation: none;
+  }
+  .vbot-edge-packet {
+    display: none;
+  }
+  .vbot-drawer-enter-active,
+  .vbot-drawer-leave-active,
+  .vbot-modal-enter-active,
+  .vbot-modal-leave-active,
+  .vbot-toast-enter-active,
+  .vbot-toast-leave-active {
+    transition: none;
+  }
 }
