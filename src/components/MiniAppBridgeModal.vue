@@ -13,6 +13,7 @@ import {
   PlayCircle,
   Search,
   ShieldCheck,
+  Terminal,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
@@ -30,11 +31,12 @@ import {
 } from '../data/miniAppBridgeCatalog';
 import BridgeFlowSimulator from './BridgeFlowSimulator.vue';
 import JsonCodeBlock from './JsonCodeBlock.vue';
+import MiniAppDevStudio from './MiniAppDevStudio.vue';
 import MiniAppPermissionsPanel from './MiniAppPermissionsPanel.vue';
 import TechPlatformSwitcher from './TechPlatformSwitcher.vue';
 
 export interface MiniAppBridgeLaunchContext {
-  tab?: 'simulator' | 'protocol' | 'catalog' | 'permissions' | 'parity';
+  tab?: 'sandbox' | 'simulator' | 'protocol' | 'catalog' | 'permissions' | 'parity';
   flowId?: string;
   subFlowId?: string;
   miniAppId?: string;
@@ -56,9 +58,10 @@ if (!explorer) {
 
 const { pushToast } = useToast();
 
-type ModalTab = 'simulator' | 'protocol' | 'catalog' | 'permissions' | 'parity';
+type ModalTab = 'sandbox' | 'simulator' | 'protocol' | 'catalog' | 'permissions' | 'parity';
 
-const activeTab = ref<ModalTab>('simulator');
+const activeTab = ref<ModalTab>('sandbox');
+const studioAppId = ref<string>('vb-ma-autodial');
 const selectedFlowId = ref<string>(MINI_APP_SIMULATOR_FLOWS[0]?.id ?? 'flow-autodial');
 const selectedSubFlowId = ref<string | undefined>(undefined);
 const permissionsFilterAppId = ref('');
@@ -88,6 +91,11 @@ const jumpToCanvasNode = (nodeId: string) => {
 const openPermissionsForApp = (appId: string) => {
   permissionsFilterAppId.value = appId;
   activeTab.value = 'permissions';
+};
+
+const openDevStudioForApp = (appId: string) => {
+  studioAppId.value = appId;
+  activeTab.value = 'sandbox';
 };
 
 const getFlowSubCount = (flowId?: string): number => {
@@ -308,7 +316,10 @@ watch(
       if (ctx?.tab) {
         activeTab.value = ctx.tab;
       } else {
-        activeTab.value = 'simulator';
+        activeTab.value = 'sandbox';
+      }
+      if (ctx?.miniAppId && ctx.miniAppId.startsWith('vb-ma-')) {
+        studioAppId.value = ctx.miniAppId;
       }
       if (ctx?.flowId && MINI_APP_SIMULATOR_FLOWS.some((f) => f.id === ctx.flowId)) {
         selectedFlowId.value = ctx.flowId;
@@ -395,6 +406,21 @@ onBeforeUnmount(() => {
                 aria-label="Mục trong Cầu nối Mini App"
                 class="inline-flex flex-wrap rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold dark:border-slate-700/80 dark:bg-slate-900"
               >
+                <button
+                  type="button"
+                  role="tab"
+                  :aria-selected="activeTab === 'sandbox'"
+                  class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition"
+                  :class="
+                    activeTab === 'sandbox'
+                      ? 'bg-white text-cyan-700 shadow-xs dark:bg-slate-700 dark:text-cyan-300'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  "
+                  @click="activeTab = 'sandbox'"
+                >
+                  <Terminal class="h-3.5 w-3.5" />
+                  Dev Studio · Mô phỏng
+                </button>
                 <button
                   type="button"
                   role="tab"
@@ -488,8 +514,17 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- TAB 1: Interactive Simulator -->
-          <div v-if="activeTab === 'simulator'" class="min-h-0 flex-1 overflow-hidden">
+          <!-- TAB 1: Interactive Mini App Dev Studio & Sandbox -->
+          <MiniAppDevStudio
+            v-if="activeTab === 'sandbox'"
+            :initial-app-id="studioAppId"
+            :platform-mode="explorer.platformMode.value"
+            @app-changed="studioAppId = $event"
+            @open-flow="runSimulatorFlow"
+          />
+
+          <!-- TAB 2: Interactive Simulator -->
+          <div v-else-if="activeTab === 'simulator'" class="min-h-0 flex-1 overflow-hidden">
             <BridgeFlowSimulator
               :flows="MINI_APP_SIMULATOR_FLOWS"
               :selected-flow-id="selectedFlowId"
@@ -862,6 +897,14 @@ onBeforeUnmount(() => {
                   </div>
 
                   <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
+                      @click="openDevStudioForApp(app.id)"
+                    >
+                      <Terminal class="h-3 w-3" />
+                      Mở Dev Studio
+                    </button>
                     <button
                       v-if="app.simulatorFlowId"
                       type="button"

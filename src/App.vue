@@ -155,6 +155,28 @@ const applyInitialState = () => {
   if (__ENABLE_TECH_MODE__) {
     explorer.setAudienceMode(initial.audienceMode);
     explorer.setPlatformMode(initial.platformMode);
+
+    const hashQuery = window.location.hash.includes('?')
+      ? window.location.hash.slice(window.location.hash.indexOf('?'))
+      : '';
+    const mergedParams = new URLSearchParams(hashQuery || window.location.search);
+    const bridgeParam = mergedParams.get('bridge');
+    const appParam = mergedParams.get('app');
+    const validBridgeTabs = new Set<NonNullable<MiniAppBridgeLaunchContext['tab']>>([
+      'sandbox',
+      'simulator',
+      'protocol',
+      'catalog',
+      'permissions',
+      'parity',
+    ]);
+    if (bridgeParam && validBridgeTabs.has(bridgeParam as NonNullable<MiniAppBridgeLaunchContext['tab']>)) {
+      explorer.setAudienceMode('tech');
+      openMiniAppBridge({
+        tab: bridgeParam as NonNullable<MiniAppBridgeLaunchContext['tab']>,
+        miniAppId: appParam && appParam.startsWith('vb-ma-') ? appParam : undefined,
+      });
+    }
   }
 
   if (initial.focusNodeId) {
@@ -202,6 +224,12 @@ const syncToUrl = () => {
     params.set('mode', explorer.audienceMode.value);
     if (explorer.audienceMode.value === 'tech') {
       params.set('platform', explorer.platformMode.value);
+      if (miniAppModalOpen.value && miniAppLaunchContext.value?.tab) {
+        params.set('bridge', miniAppLaunchContext.value.tab);
+        if (miniAppLaunchContext.value.miniAppId) {
+          params.set('app', miniAppLaunchContext.value.miniAppId);
+        }
+      }
     }
   }
   const qs = params.toString();
