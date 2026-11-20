@@ -6,6 +6,7 @@ import {
   Code2,
   Copy,
   Globe,
+  HelpCircle,
   Maximize2,
   PhoneCall,
   PhoneOff,
@@ -130,8 +131,16 @@ const postEventToIframe = (eventName: string, payload: Record<string, unknown>):
   return true;
 };
 
+const switchPreviewMode = (mode: PreviewMode, expandShim = true) => {
+  previewMode.value = mode;
+  if (mode === 'iframe' && expandShim) {
+    showShimCard.value = true;
+  }
+};
+
 defineExpose({
   postEventToIframe,
+  switchPreviewMode,
 });
 
 const handleWindowMessage = (event: MessageEvent) => {
@@ -211,36 +220,47 @@ const missingThemeOnAndroidHistory = computed(
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/75">
+  <div
+    data-studio-tour="phone-preview"
+    class="flex h-full min-h-0 flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/75"
+  >
     <!-- Top mode switcher -->
     <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-      <div class="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
-        <button
-          type="button"
-          class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition"
-          :class="
-            previewMode === 'mock'
-              ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-700 dark:text-white'
-              : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
-          "
-          @click="previewMode = 'mock'"
+      <div class="flex items-center gap-1">
+        <div class="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition"
+            :class="
+              previewMode === 'mock'
+                ? 'bg-white text-slate-900 shadow-2xs dark:bg-slate-700 dark:text-white'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+            "
+            @click="previewMode = 'mock'"
+          >
+            <Smartphone class="h-3 w-3" />
+            Mock UI (Sẵn)
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition"
+            :class="
+              previewMode === 'iframe'
+                ? 'bg-white text-cyan-700 shadow-2xs dark:bg-cyan-500/20 dark:text-cyan-300'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+            "
+            @click="previewMode = 'iframe'"
+          >
+            <Globe class="h-3 w-3" />
+            Iframe Localhost
+          </button>
+        </div>
+        <span
+          title="Mock UI dùng để test nhanh không cần code. Chuyển sang Iframe Localhost để nhúng app thật trên máy bạn kèm 1-click Dev Bridge Shim JS."
+          class="inline-flex cursor-help items-center text-slate-400 hover:text-cyan-500 dark:text-slate-500 dark:hover:text-cyan-300"
         >
-          <Smartphone class="h-3 w-3" />
-          Mock UI (Sẵn)
-        </button>
-        <button
-          type="button"
-          class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition"
-          :class="
-            previewMode === 'iframe'
-              ? 'bg-white text-cyan-700 shadow-2xs dark:bg-cyan-500/20 dark:text-cyan-300'
-              : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
-          "
-          @click="previewMode = 'iframe'"
-        >
-          <Globe class="h-3 w-3" />
-          Iframe Localhost
-        </button>
+          <HelpCircle class="h-3.5 w-3.5" />
+        </span>
       </div>
 
       <div class="flex items-center gap-1.5 text-[10px] font-semibold">

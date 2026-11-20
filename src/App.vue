@@ -345,7 +345,10 @@ watch(
       @export-svg="handlePaletteExportSvg"
       @export-md="handlePaletteExportMd"
     />
-    <GuideGlossaryModal v-model:open="guideOpen" />
+    <GuideGlossaryModal
+      v-model:open="guideOpen"
+      @open-mini-app-studio="openMiniAppBridge({ tab: 'sandbox' })"
+    />
     <ScenarioFlowDialog />
     <component :is="ParityMatrixModal" v-if="ParityMatrixModal" v-model:open="parityOpen" />
     <component

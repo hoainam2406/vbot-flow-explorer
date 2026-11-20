@@ -20,6 +20,15 @@ import {
   SANDBOX_FAULT_OPTIONS,
   validateIframeDevUrl,
 } from '../src/core/miniAppSandboxEngine';
+import {
+  BRIDGE_MODAL_TABS_GUIDE,
+  loadStudioBannerDismissed,
+  MINI_APP_WORKFLOW_STEPS,
+  saveStudioBannerDismissed,
+  STUDIO_BANNER_DISMISSED_KEY,
+  STUDIO_QUICK_RECIPES,
+  STUDIO_TOUR_STEPS,
+} from '../src/core/miniAppStudioGuide';
 import { MINI_APP_CATALOG } from '../src/data/miniAppBridgeCatalog';
 import { createRoleStateFromPreset } from '../src/data/miniAppPermissionMatrix';
 
@@ -354,5 +363,115 @@ describe('miniAppSandboxEngine', () => {
     );
     expect(pushed.nextState.theme).toBe('light');
     expect(pushed.nextState.lastPushEvent?.eventName).toBe('theme_changed');
+  });
+});
+
+describe('miniAppStudioGuide', () => {
+  it('defines 6 spotlight tour steps, 6 tab guide entries, and 4 workflow steps', () => {
+    expect(STUDIO_TOUR_STEPS).toHaveLength(6);
+    expect(STUDIO_TOUR_STEPS.map((s) => s.stepNumber)).toEqual([1, 2, 3, 4, 5, 6]);
+    const ids = new Set(STUDIO_TOUR_STEPS.map((s) => s.id));
+    expect(ids.size).toBe(6);
+    for (const step of STUDIO_TOUR_STEPS) {
+      expect(step.targetSelector).toMatch(/^\[data-studio-tour=".+"\]$/);
+    }
+
+    expect(BRIDGE_MODAL_TABS_GUIDE).toHaveLength(6);
+    expect(BRIDGE_MODAL_TABS_GUIDE.map((t) => t.tab)).toEqual([
+      'sandbox',
+      'simulator',
+      'protocol',
+      'catalog',
+      'permissions',
+      'parity',
+    ]);
+
+    expect(MINI_APP_WORKFLOW_STEPS).toHaveLength(4);
+  });
+
+  it('executes all 5 1-click quick recipes with accurate Sandbox outcomes', () => {
+    expect(STUDIO_QUICK_RECIPES).toHaveLength(5);
+
+    const outcomes = new Map<string, ReturnType<typeof executeHostCommand>>();
+    for (const recipe of STUDIO_QUICK_RECIPES) {
+      expect(MINI_APP_CATALOG.some((a) => a.id === recipe.appId)).toBe(true);
+      if (!recipe.command) {
+        expect(recipe.id).toBe('recipe-localhost-iframe-shim');
+        expect(recipe.phoneMode).toBe('iframe');
+        continue;
+      }
+
+      const cfg = {
+        ...createDefaultHostConfig(recipe.appId),
+        platform: recipe.platform,
+        rolePreset: recipe.rolePreset,
+        roleState: createRoleStateFromPreset(recipe.rolePreset),
+        fault: recipe.fault,
+      };
+      const res = executeHostCommand(
+        recipe.command.method,
+        recipe.command.payload,
+        cfg,
+        createInitialHostState(cfg),
+      );
+      outcomes.set(recipe.id, res);
+    }
+
+    const sheetRes = outcomes.get('recipe-android-hotline-sheet')!;
+    expect(sheetRes.status).toBe('pending');
+    expect(sheetRes.nextState.pendingHotlinePicker?.phone).toBe('0901234567');
+
+    const logoutRes = outcomes.get('recipe-token-401-logout')!;
+    expect(logoutRes.ok).toBe(false);
+    expect(logoutRes.nextState.sessionLogoutTriggered).toBe(true);
+
+    const toastRes = outcomes.get('recipe-ios-toast-parity')!;
+    expect(toastRes.status).toBe('warning');
+    expect(toastRes.responsePayload.error_code).toBe('UNSUPPORTED_ON_IOS');
+
+    const fetchRes = outcomes.get('recipe-host-fetch-auth-strip')!;
+    expect(fetchRes.ok).toBe(true);
+    expect(fetchRes.status).toBe('warning');
+    expect(fetchRes.responsePayload.stripped_js_authorization).toBe(true);
+  });
+
+  it('persists and safely restores banner dismissal state in storage', () => {
+    const store = new Map<string, string>();
+    const mockStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    };
+
+    expect(loadStudioBannerDismissed(mockStorage)).toBe(false);
+    saveStudioBannerDismissed(true, mockStorage);
+    expect(store.get(STUDIO_BANNER_DISMISSED_KEY)).toBe('1');
+    expect(loadStudioBannerDismissed(mockStorage)).toBe(true);
+
+    saveStudioBannerDismissed(false, mockStorage);
+    expect(loadStudioBannerDismissed(mockStorage)).toBe(false);
+
+    // Resilience when storage is null or throws SecurityError / QuotaExceeded
+    expect(loadStudioBannerDismissed(null)).toBe(false);
+    expect(() => saveStudioBannerDismissed(true, null)).not.toThrow();
+
+    const throwingStorage = {
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      setItem: () => {
+        throw new Error('quota');
+      },
+      removeItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    expect(loadStudioBannerDismissed(throwingStorage)).toBe(false);
+    expect(() => saveStudioBannerDismissed(true, throwingStorage)).not.toThrow();
+    expect(() => saveStudioBannerDismissed(false, throwingStorage)).not.toThrow();
   });
 });

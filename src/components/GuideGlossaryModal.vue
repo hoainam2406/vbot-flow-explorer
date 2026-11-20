@@ -20,6 +20,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [value: boolean];
+  openMiniAppStudio: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -68,6 +69,12 @@ const jumpToTechNode = (
   }
   explorer.jumpToNode(nodeId);
   close();
+};
+
+const handleOpenMiniAppStudio = () => {
+  if (!__ENABLE_TECH_MODE__) return;
+  close();
+  emit('openMiniAppStudio');
 };
 
 const onWindowKeyDown = (event: KeyboardEvent) => {
@@ -266,6 +273,7 @@ onBeforeUnmount(() => {
               :tab="activeTab"
               :tech-branch="techBranch"
               @jump-tech="jumpToTechNode"
+              @open-mini-app-studio="handleOpenMiniAppStudio"
             />
           </div>
         </div>

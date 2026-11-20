@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { ArrowRight, Search } from 'lucide-vue-next';
+import { ArrowRight, Search, Terminal } from 'lucide-vue-next';
 import {
   DEV_ONBOARDING_STEPS,
   TECH_GLOSSARY_TERMS,
@@ -15,6 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   jumpTech: [nodeId: string, recommendedPlatform?: DevOnboardingStep['recommendedPlatform']];
+  openMiniAppStudio: [];
 }>();
 
 const glossaryQuery = ref('');
@@ -60,14 +61,25 @@ const filteredGlossary = computed<TechGlossaryItem[]>(() => {
             <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-400">{{ item.description }}</p>
           </div>
         </div>
-        <button
-          type="button"
-          class="inline-flex shrink-0 items-center gap-1 self-start rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-100 sm:self-center dark:border-cyan-500/35 dark:bg-cyan-500/12 dark:text-cyan-300 dark:hover:bg-cyan-500/20"
-          @click="emit('jumpTech', item.nodeId, item.recommendedPlatform)"
-        >
-          Mở trên sơ đồ
-          <ArrowRight class="h-3 w-3" />
-        </button>
+        <div class="flex flex-wrap items-center gap-1.5 self-start sm:self-center">
+          <button
+            v-if="item.step === 4"
+            type="button"
+            class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-cyan-300 bg-cyan-50 px-2.5 py-1.5 text-[11px] font-semibold text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
+            @click="emit('openMiniAppStudio')"
+          >
+            <Terminal class="h-3 w-3" />
+            Mở Dev Studio
+          </button>
+          <button
+            type="button"
+            class="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/12 dark:text-cyan-300 dark:hover:bg-cyan-500/20"
+            @click="emit('jumpTech', item.nodeId, item.recommendedPlatform)"
+          >
+            Mở trên sơ đồ
+            <ArrowRight class="h-3 w-3" />
+          </button>
+        </div>
       </li>
     </ol>
   </div>

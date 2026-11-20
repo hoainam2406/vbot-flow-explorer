@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -11,13 +11,16 @@ import {
   Download,
   ExternalLink,
   FileJson,
+  HelpCircle,
   Link2,
   Play,
   PlayCircle,
   RotateCcw,
   Send,
+  Sparkles,
   Terminal,
   Trash2,
+  X,
   Zap,
 } from 'lucide-vue-next';
 import { useToast } from '../composables/useToast';
@@ -46,6 +49,12 @@ import {
   type SandboxPlatform,
   type SandboxWireLogEntry,
 } from '../core/miniAppSandboxEngine';
+import {
+  loadStudioBannerDismissed,
+  saveStudioBannerDismissed,
+  type StudioQuickRecipe,
+  type StudioTourStep,
+} from '../core/miniAppStudioGuide';
 import { MINI_APP_CATALOG } from '../data/miniAppBridgeCatalog';
 import {
   createRoleStateFromPreset,
@@ -64,6 +73,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   appChanged: [appId: string];
   openFlow: [flowId: string];
+  startTour: [];
+  openGuide: [];
+  bannerDismissedChange: [dismissed: boolean];
 }>();
 
 const { pushToast } = useToast();
@@ -73,6 +85,7 @@ type InspectorTab = 'response' | 'sdk' | 'native';
 
 const studioView = ref<StudioViewMode>('sandbox');
 const inspectorTab = ref<InspectorTab>('response');
+const bannerDismissed = ref<boolean>(loadStudioBannerDismissed());
 
 function resolveValidAppId(candidate?: string): string {
   if (candidate && MINI_APP_CATALOG.some((a) => a.id === candidate)) {
@@ -326,6 +339,64 @@ const jumpToSandboxWithPush = (eventName: string, samplePayload: Record<string, 
   firePushEvent(eventName, samplePayload);
 };
 
+const setBannerDismissed = (dismissed: boolean) => {
+  bannerDismissed.value = dismissed;
+  saveStudioBannerDismissed(dismissed);
+  emit('bannerDismissedChange', dismissed);
+};
+
+const prepareForTourStep = async (step: StudioTourStep) => {
+  studioView.value = step.requiredView;
+  if (step.preferredPhoneMode) {
+    await nextTick();
+    phonePreviewRef.value?.switchPreviewMode(
+      step.preferredPhoneMode,
+      step.preferredPhoneMode === 'iframe',
+    );
+  }
+};
+
+const runQuickRecipe = async (recipe: StudioQuickRecipe) => {
+  studioView.value = 'sandbox';
+  const targetAppId = resolveValidAppId(recipe.appId);
+  const appChanged = selectedAppId.value !== targetAppId;
+  selectedAppId.value = targetAppId;
+  if (appChanged) {
+    // Đợi watch(selectedAppId) reset state xong trước khi áp dụng cấu hình của kịch bản
+    await nextTick();
+  }
+  hostConfig.value = {
+    ...hostConfig.value,
+    appId: targetAppId,
+    platform: recipe.platform,
+    rolePreset: recipe.rolePreset,
+    roleState: createRoleStateFromPreset(recipe.rolePreset),
+    fault: recipe.fault,
+  };
+  hostState.value = createInitialHostState(hostConfig.value);
+  wireLogs.value = [];
+  lastResult.value = null;
+  selectedLogId.value = null;
+
+  await nextTick();
+  phonePreviewRef.value?.switchPreviewMode(
+    recipe.phoneMode,
+    recipe.phoneMode === 'iframe',
+  );
+
+  if (recipe.command) {
+    runDirectCommand(recipe.command.method, recipe.command.payload);
+    inspectorTab.value = 'response';
+  }
+  pushToast(`Đang chạy thử: ${recipe.title}`, 'info');
+};
+
+defineExpose({
+  prepareForTourStep,
+  runQuickRecipe,
+  setBannerDismissed,
+});
+
 const selectedWireFrame = computed(() =>
   wireLogs.value.find((w) => w.id === selectedLogId.value) ?? wireLogs.value[wireLogs.value.length - 1] ?? null,
 );
@@ -368,7 +439,10 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
 <template>
   <div class="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50/50 dark:bg-[#090d16]">
     <!-- Top Studio Header Bar -->
-    <div class="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
+    <div
+      data-studio-tour="studio-header"
+      class="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-200 bg-white px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900"
+    >
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <label class="text-[11px] font-bold text-slate-600 dark:text-slate-300" for="studio-app-select">
           Mini App:
@@ -452,10 +526,52 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
       </div>
     </div>
 
+    <!-- First-visit Dismissible Quick Start Banner (always restorable via ? Hướng dẫn) -->
+    <div
+      v-if="!bannerDismissed"
+      class="flex flex-wrap items-center justify-between gap-2 border-b border-cyan-200/80 bg-cyan-50/75 px-4 py-2 text-xs text-cyan-950 dark:border-cyan-500/25 dark:bg-cyan-500/10 dark:text-cyan-100"
+    >
+      <div class="flex min-w-0 items-center gap-2">
+        <Sparkles class="h-3.5 w-3.5 shrink-0 text-cyan-600 dark:text-cyan-400" />
+        <span class="truncate sm:whitespace-normal">
+          <strong>Mới dùng Dev Studio?</strong> Chọn Mini App → xem <em>Hợp đồng 2 Chiều</em> → thử lệnh &amp; <em>Giả lập lỗi</em> → hoặc nối <em>Iframe Localhost</em>.
+        </span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-md bg-cyan-600 px-2.5 py-1 text-[11px] font-bold text-white transition hover:bg-cyan-500"
+          @click="emit('startTour')"
+        >
+          <Play class="h-3 w-3" />
+          Bắt đầu Tour 60s
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-md border border-cyan-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-500/40 dark:bg-slate-900 dark:text-cyan-300 dark:hover:bg-slate-800"
+          @click="emit('openGuide')"
+        >
+          5 Bài test mẫu
+        </button>
+        <button
+          type="button"
+          aria-label="Ẩn gợi ý đầu trang"
+          title="Ẩn thanh gợi ý (luôn mở lại được ở nút ? Hướng dẫn)"
+          class="rounded p-1 text-cyan-700/70 hover:bg-cyan-200/60 hover:text-cyan-900 dark:text-cyan-300/70 dark:hover:bg-slate-800 dark:hover:text-cyan-200"
+          @click="setBannerDismissed(true)"
+        >
+          <X class="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+
     <!-- VIEW 1: INTERACTIVE SANDBOX -->
     <template v-if="studioView === 'sandbox'">
       <!-- Host Environment Config Bar -->
-      <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/60">
+      <div
+        data-studio-tour="env-bar"
+        class="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-100/70 px-4 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/60"
+      >
         <!-- Platform -->
         <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-800">
           <button
@@ -485,8 +601,14 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
         </div>
 
         <!-- Role Preset -->
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1">
           <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Role:</span>
+          <span
+            title="Giả lập vai trò user (Admin, CSKH/Sales, Giám sát, Member tối giản) để test lệnh check_permissions 2 tầng"
+            class="inline-flex cursor-help items-center text-slate-400 hover:text-cyan-500 dark:text-slate-500 dark:hover:text-cyan-300"
+          >
+            <HelpCircle class="h-3 w-3" />
+          </span>
           <select
             :value="hostConfig.rolePreset"
             class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
@@ -499,8 +621,14 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
         </div>
 
         <!-- Fault Injection -->
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1">
           <span class="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Giả lập lỗi:</span>
+          <span
+            title="Tiêm lỗi có chủ đích (401 Fail, RBAC Deny, Android Hotline Picker, Timeout 5000ms...) để kiểm tra cách Mini App xử lý"
+            class="inline-flex cursor-help items-center text-slate-400 hover:text-cyan-500 dark:text-slate-500 dark:hover:text-cyan-300"
+          >
+            <HelpCircle class="h-3 w-3" />
+          </span>
           <select
             v-model="hostConfig.fault"
             class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
@@ -534,11 +662,17 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
       <!-- 3-Column Interactive Studio Grid -->
       <div class="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 xl:grid-cols-12 xl:overflow-hidden">
         <!-- LEFT COLUMN (4 cols): Request Composer + Push Events -->
-        <div class="flex min-h-0 flex-col gap-3 xl:col-span-4">
+        <div data-studio-tour="composer-col" class="flex min-h-0 flex-col gap-3 xl:col-span-4">
           <div class="flex min-h-0 flex-1 flex-col rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900/75">
             <div class="flex flex-wrap items-center justify-between gap-2">
-              <span class="text-xs font-bold text-slate-900 dark:text-slate-100">
+              <span class="inline-flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-slate-100">
                 Mini App → Host (Gửi lệnh &amp; Test Input)
+                <span
+                  title="Chọn hàm/action Mini App gọi lên Host, thử bấm Mẫu lỗi để xem validation của Native"
+                  class="inline-flex cursor-help items-center text-slate-400 hover:text-cyan-500 dark:text-slate-500 dark:hover:text-cyan-300"
+                >
+                  <HelpCircle class="h-3 w-3" />
+                </span>
               </span>
               <div class="flex items-center gap-1">
                 <button
@@ -618,6 +752,12 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
             <div class="flex items-center gap-1.5 text-xs font-bold text-indigo-700 dark:text-indigo-300">
               <Zap class="h-3.5 w-3.5" />
               Host → Mini App (Bắn Push Event giả lập)
+              <span
+                title="Giả lập sự kiện 1 chiều Native chủ động đẩy xuống onEvent(...) của Mini App (và đẩy thẳng vào Iframe nếu đang nối localhost)"
+                class="inline-flex cursor-help items-center text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200"
+              >
+                <HelpCircle class="h-3 w-3" />
+              </span>
             </div>
             <p class="mt-0.5 text-[10px] text-slate-500 dark:text-slate-400">
               Giả lập Native chủ động đẩy sự kiện xuống WebView <code class="font-mono">onEvent(...)</code>:
@@ -638,12 +778,18 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
         </div>
 
         <!-- CENTER COLUMN (4 cols): Live Wire Console + Frame Inspector -->
-        <div class="flex min-h-0 flex-col gap-3 xl:col-span-4">
+        <div data-studio-tour="console-col" class="flex min-h-0 flex-col gap-3 xl:col-span-4">
           <!-- Wire Console Log -->
           <div class="flex min-h-[180px] flex-1 flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/75">
             <div class="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
-              <span class="text-xs font-bold text-slate-900 dark:text-slate-100">
+              <span class="inline-flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-slate-100">
                 Live Bridge Wire Console ({{ wireLogs.length }})
+                <span
+                  title="Bấm bất kỳ dòng TX / NATIVE / RX nào để soi payload JSON, lấy code @vbotma/sdk và hàm Swift/Kotlin tương ứng ở khung dưới"
+                  class="inline-flex cursor-help items-center text-slate-400 hover:text-cyan-500 dark:text-slate-500 dark:hover:text-cyan-300"
+                >
+                  <HelpCircle class="h-3 w-3" />
+                </span>
               </span>
               <button
                 type="button"

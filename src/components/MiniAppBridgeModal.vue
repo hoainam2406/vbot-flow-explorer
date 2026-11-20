@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -10,6 +10,7 @@ import {
   ExternalLink,
   FileText,
   Grid2x2,
+  HelpCircle,
   PlayCircle,
   Search,
   ShieldCheck,
@@ -19,6 +20,13 @@ import {
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useToast } from '../composables/useToast';
 import { copyTextToClipboard, downloadTextFile } from '../core/downloadHelper';
+import {
+  loadStudioBannerDismissed,
+  saveStudioBannerDismissed,
+  STUDIO_TOUR_STEPS,
+  type BridgeModalTabId,
+  type StudioQuickRecipe,
+} from '../core/miniAppStudioGuide';
 import {
   BRIDGE_PARITY_ALERTS,
   CORE_BRIDGE_SPECS,
@@ -33,6 +41,8 @@ import BridgeFlowSimulator from './BridgeFlowSimulator.vue';
 import JsonCodeBlock from './JsonCodeBlock.vue';
 import MiniAppDevStudio from './MiniAppDevStudio.vue';
 import MiniAppPermissionsPanel from './MiniAppPermissionsPanel.vue';
+import MiniAppStudioGuidePopover from './MiniAppStudioGuidePopover.vue';
+import MiniAppStudioTourOverlay from './MiniAppStudioTourOverlay.vue';
 import TechPlatformSwitcher from './TechPlatformSwitcher.vue';
 
 export interface MiniAppBridgeLaunchContext {
@@ -62,6 +72,11 @@ type ModalTab = 'sandbox' | 'simulator' | 'protocol' | 'catalog' | 'permissions'
 
 const activeTab = ref<ModalTab>('sandbox');
 const studioAppId = ref<string>('vb-ma-autodial');
+const devStudioRef = ref<InstanceType<typeof MiniAppDevStudio> | null>(null);
+const guidePopoverOpen = ref(false);
+const tourActive = ref(false);
+const tourStepIndex = ref(0);
+const studioBannerDismissed = ref(loadStudioBannerDismissed());
 const selectedFlowId = ref<string>(MINI_APP_SIMULATOR_FLOWS[0]?.id ?? 'flow-autodial');
 const selectedSubFlowId = ref<string | undefined>(undefined);
 const permissionsFilterAppId = ref('');
@@ -96,6 +111,61 @@ const openPermissionsForApp = (appId: string) => {
 const openDevStudioForApp = (appId: string) => {
   studioAppId.value = appId;
   activeTab.value = 'sandbox';
+};
+
+const startStudioTour = async () => {
+  guidePopoverOpen.value = false;
+  activeTab.value = 'sandbox';
+  tourStepIndex.value = 0;
+  await nextTick();
+  const firstStep = STUDIO_TOUR_STEPS[0];
+  if (firstStep) {
+    await devStudioRef.value?.prepareForTourStep(firstStep);
+  }
+  tourActive.value = true;
+};
+
+const handleTourStepChange = async (nextIdx: number) => {
+  tourStepIndex.value = nextIdx;
+  await nextTick();
+  const step = STUDIO_TOUR_STEPS[nextIdx];
+  if (step) {
+    await devStudioRef.value?.prepareForTourStep(step);
+  }
+};
+
+const handleTourClose = (completed: boolean) => {
+  tourActive.value = false;
+  if (completed) {
+    saveStudioBannerDismissed(true);
+    studioBannerDismissed.value = true;
+    devStudioRef.value?.setBannerDismissed(true);
+  }
+};
+
+const handleRunQuickRecipe = async (recipe: StudioQuickRecipe) => {
+  guidePopoverOpen.value = false;
+  tourActive.value = false;
+  activeTab.value = 'sandbox';
+  await nextTick();
+  await devStudioRef.value?.runQuickRecipe(recipe);
+};
+
+const handleRestoreBanner = async () => {
+  saveStudioBannerDismissed(false);
+  studioBannerDismissed.value = false;
+  guidePopoverOpen.value = false;
+  activeTab.value = 'sandbox';
+  await nextTick();
+  devStudioRef.value?.setBannerDismissed(false);
+};
+
+const handleGuideJumpTab = (tab: BridgeModalTabId) => {
+  guidePopoverOpen.value = false;
+  if (tab !== 'permissions') {
+    permissionsFilterAppId.value = '';
+  }
+  activeTab.value = tab;
 };
 
 const getFlowSubCount = (flowId?: string): number => {
@@ -303,6 +373,14 @@ const onWindowKeyDown = (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
     event.preventDefault();
     event.stopPropagation();
+    if (tourActive.value) {
+      handleTourClose(false);
+      return;
+    }
+    if (guidePopoverOpen.value) {
+      guidePopoverOpen.value = false;
+      return;
+    }
     close();
   }
 };
@@ -312,6 +390,7 @@ watch(
   (isOpen) => {
     if (isOpen) {
       window.addEventListener('keydown', onWindowKeyDown, true);
+      studioBannerDismissed.value = loadStudioBannerDismissed();
       const ctx = props.initialContext;
       if (ctx?.tab) {
         activeTab.value = ctx.tab;
@@ -347,6 +426,8 @@ watch(
         permissionsFilterAppId.value = '';
       }
     } else {
+      guidePopoverOpen.value = false;
+      tourActive.value = false;
       window.removeEventListener('keydown', onWindowKeyDown, true);
     }
   },
@@ -402,6 +483,7 @@ onBeforeUnmount(() => {
 
             <div class="flex flex-wrap items-center gap-2">
               <div
+                data-studio-tour="modal-tabs"
                 role="tablist"
                 aria-label="Mục trong Cầu nối Mini App"
                 class="inline-flex flex-wrap rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold dark:border-slate-700/80 dark:bg-slate-900"
@@ -505,6 +587,16 @@ onBeforeUnmount(() => {
 
               <button
                 type="button"
+                class="inline-flex items-center gap-1 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
+                title="Mở hướng dẫn dùng Dev Studio, chạy lại Tour hoặc xem 5 kịch bản thực hành mẫu"
+                @click="guidePopoverOpen = true"
+              >
+                <HelpCircle class="h-3.5 w-3.5" />
+                Hướng dẫn
+              </button>
+
+              <button
+                type="button"
                 aria-label="Đóng Cầu nối Mini App"
                 class="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 @click="close"
@@ -517,10 +609,14 @@ onBeforeUnmount(() => {
           <!-- TAB 1: Interactive Mini App Dev Studio & Sandbox -->
           <MiniAppDevStudio
             v-if="activeTab === 'sandbox'"
+            ref="devStudioRef"
             :initial-app-id="studioAppId"
             :platform-mode="explorer.platformMode.value"
             @app-changed="studioAppId = $event"
             @open-flow="runSimulatorFlow"
+            @start-tour="startStudioTour"
+            @open-guide="guidePopoverOpen = true"
+            @banner-dismissed-change="studioBannerDismissed = $event"
           />
 
           <!-- TAB 2: Interactive Simulator -->
@@ -1052,5 +1148,22 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </Transition>
+
+    <MiniAppStudioGuidePopover
+      v-model:open="guidePopoverOpen"
+      :banner-dismissed="studioBannerDismissed"
+      @start-tour="startStudioTour"
+      @run-recipe="handleRunQuickRecipe"
+      @jump-tab="handleGuideJumpTab"
+      @restore-banner="handleRestoreBanner"
+    />
+
+    <MiniAppStudioTourOverlay
+      :open="tourActive"
+      :steps="STUDIO_TOUR_STEPS"
+      :step-index="tourStepIndex"
+      @update:step-index="handleTourStepChange"
+      @close="handleTourClose"
+    />
   </Teleport>
 </template>
