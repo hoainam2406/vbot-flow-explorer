@@ -102,7 +102,7 @@ describe('scenarioFlowEngine & scenarioSequenceBuilder', () => {
 
     const autoFlow = buildVisibleTreeFlow(
       fullDataset,
-      new Set(['mod-autodial', 'ma-autodial']),
+      new Set(['mod-miniapp-hub', 'miniapp-list', 'hub-cat-call-mgmt', 'ma-autodial']),
       'tech',
       null,
       'compare',
@@ -115,6 +115,18 @@ describe('scenarioFlowEngine & scenarioSequenceBuilder', () => {
       'maad-control',
       'maad-finish',
     ]);
+
+    const makeCallScenario = autoFlow.activeScenarios.find((s) => s.id === 'sc-maad-makecall');
+    expect(makeCallScenario).toBeDefined();
+    expect(
+      buildScenarioTimeline(makeCallScenario!, autoFlow, 'tech').steps.map((s) => s.node.id),
+    ).toEqual(['maad-init', 'maad-make-call']);
+
+    const stopScenario = autoFlow.activeScenarios.find((s) => s.id === 'sc-maad-stop');
+    expect(stopScenario).toBeDefined();
+    expect(
+      buildScenarioTimeline(stopScenario!, autoFlow, 'tech').steps.map((s) => s.node.id),
+    ).toEqual(['maad-init', 'maad-start', 'maad-stop-state']);
   });
 
   it('derives accurate Sequence Diagram actors, directions, and SVG across Mini App and Android scenarios', () => {
@@ -178,7 +190,7 @@ describe('scenarioFlowEngine & scenarioSequenceBuilder', () => {
     // 3. sc-maad-run + SVG rendering
     const autoFlow = buildVisibleTreeFlow(
       fullDataset,
-      new Set(['mod-autodial', 'ma-autodial']),
+      new Set(['mod-miniapp-hub', 'miniapp-list', 'hub-cat-call-mgmt', 'ma-autodial']),
       'tech',
       null,
       'ios',

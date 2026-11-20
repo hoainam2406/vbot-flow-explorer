@@ -1,5 +1,5 @@
 // src/composables/useGraphLayout.ts
-import dagre from '@dagrejs/dagre';
+import dagre, { type LayoutConfig, type graphlib } from '@dagrejs/dagre';
 import {
   MarkerType,
   Position,
@@ -62,6 +62,131 @@ export interface RoutedEdgePathResult {
   labelY: number;
 }
 
+type DagreRankedNode = {
+  rank?: number;
+  order?: number;
+};
+
+type DagreCustomOrderFn = NonNullable<LayoutConfig['customOrder']>;
+
+function countLayerCrossings(graph: graphlib.Graph, layers: string[][]): number {
+  let total = 0;
+  for (let i = 0; i < layers.length - 1; i += 1) {
+    const north = layers[i];
+    const southPos = new Map(layers[i + 1].map((id, idx) => [id, idx]));
+    const pairs: [number, number][] = [];
+
+    for (let ui = 0; ui < north.length; ui += 1) {
+      for (const edge of graph.outEdges(north[ui]) ?? []) {
+        const vi = southPos.get(edge.w);
+        if (vi !== undefined) {
+          pairs.push([ui, vi]);
+        }
+      }
+    }
+
+    for (let a = 0; a < pairs.length; a += 1) {
+      for (let b = a + 1; b < pairs.length; b += 1) {
+        if (
+          (pairs[a][0] < pairs[b][0] && pairs[a][1] > pairs[b][1]) ||
+          (pairs[a][0] > pairs[b][0] && pairs[a][1] < pairs[b][1])
+        ) {
+          total += 1;
+        }
+      }
+    }
+  }
+  return total;
+}
+
+function sweepLayers(graph: graphlib.Graph, layers: string[][], downward: boolean): void {
+  const start = downward ? 1 : layers.length - 2;
+  const end = downward ? layers.length : -1;
+  const step = downward ? 1 : -1;
+
+  for (let i = start; i !== end; i += step) {
+    const fixedPos = new Map(layers[i - step].map((id, idx) => [id, idx]));
+    const scored = layers[i].map((id, idx) => {
+      const edges = downward ? (graph.inEdges(id) ?? []) : (graph.outEdges(id) ?? []);
+      let sum = 0;
+      let weight = 0;
+      for (const edge of edges) {
+        const neighbor = downward ? edge.v : edge.w;
+        const pos = fixedPos.get(neighbor);
+        if (pos !== undefined) {
+          const w = (graph.edge(edge) as { weight?: number } | undefined)?.weight ?? 1;
+          sum += pos * w;
+          weight += w;
+        }
+      }
+      return { id, idx, bc: weight > 0 ? sum / weight : null };
+    });
+
+    // Giữ nguyên thứ tự hiện tại khi barycenter bằng nhau thay vì lật ngược theo biasRight như Dagre mặc định
+    const sortable = scored
+      .filter((entry) => entry.bc !== null)
+      .sort((a, b) => (Math.abs(a.bc! - b.bc!) < 1e-9 ? a.idx - b.idx : a.bc! - b.bc!));
+
+    let sortableIdx = 0;
+    layers[i] = scored.map((entry) =>
+      entry.bc === null ? entry.id : sortable[sortableIdx++].id,
+    );
+  }
+}
+
+/**
+ * Sắp xếp thứ tự node trong từng tầng Dagre một cách ổn định:
+ * khởi tạo theo đúng thứ tự định nghĩa node/edge và chỉ đổi chỗ khi số điểm cắt giảm thực sự.
+ */
+const stableOrderGraph: DagreCustomOrderFn = (graph, defaultOrder) => {
+  defaultOrder(graph, { disableOptimalOrderHeuristic: true });
+
+  const byRank = new Map<number, string[]>();
+  for (const id of graph.nodes()) {
+    const node = graph.node(id) as DagreRankedNode | undefined;
+    if (typeof node?.rank !== 'number') continue;
+    const list = byRank.get(node.rank) ?? [];
+    list.push(id);
+    byRank.set(node.rank, list);
+  }
+
+  const ranks = [...byRank.keys()].sort((a, b) => a - b);
+  if (ranks.length <= 1) return;
+
+  const layers = ranks.map((rank) =>
+    byRank
+      .get(rank)!
+      .slice()
+      .sort(
+        (a, b) =>
+          ((graph.node(a) as DagreRankedNode | undefined)?.order ?? 0) -
+          ((graph.node(b) as DagreRankedNode | undefined)?.order ?? 0),
+      ),
+  );
+
+  let bestCC = countLayerCrossings(graph, layers);
+  if (bestCC === 0) return;
+
+  let bestLayers = layers.map((layer) => layer.slice());
+  for (let iter = 0, noImprove = 0; noImprove < 4 && iter < 24; iter += 1, noImprove += 1) {
+    sweepLayers(graph, layers, iter % 2 === 0);
+    const cc = countLayerCrossings(graph, layers);
+    if (cc < bestCC) {
+      bestCC = cc;
+      bestLayers = layers.map((layer) => layer.slice());
+      noImprove = 0;
+      if (bestCC === 0) break;
+    }
+  }
+
+  for (const layer of bestLayers) {
+    layer.forEach((id, idx) => {
+      const node = graph.node(id) as DagreRankedNode | undefined;
+      if (node) node.order = idx;
+    });
+  }
+};
+
 export function computeDagreGraphLayout(
   flowNodes: FlowNodeData[],
   flowEdges: FlowEdgeData[],
@@ -101,7 +226,7 @@ export function computeDagreGraphLayout(
     }
   }
 
-  dagre.layout(g);
+  dagre.layout(g, { customOrder: stableOrderGraph });
 
   const nodes = flowNodes.map((node) => {
     const pos = g.node(node.id);

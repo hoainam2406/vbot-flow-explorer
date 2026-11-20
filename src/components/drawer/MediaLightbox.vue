@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue';
 import { ChevronLeft, ChevronRight, X } from 'lucide-vue-next';
+import { resolveMediaUrl } from '../../core/mediaUrl';
 import type { MediaItem } from '../../data/schema';
 
 const props = defineProps<{
@@ -83,7 +84,7 @@ onBeforeUnmount(() => {
 
         <video
           v-if="activeItem.type === 'video'"
-          :src="activeItem.src"
+          :src="resolveMediaUrl(activeItem.src)"
           controls
           autoplay
           loop
@@ -93,7 +94,7 @@ onBeforeUnmount(() => {
         />
         <img
           v-else
-          :src="activeItem.src"
+          :src="resolveMediaUrl(activeItem.src)"
           :alt="activeItem.caption"
           class="max-h-[78vh] max-w-full rounded-2xl bg-white object-contain shadow-2xl"
         />

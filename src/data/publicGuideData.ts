@@ -62,7 +62,7 @@ export const PUBLIC_CONCEPTS: PublicConceptItem[] = [
     term: 'Quay số tự động (Autodial)',
     description:
       'Tính năng tự động gọi lần lượt danh sách khách hàng trong chiến dịch, giúp nhân viên không phải bấm từng số thủ công.',
-    relatedNodeId: 'autodial-campaign',
+    relatedNodeId: 'ma-autodial',
   },
   {
     term: 'Mini App',

@@ -9,8 +9,10 @@
       "entryNodeIds": [
         "call-incoming",
         "call-outgoing",
+        "call-marketing-template",
         "call-transfer",
-        "call-controls"
+        "call-controls",
+        "call-incall-miniapps"
       ],
       "nodes": [
         {
@@ -95,6 +97,46 @@
           }
         },
         {
+          "id": "call-marketing-template",
+          "label": "Gọi theo kịch bản mẫu (Call Marketing)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Cho phép nhân viên chọn Hotline, chọn kịch bản gọi tự động và điền các trường thông tin tùy chỉnh trước khi phát cuộc gọi marketing.",
+            "tech": "SelectCallTypeViewController điều hướng chọn gọi thường vs gọi với kịch bản tự động; SelectTemplateForCallViewController, SelectTemplateViewController và EditCustomFieldViewController xử lý chọn hotline, kịch bản và biến."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Controller/NewController/CallVC/SelectCallTypeViewController.swift",
+              "VBot/Controller/NewController/CallMarketing/Call/SelectTemplateForCallViewController.swift",
+              "VBot/Controller/NewController/CallMarketing/CallTemplate/SelectTemplateViewController.swift",
+              "VBot/Controller/NewController/CallMarketing/Call/EditCustomFieldViewController.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "SelectCallTypeViewController + SelectTemplateForCallViewController + SelectTemplateViewController + EditCustomFieldViewController.",
+                "codeRefs": [
+                  "VBot/Controller/NewController/CallVC/SelectCallTypeViewController.swift",
+                  "VBot/Controller/NewController/CallMarketing/Call/SelectTemplateForCallViewController.swift"
+                ]
+              },
+              "android": {
+                "summary": "Feature Hub (FeatureFragment) mở các Mini App vb-ma-auto-call-* (lọc theo quyền CHIEN_DICH / CHIEN_DICH_SMS); các màn native AutoCallActivity -> QueueCallCampaignActivity / AddScriptIVRActivity vẫn live nhưng chỉ mở từ Danh bạ / Tìm kiếm qua CallSelectedBS (tvCallAuto), còn InformationCampaignActivity mở từ NewCallActivity (typeId == 4).",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/auto_call/AutoCallActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/maketing/campaign/QueueCallCampaignActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/maketing/call_script/AddScriptIVRActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/bottomsheet/call/CallSelectedBS.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": [
+            "call-out-hotline",
+            "hub-cat-autocall"
+          ]
+        },
+        {
           "id": "call-transfer",
           "label": "Chuyển tiếp cuộc gọi (Chuyển ngay & Hỏi trước)",
           "techLabel": "Chuyển tiếp cuộc gọi (Blind & Attended)",
@@ -166,6 +208,45 @@
               }
             }
           }
+        },
+        {
+          "id": "call-incall-miniapps",
+          "label": "Mini App trong cuộc gọi (4/41 — Chưa dùng trên Nam-dev)",
+          "techLabel": "inCallOnlyMiniApps (4 Mini App — Nam-dev dùng Native UI)",
+          "kind": "module",
+          "audience": "tech",
+          "summary": {
+            "overview": "4 Mini App chuyên biệt phục vụ thao tác trong cuộc gọi (Ghi chú, Gắn thẻ, Chuyển tiếp, Thêm thành viên); trên phiên bản hiện tại các thao tác này đang chạy trực tiếp bằng giao diện Native.",
+            "tech": "Android MiniAppHelper lọc bỏ 4 inCallOnlyMiniApps (vb-ma-call-note, vb-ma-call-tag, vb-ma-call-transfer, vb-ma-call-add-member) khỏi FeatureFragment; iOS và Android trên nhánh Nam-dev đều chưa đăng ký CallActionBridgeHelper.SUPPORTED_ACTIONS và xử lý nút trong cuộc gọi hoàn toàn bằng Native UI + DTMF."
+          },
+          "techDetail": {
+            "platformDiffNote": "Android khai báo rõ tập inCallOnlyMiniApps trong MiniAppHelper.kt để ẩn khỏi Trang Tính năng; iOS không bật CallActionBridgeHelper trên Nam-dev.",
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift",
+              "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "summary": "MiniAppService không đăng ký CallActionBridgeHelper; NewCallViewController dùng UI Native & DTMF.",
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift",
+                  "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
+                ]
+              },
+              "android": {
+                "summary": "MiniAppHelper.inCallOnlyMiniApps lọc 4 app khỏi Hub; NewCallActivity & CallForwardBottomSheet dùng UI Native.",
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": [
+            "call-controls",
+            "call-transfer",
+            "miniapp-list"
+          ]
         }
       ],
       "edges": []
@@ -559,7 +640,7 @@
               ]
             }
           },
-          "relatedNodeIds": ["ct-quick-call", "autodial-campaign"]
+          "relatedNodeIds": ["ct-quick-call", "ma-autodial"]
         },
         {
           "id": "call-out-hotline",
@@ -1049,6 +1130,145 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/SipCallResultNotificationHelper.kt"
             ]
           }
+        }
+      ],
+      "edges": []
+    },
+    "call-incall-miniapps": {
+      "title": "Mini App trong cuộc gọi (4/41 — Chưa dùng trên Nam-dev)",
+      "layoutHint": "tree",
+      "direction": "LR",
+      "entryNodeIds": [
+        "ma-call-note",
+        "ma-call-tag",
+        "ma-call-transfer",
+        "ma-call-add-member"
+      ],
+      "nodes": [
+        {
+          "id": "ma-call-note",
+          "label": "Ghi chú trong cuộc gọi",
+          "techLabel": "Mini App: Ghi chú trong cuộc gọi (vb-ma-call-note)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Ghi chú nội dung trao đổi ngay trong khi đang đàm thoại.",
+            "tech": "Core SDK Mini App (vb-ma-call-note); Android lọc khỏi FeatureFragment qua inCallOnlyMiniApps; trên nhánh Nam-dev cả iOS & Android dùng UI Native trong cuộc gọi (CallActionBridgeHelper chưa bật), Tầng 2 yêu cầu CUOC_GOI [DANG_DIEN_RA]."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": [
+            "call-controls"
+          ]
+        },
+        {
+          "id": "ma-call-tag",
+          "label": "Gắn thẻ trong cuộc gọi",
+          "techLabel": "Mini App: Gắn thẻ trong cuộc gọi (vb-ma-call-tag)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Gắn nhanh thẻ phân loại (tag) cho cuộc gọi đang diễn ra.",
+            "tech": "Core SDK Mini App (vb-ma-call-tag); Android lọc qua inCallOnlyMiniApps; nhánh Nam-dev dùng UI Native trong cuộc gọi, Tầng 2 yêu cầu CUOC_GOI [DANG_DIEN_RA]."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": [
+            "call-controls",
+            "ma-tagging"
+          ]
+        },
+        {
+          "id": "ma-call-transfer",
+          "label": "Chuyển tiếp cuộc gọi (Mini App)",
+          "techLabel": "Mini App: Chuyển tiếp cuộc gọi (vb-ma-call-transfer)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Giao diện Mini App chọn thành viên / danh bạ để chuyển tiếp cuộc gọi.",
+            "tech": "Verified manifest (vb-ma-call-transfer/manifest.json: CUOC_GOI [DANG_DIEN_RA, LICH_SU], KHACH_HANG [XEM], THANH_VIEN [XEM]); trên nhánh Nam-dev bị ẩn ở Hub và chuyển tiếp thực tế dùng màn Native + DTMF (#1/*2/*9/*1)."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": [
+            "call-transfer"
+          ]
+        },
+        {
+          "id": "ma-call-add-member",
+          "label": "Thêm thành viên vào cuộc gọi",
+          "techLabel": "Mini App: Thêm thành viên vào cuộc gọi (vb-ma-call-add-member)",
+          "kind": "miniapp",
+          "audience": "tech",
+          "summary": {
+            "overview": "Mời thêm thành viên nội bộ tham gia cuộc gọi nhóm.",
+            "tech": "Core SDK Mini App (vb-ma-call-add-member); Android lọc qua inCallOnlyMiniApps; iOS chuẩn bị qua CallActionBridgeHelper (trên Nam-dev chưa bật), Tầng 2 yêu cầu CUOC_GOI [DANG_DIEN_RA] & THANH_VIEN [XEM]."
+          },
+          "techDetail": {
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            }
+          },
+          "relatedNodeIds": [
+            "call-controls"
+          ]
         }
       ],
       "edges": []

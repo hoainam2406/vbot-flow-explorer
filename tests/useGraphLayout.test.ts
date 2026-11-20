@@ -1,6 +1,8 @@
 // tests/useGraphLayout.test.ts
 import { describe, expect, it } from 'vitest';
 import { Position } from '@vue-flow/core';
+import { loadMergedDataset } from '../plugins/flowDataPlugin';
+import { buildVisibleTreeFlow } from '../src/core/graphEngine';
 import {
   buildRoutedEdgePath,
   computeDagreGraphLayout,
@@ -130,5 +132,63 @@ describe('computeDagreLayout', () => {
     ];
     const layoutNodes = computeDagreLayout(nodes, [], { direction: 'LR' });
     expect(layoutNodes[0].data.estimatedWidth).toBe(250);
+  });
+
+  it('preserves sibling definition order in pure tree layouts (LR and TB)', () => {
+    const nodes: FlowNodeData[] = [
+      { id: 'root', label: 'Root', kind: 'module', audience: 'all', summary: { overview: 'R' } },
+      { id: 'c1', label: 'Child 1', kind: 'action', audience: 'all', summary: { overview: '1' } },
+      { id: 'c2', label: 'Child 2', kind: 'action', audience: 'all', summary: { overview: '2' } },
+      { id: 'c3', label: 'Child 3', kind: 'action', audience: 'all', summary: { overview: '3' } },
+      { id: 'c4', label: 'Child 4', kind: 'action', audience: 'all', summary: { overview: '4' } },
+    ];
+    const edges: FlowEdgeData[] = [
+      { id: 'e1', source: 'root', target: 'c1' },
+      { id: 'e2', source: 'root', target: 'c2' },
+      { id: 'e3', source: 'root', target: 'c3' },
+      { id: 'e4', source: 'root', target: 'c4' },
+    ];
+
+    const lrLayout = computeDagreLayout(nodes, edges, { direction: 'LR' });
+    const lrOrder = ['c1', 'c2', 'c3', 'c4'].map((id) => lrLayout.find((n) => n.id === id)!.position.y);
+    expect(lrOrder[0]).toBeLessThan(lrOrder[1]);
+    expect(lrOrder[1]).toBeLessThan(lrOrder[2]);
+    expect(lrOrder[2]).toBeLessThan(lrOrder[3]);
+
+    const tbLayout = computeDagreLayout(nodes, edges, { direction: 'TB' });
+    const tbOrder = ['c1', 'c2', 'c3', 'c4'].map((id) => tbLayout.find((n) => n.id === id)!.position.x);
+    expect(tbOrder[0]).toBeLessThan(tbOrder[1]);
+    expect(tbOrder[1]).toBeLessThan(tbOrder[2]);
+    expect(tbOrder[2]).toBeLessThan(tbOrder[3]);
+  });
+
+  it('keeps branch and Mini App ordering consistent before and after expanding ma-autodial', () => {
+    const dataset = loadMergedDataset(process.cwd());
+    const expectedBranches = dataset.branches.map((b) => b.id);
+    const expectedCallKids = dataset.subtreesByParentId['hub-cat-call-mgmt'].nodes.map((n) => n.id);
+
+    const states = [
+      new Set<string>(),
+      new Set(['mod-miniapp-hub', 'miniapp-list', 'hub-cat-call-mgmt']),
+      new Set(['mod-miniapp-hub', 'miniapp-list', 'hub-cat-call-mgmt', 'ma-autodial']),
+    ];
+
+    for (const expanded of states) {
+      const flow = buildVisibleTreeFlow(dataset, expanded, 'tech', null, 'compare');
+      const layout = computeDagreLayout(flow.nodes, flow.edges, { direction: 'LR' });
+      const posById = new Map(layout.map((n) => [n.id, n.position]));
+
+      const actualBranches = [...expectedBranches].sort(
+        (a, b) => posById.get(a)!.y - posById.get(b)!.y,
+      );
+      expect(actualBranches).toEqual(expectedBranches);
+
+      if (expanded.has('hub-cat-call-mgmt')) {
+        const actualCallKids = [...expectedCallKids].sort(
+          (a, b) => posById.get(a)!.y - posById.get(b)!.y,
+        );
+        expect(actualCallKids).toEqual(expectedCallKids);
+      }
+    }
   });
 });

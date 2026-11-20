@@ -271,7 +271,7 @@
             "tech": "Tab 1 (iOS ContactForwardViewController / Android ContactForwardFragment) nhúng Mini App vb-ma-contact-forward; luồng trong cuộc gọi vẫn dùng SQLite ContactV2."
           },
           "techDetail": {
-            "platformDiffNote": "CHÊNH LỆCH QUYỀN '+': Nút '+' thêm mới trên Header ở iOS hiển thị cho Admin HOẶC user có quyền CRM:CREATE; Android (MainActivity.ivAddContact) CHỈ hiển thị cho Admin (UtilsKotlin.checkAdmin()). Ngoài ra, cả Tab 1 iOS (ContactV2ViewController/Form cũ đã dead) lẫn Android (ContactV2Fragment cũ) đều chuyển sang Mini App; lớp ContactV2 chỉ còn dùng khi chuyển tiếp cuộc gọi (iOS ContactV2Repository trong ChildCallSelectMemberVC, Android ContactV2DatabaseHelper + ContactV2Manager trong CallForwardBottomSheet).",
+            "platformDiffNote": "Nút '+' thêm mới trên Header ở Tab 1 đã đồng bộ trên cả iOS (ContactForwardViewController.isAdmin) và Android (MainActivity.ivAddContact → UtilsKotlin.checkAdmin()): chỉ hiển thị cho Admin. Ngoài ra, cả Tab 1 iOS (ContactV2ViewController/Form cũ đã dead) lẫn Android (ContactV2Fragment cũ) đều chuyển sang Mini App; lớp ContactV2 chỉ còn dùng khi chuyển tiếp cuộc gọi (iOS ContactV2Repository trong ChildCallSelectMemberVC, Android ContactV2DatabaseHelper + ContactV2Manager trong CallForwardBottomSheet).",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "VBot/Controller/NewController/CallVC/ChildCallSelectMemberViewController.swift"
@@ -280,7 +280,7 @@
               "android": {
                 "summary": "ContactForwardFragment.kt (Tab 1) nhúng MiniAppFragment(\"vb-ma-contact-forward\"); MainActivity.ivAddContact chỉ mở modal \"add\" khi UtilsKotlin.checkAdmin(). ContactV2Fragment.kt cũ không gắn lên MainActivity, nhưng ContactV2DatabaseHelper (vbot_contact_v2.db, PK (id, uid, project_code)) + ContactV2Manager vẫn cấp dữ liệu cho CallForwardBottomSheet khi đang gọi.",
                 "edgeCases": [
-                  "Nút '+' trên Android MainActivity.ivAddContact chỉ hiện khi UtilsKotlin.checkAdmin() == true (khác iOS: Admin || CRM:CREATE)",
+                  "Nút '+' trên Android MainActivity.ivAddContact chỉ hiện khi UtilsKotlin.checkAdmin() == true (đồng bộ Admin-only với iOS ContactForwardViewController)",
                   "ContactV2Fragment.kt là màn hình legacy đã thay bằng ContactForwardFragment, nhưng SQLite vbot_contact_v2.db vẫn dùng trong CallForwardBottomSheet"
                 ],
                 "codeRefs": [
@@ -306,12 +306,11 @@
                   "name": "createMiniAppViewController (Tab & Modal)",
                   "hostFn": "ContactForwardViewController.loadMiniApp() / openAddContactForward() → VbMa.shared.createMiniAppViewController(...)",
                   "hostFnByPlatform": {
-                    "ios": "ContactForwardViewController.loadMiniApp() / openAddContactForward() (Admin || CRM:CREATE)",
+                    "ios": "ContactForwardViewController.loadMiniApp() / openAddContactForward() (chỉ Admin: isAdmin + guard isAdmin)",
                     "android": "ContactForwardFragment (embedded) / MainActivity.ivAddContact → MiniAppHelper.openMiniApp(..., \"add\") (chỉ Admin)"
                   },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
-                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native: { startParam: 'add', onClose → refreshData() }",
-                  "parityNote": "Khác biệt phân quyền: iOS kiểm tra Admin hoặc CRM:CREATE; Android hiện chỉ kiểm tra UtilsKotlin.checkAdmin() ở MainActivity.ivAddContact."
+                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native: { startParam: 'add', onClose → refreshData() }"
                 },
                 {
                   "direction": "host_to_miniapp",
@@ -390,10 +389,10 @@
           "audience": "tech",
           "summary": {
             "overview": "Lá đại diện Mini App Danh bạ chuyển tiếp (vb-ma-contact-forward) nhúng ở Tab 1 và mở modal 'add': bấm '+4' để xem luồng mở Tab/Modal, refresh_data, kiểm tra quyền CRM và make_call.",
-            "tech": "iOS ContactForwardViewController / Android ContactForwardFragment nhúng WebView embedded và MainActivity.ivAddContact mở modal 'add' (Android chỉ cho Admin)."
+            "tech": "iOS ContactForwardViewController / Android ContactForwardFragment nhúng WebView embedded; nút '+' native mở modal 'add' chỉ hiện cho Admin trên cả 2 HĐH."
           },
           "techDetail": {
-            "platformDiffNote": "Android chỉ hiện nút '+' mở modal 'add' khi UtilsKotlin.checkAdmin() (iOS cho cả Admin hoặc CRM:CREATE); trong cuộc gọi Android dùng ContactV2DatabaseHelper (vbot_contact_v2.db) cho CallForwardBottomSheet.",
+            "platformDiffNote": "Cả iOS (ContactForwardViewController.isAdmin) và Android (MainActivity.ivAddContact → UtilsKotlin.checkAdmin()) đều chỉ hiện nút '+' mở modal 'add' cho Admin; trong cuộc gọi Android dùng ContactV2DatabaseHelper (vbot_contact_v2.db) cho CallForwardBottomSheet.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "vb-ma-contact-forward/src/routes/+page.svelte",
@@ -955,7 +954,7 @@
             }
           ],
           "techDetail": {
-            "platformDiffNote": "Android bỏ ContactV2Fragment ở MainActivity để thay bằng ContactForwardFragment (nhúng vb-ma-contact-forward), nút '+' thêm mới trên MainActivity.ivAddContact CHỈ hiện khi UtilsKotlin.checkAdmin() (iOS hiện cho Admin hoặc CRM:CREATE). Trên iOS, ContactV2ViewController cũ đã dead; cả 2 HĐH đều ẩn bàn phím gọi nổi trên Tab 1.",
+            "platformDiffNote": "Cả iOS (ContactForwardViewController) và Android (ContactForwardFragment thay ContactV2Fragment) đều nhúng vb-ma-contact-forward ở Tab 1, ẩn bàn phím gọi nổi và chỉ hiển thị nút '+' thêm mới cho Admin (iOS isAdmin / Android UtilsKotlin.checkAdmin()). Trên iOS, ContactV2ViewController cũ đã dead.",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "VBot/Controller/NewController/CallVC/ChildCallSelectMemberViewController.swift"
@@ -964,7 +963,7 @@
               "android": {
                 "summary": "Tab 1 là ContactForwardFragment (MiniAppFragment vb-ma-contact-forward); MainActivity.ivAddContact chỉ mở modal 'add' khi UtilsKotlin.checkAdmin(); khi đang gọi dùng CallForwardBottomSheet + ContactV2DatabaseHelper (vbot_contact_v2.db).",
                 "edgeCases": [
-                  "Nút '+' Android chỉ hiện cho Admin (UtilsKotlin.checkAdmin()), không xét CRM:CREATE như iOS"
+                  "Nút '+' Android chỉ hiện cho Admin (UtilsKotlin.checkAdmin()), đồng bộ với iOS (VPMRoleService.isAdminProject())"
                 ],
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt",
@@ -987,12 +986,11 @@
                   "name": "createMiniAppViewController (Tab & Modal)",
                   "hostFn": "ContactForwardViewController.loadMiniApp() / openAddContactForward() → VbMa.shared.createMiniAppViewController(...)",
                   "hostFnByPlatform": {
-                    "ios": "ContactForwardViewController.loadMiniApp() / openAddContactForward() (Admin || CRM:CREATE)",
+                    "ios": "ContactForwardViewController.loadMiniApp() / openAddContactForward() (chỉ Admin: isAdmin + guard isAdmin)",
                     "android": "ContactForwardFragment (embedded) / MainActivity.ivAddContact → MiniAppHelper.openMiniApp(..., \"add\") (chỉ Admin)"
                   },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
-                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native: { startParam: 'add', onClose → refreshData() }",
-                  "parityNote": "iOS kiểm tra Admin || CRM:CREATE cho nút '+'; Android chỉ kiểm tra UtilsKotlin.checkAdmin()."
+                  "payload": "Tab: { startParam: 'embedded', extraData: { theme_params } } | Nút '+' native: { startParam: 'add', onClose → refreshData() }"
                 },
                 {
                   "direction": "host_to_miniapp",
@@ -1813,10 +1811,10 @@
           "audience": "tech",
           "summary": {
             "overview": "Nút '+' trên header hoặc nút Sửa trong danh sách mở instance toàn màn hình mới để tránh kẹt header tab.",
-            "tech": "iOS hiện '+' cho Admin hoặc CRM:CREATE; Android MainActivity.ivAddContact CHỈ hiện cho Admin (UtilsKotlin.checkAdmin()) và gọi MiniAppHelper.openMiniApp(..., 'add')."
+            "tech": "Cả iOS (ContactForwardViewController.isAdmin + guard isAdmin) và Android (MainActivity.ivAddContact với UtilsKotlin.checkAdmin()) đều CHỈ hiện nút '+' cho Admin để mở modal 'add'."
           },
           "techDetail": {
-            "platformDiffNote": "PARITY DIFF QUAN TRỌNG: Nút '+' ở iOS hiển thị khi user là Admin HOẶC có quyền CRM:CREATE; Android (MainActivity.ivAddContact) chỉ hiện khi UtilsKotlin.checkAdmin() == true.",
+            "platformDiffNote": "Đã đồng bộ quyền nút '+' giữa iOS và Android: cả hai chỉ hiển thị nút '+' khi user là Admin (iOS VPMRoleService.isAdminProject() + guard isAdmin; Android UtilsKotlin.checkAdmin()). Điểm khác còn lại chỉ là cách mở modal: iOS present UINavigationController (.pageSheet), Android gọi MiniAppHelper.openMiniApp(..., 'add').",
             "codeRefs": [
               "VBot/Controller/NewController/Contact/ContactForwardViewController.swift",
               "vb-ma-contact-forward/src/lib/components/contact-item.svelte"
@@ -1825,7 +1823,7 @@
               "android": {
                 "summary": "MainActivity.ivAddContact chỉ hiển thị khi UtilsKotlin.checkAdmin() == true; bấm vào gọi MiniAppHelper.openMiniApp(\"vb-ma-contact-forward\", startParam = \"add\").",
                 "edgeCases": [
-                  "User thường có CRM:CREATE nhưng không phải Admin sẽ KHÔNG thấy nút '+' trên Android (khác iOS)"
+                  "User không phải Admin sẽ không thấy nút '+' trên cả Android và iOS (kể cả khi có quyền KHACH_HANG:TAO)"
                 ],
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt",
@@ -1847,14 +1845,13 @@
                   "name": "openAddContactForward / open_mini_app",
                   "hostFn": "ContactForwardViewController.openAddContactForward() → VbMa.shared.createMiniAppViewController(id: 'vb-ma-contact-forward', startParam: 'add', onClose:) [.pageSheet]",
                   "hostFnByPlatform": {
-                    "ios": "ContactForwardViewController.openAddContactForward() (Admin || CRM:CREATE) → VbMa.shared.createMiniAppViewController(..., startParam: 'add', onClose: refreshData) (.pageSheet)",
+                    "ios": "ContactForwardViewController.openAddContactForward() (Admin only: isAdmin + guard isAdmin) → VbMa.shared.createMiniAppViewController(..., startParam: 'add', onClose: refreshData) (.pageSheet)",
                     "android": "MainActivity.ivAddContact (Admin only: UtilsKotlin.checkAdmin()) → MiniAppHelper.openMiniApp(..., \"add\")"
                   },
                   "miniAppFn": "retrieveLaunchParams() đọc startParam='add' → goto('/add') | postEvent(\"open_mini_app\", ...)",
                   "payload": "{ startParam: 'add' } | { app_id, path, params: { editId } }",
                   "examplePayload": "{\n  \"app_id\": \"vb-ma-contact-forward\",\n  \"path\": \"edit/402\",\n  \"params\": { \"editId\": 402 }\n}",
-                  "note": "Khi Modal Thêm/Sửa đóng lại, Host kích hoạt refreshData() trên Tab đang nhúng.",
-                  "parityNote": "Chênh lệch quyền '+': iOS cho phép Admin hoặc CRM:CREATE; Android chỉ cho Admin (UtilsKotlin.checkAdmin())."
+                  "note": "Khi Modal Thêm/Sửa đóng lại, Host kích hoạt refreshData() trên Tab đang nhúng."
                 }
               ]
             }

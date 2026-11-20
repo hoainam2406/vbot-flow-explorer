@@ -4,6 +4,7 @@ import { Handle, Position } from '@vue-flow/core';
 import { Film, Image as ImageIcon } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY, getVisibleMedia } from '../../composables/useFlowExplorer';
 import { getNodeDisplayLabel } from '../../core/graphEngine';
+import { resolveMediaUrl } from '../../core/mediaUrl';
 import type { PositionedFlowNodeData } from '../../composables/useGraphLayout';
 import type { NodeKind } from '../../data/schema';
 
@@ -244,7 +245,7 @@ const onToggleBranch = () => {
     >
       <video
         v-if="firstMedia.type === 'video'"
-        :src="firstMedia.src"
+        :src="resolveMediaUrl(firstMedia.src)"
         autoplay
         loop
         muted
@@ -254,7 +255,7 @@ const onToggleBranch = () => {
       />
       <img
         v-else
-        :src="firstMedia.src"
+        :src="resolveMediaUrl(firstMedia.src)"
         :alt="firstMedia.caption"
         loading="lazy"
         class="h-full w-full object-cover"

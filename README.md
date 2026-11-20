@@ -22,8 +22,9 @@
 - **Đối chiếu đa nền tảng iOS ↔ Android (`iOS | Android | So sánh`) & Bảng Chênh lệch (`ParityMatrixModal`):**
   - Chuyển đổi giữa **iOS**, **Android**, hoặc **So sánh** song song ngay trên biểu đồ và trong `TechDetailPanel`.
   - Mở bảng **Chênh lệch** để lọc mọi điểm khác biệt giữa iOS (`Swift / TelephoneSDK (PJSIP) / CallKit / WKWebView`) và Android (`Kotlin / PJSIP / CallStyle FSI / WebView`) và nhảy thẳng tới node tương ứng.
-- **Cầu nối Host App ↔ Mini App (`kind: "miniapp"` & `miniAppBridge`):**
+- **Cầu nối Host App ↔ Mini App (`kind: "miniapp"`, `miniAppBridge` & `MiniAppBridgeModal`):**
   - Biểu diễn lá `Mini App` chuyên biệt cùng danh sách hàm gọi 2 chiều Host ↔ JS SDK (`hostFnByPlatform`, `miniAppFn`), schema/ví dụ Payload & Response JSON thật kèm nút **Copy** nhanh.
+  - Bổ sung modal **Cầu nối Mini App** trên `TopBar` (chỉ có ở bản Internal/Kỹ thuật): gồm **Trình chạy thử 8 luồng 4 làn SVG động** (giải thích chi tiết từng hàm gọi, gói tin JSON và cách iOS/Android xử lý/báo kết quả cho _Autodial, Token 401, make_call, Giám sát, Danh bạ, RBAC, Mini App con & Host Push_), **Tra cứu Core Protocol `@vbotma/sdk`**, **Danh mục đầy đủ 41 Mini App (36 đang dùng + 5 chưa dùng, đồng bộ từ `/api/apps` Production)**, **Tab Quản lý Quyền (RBAC)** (ma trận 2 tầng quyền hiển thị Host & quyền action bên trong Mini App kèm bộ giả lập vai trò Admin/Member) và xuất Spec Markdown (`.md`).
 - **Side Drawer chi tiết, Lịch sử `← Quay lại` & Copy 1-click:**
   - Click vào thân node để mở `DetailDrawer`; khi bấm các chip **Liên kết chéo (`relatedNodeIds`)** có nút **`← Quay lại`** ở đầu drawer để quay lại node vừa xem trước đó.
   - Trong chế độ kỹ thuật, từng dòng `codeRefs` và các khối ví dụ JSON đều có nút **Copy 1-click**.
@@ -39,14 +40,17 @@
 ## Cài đặt & Chạy dự án
 
 ### Yêu cầu
+
 - Node.js (khuyến nghị Node 22+ / 24+) và pnpm (`pnpm@10.23.0`)
 
 ### Cài đặt dependencies
+
 ```bash
 pnpm install
 ```
 
 ### Lệnh phát triển & kiểm thử
+
 ```bash
 # Chạy chế độ phát triển đầy đủ (bản Nội bộ: có Tổng quan | Kỹ thuật, iOS/Android/So sánh)
 pnpm dev
@@ -65,6 +69,7 @@ pnpm typecheck
 ```
 
 ### Build 2 bản độc lập & Kiểm tra bảo mật bản Public
+
 ```bash
 # Build bản Public (cho khách hàng / đối tác) -> dist-public/
 pnpm build:public

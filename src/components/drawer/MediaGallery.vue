@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-vue-next';
 import type { ViewMode } from '../../core/graphEngine';
+import { resolveMediaUrl } from '../../core/mediaUrl';
 import type { MediaItem } from '../../data/schema';
 import MediaLightbox from './MediaLightbox.vue';
 
@@ -88,7 +89,7 @@ const openLightbox = () => {
         <div class="relative overflow-hidden rounded-[20px] bg-white">
           <video
             v-if="currentItem.type === 'video'"
-            :src="currentItem.src"
+            :src="resolveMediaUrl(currentItem.src)"
             autoplay
             loop
             muted
@@ -99,7 +100,7 @@ const openLightbox = () => {
           />
           <img
             v-else
-            :src="currentItem.src"
+            :src="resolveMediaUrl(currentItem.src)"
             :alt="currentItem.caption"
             loading="lazy"
             class="max-h-88 w-full cursor-zoom-in object-cover"
@@ -123,7 +124,7 @@ const openLightbox = () => {
       >
         <video
           v-if="currentItem.type === 'video'"
-          :src="currentItem.src"
+          :src="resolveMediaUrl(currentItem.src)"
           autoplay
           loop
           muted
@@ -134,7 +135,7 @@ const openLightbox = () => {
         />
         <img
           v-else
-          :src="currentItem.src"
+          :src="resolveMediaUrl(currentItem.src)"
           :alt="currentItem.caption"
           loading="lazy"
           class="max-h-64 w-full cursor-zoom-in object-contain"

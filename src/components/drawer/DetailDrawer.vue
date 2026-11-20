@@ -20,7 +20,12 @@ import {
 } from '../../core/graphEngine';
 import { exportNodeOverviewMarkdown } from '../../core/publicMarkdownExport';
 import type { NodeKind } from '../../data/schema';
+import type { MiniAppBridgeLaunchContext } from '../MiniAppBridgeModal.vue';
 import MediaGallery from './MediaGallery.vue';
+
+const emit = defineEmits<{
+  openMiniappBridge: [context: MiniAppBridgeLaunchContext];
+}>();
 
 const TechDetailPanel = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./TechDetailPanel.vue'))
@@ -289,6 +294,7 @@ onBeforeUnmount(() => {
         v-if="TechDetailPanel && explorer.audienceMode.value === 'tech'"
         :node="node"
         :platform-mode="explorer.platformMode.value"
+        @open-miniapp-bridge="emit('openMiniappBridge', $event)"
       />
 
       <section v-if="relatedNodes.length > 0" class="space-y-2 border-t border-slate-100 pt-4">

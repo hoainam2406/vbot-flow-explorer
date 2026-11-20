@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, inject } from 'vue';
 import {
+  ArrowLeftRight,
   ChevronRight,
   GitBranch,
   HelpCircle,
@@ -17,6 +18,7 @@ const emit = defineEmits<{
   openSearch: [];
   openParity: [];
   openGuide: [];
+  openMiniappBridge: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -76,9 +78,9 @@ const onBreadcrumbClick = (nodeId: string) => {
               {{ techBranchLabel }}
             </span>
           </div>
-          <p class="hidden text-[11px] text-slate-500 xl:block">
+          <!-- <p class="hidden text-[11px] text-slate-500 xl:block">
             {{ explorer.dataset.app.tagline }}
-          </p>
+          </p> -->
         </div>
       </button>
 
@@ -171,6 +173,17 @@ const onBreadcrumbClick = (nodeId: string) => {
       </button>
 
       <ExportMenu />
+
+      <button
+        v-if="enableTechMode && explorer.audienceMode.value === 'tech'"
+        type="button"
+        class="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100"
+        title="Trình chạy thử luồng giao tiếp, tra cứu hàm @vbotma/sdk và danh mục 41 Mini App (36 đang dùng + 5 chưa dùng)"
+        @click="emit('openMiniappBridge')"
+      >
+        <ArrowLeftRight class="h-3.5 w-3.5" />
+        <span class="hidden sm:inline">Cầu nối Mini App</span>
+      </button>
 
       <component
         :is="TechPlatformSwitcher"

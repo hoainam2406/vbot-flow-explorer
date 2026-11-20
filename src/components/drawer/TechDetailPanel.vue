@@ -9,7 +9,10 @@ import {
   ChevronRight,
   Columns2,
   Copy,
+  PlayCircle,
 } from 'lucide-vue-next';
+import type { MiniAppBridgeLaunchContext } from '../MiniAppBridgeModal.vue';
+import { MINI_APP_CATALOG } from '../../data/miniAppBridgeCatalog';
 import { copyTextToClipboard } from '../../core/downloadHelper';
 import type {
   BridgeMessage,
@@ -23,6 +26,56 @@ const props = defineProps<{
   node: FlowNodeData;
   platformMode: PlatformViewMode;
 }>();
+
+const emit = defineEmits<{
+  openMiniappBridge: [context: MiniAppBridgeLaunchContext];
+}>();
+
+const AUTODIAL_NODE_SUBFLOW_MAP: Record<string, string> = {
+  'maad-init': 'autodial-init-session',
+  'maad-make-call': 'autodial-make-call',
+  'maad-start': 'autodial-start',
+  'maad-control': 'autodial-pause-resume',
+  'maad-stop-state': 'autodial-stop-state',
+  'maad-finish': 'autodial-finish-error',
+  'maad-error': 'autodial-finish-error',
+};
+
+const resolveContextForMiniApp = (
+  miniAppId: string,
+  nodeId?: string,
+): MiniAppBridgeLaunchContext => {
+  if (miniAppId === 'vb-ma-autodial') {
+    const subFlowId = (nodeId && AUTODIAL_NODE_SUBFLOW_MAP[nodeId]) ?? 'autodial-start';
+    return { tab: 'simulator', flowId: 'flow-autodial', subFlowId, miniAppId };
+  }
+  if (miniAppId === 'vb-ma-monitoring') {
+    return { tab: 'simulator', flowId: 'flow-monitoring', miniAppId };
+  }
+  if (miniAppId === 'vb-ma-user-contact') {
+    return { tab: 'simulator', flowId: 'flow-user-contact', miniAppId };
+  }
+  if (miniAppId === 'vb-ma-2fa-setting' || miniAppId === 'vb-ma-user-history-call') {
+    return { tab: 'simulator', flowId: 'flow-2fa-history', miniAppId };
+  }
+  if (miniAppId.includes('Global Hub')) {
+    return { tab: 'catalog', miniAppId };
+  }
+  if (miniAppId.includes('Global')) {
+    return { tab: 'simulator', flowId: 'flow-token-401', miniAppId };
+  }
+  if (miniAppId === 'vb-ma-contact-forward' || miniAppId.includes('vb-ma-crm')) {
+    return { tab: 'simulator', flowId: 'flow-make-call', miniAppId };
+  }
+  const catalogEntry = MINI_APP_CATALOG.find((a) => a.id === miniAppId);
+  if (catalogEntry?.simulatorFlowId) {
+    return { tab: 'simulator', flowId: catalogEntry.simulatorFlowId, miniAppId };
+  }
+  if (catalogEntry) {
+    return { tab: 'catalog', miniAppId };
+  }
+  return { tab: 'simulator', flowId: 'flow-token-401', miniAppId };
+};
 
 const expandedMap = ref<Record<number, boolean>>({});
 const copiedKey = ref<string | null>(null);
@@ -415,9 +468,21 @@ const techSections = computed<RenderedTechSection[]>(() => {
         <ArrowLeftRight class="h-3.5 w-3.5 text-cyan-700" />
         Giao tiếp Host App ↔ Mini App
       </h3>
-      <span class="rounded-md border border-cyan-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-cyan-800">
-        {{ miniAppBridgeView.embedLabel }}
-      </span>
+      <div class="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700 transition hover:bg-indigo-100"
+          @click="
+            emit('openMiniappBridge', resolveContextForMiniApp(miniAppBridgeView.miniAppId, props.node.id))
+          "
+        >
+          <PlayCircle class="h-3 w-3" />
+          Chạy thử & Spec ↗
+        </button>
+        <span class="rounded-md border border-cyan-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-cyan-800">
+          {{ miniAppBridgeView.embedLabel }}
+        </span>
+      </div>
     </div>
 
     <div class="space-y-1.5 text-xs">

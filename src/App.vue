@@ -5,6 +5,7 @@ import FlowCanvas from './components/FlowCanvas.vue';
 import GuideGlossaryModal from './components/GuideGlossaryModal.vue';
 import ScenarioFlowDialog from './components/ScenarioFlowDialog.vue';
 import SearchModal from './components/SearchModal.vue';
+import type { MiniAppBridgeLaunchContext } from './components/MiniAppBridgeModal.vue';
 import TopBar from './components/TopBar.vue';
 import DetailDrawer from './components/drawer/DetailDrawer.vue';
 import { createFlowExplorerState, FLOW_EXPLORER_KEY } from './composables/useFlowExplorer';
@@ -18,6 +19,9 @@ import { isVisibleForMode, isVisibleForPlatform } from './core/graphEngine';
 const ParityMatrixModal = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./components/ParityMatrixModal.vue'))
   : null;
+const MiniAppBridgeModal = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./components/MiniAppBridgeModal.vue'))
+  : null;
 
 const explorer = createFlowExplorerState(dataset, __ENABLE_TECH_MODE__);
 provide(FLOW_EXPLORER_KEY, explorer);
@@ -25,7 +29,15 @@ provide(FLOW_EXPLORER_KEY, explorer);
 const searchOpen = ref(false);
 const parityOpen = ref(false);
 const guideOpen = ref(false);
+const miniAppModalOpen = ref(false);
+const miniAppLaunchContext = ref<MiniAppBridgeLaunchContext | null>(null);
 const hydrated = ref(false);
+
+const openMiniAppBridge = (context?: MiniAppBridgeLaunchContext) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  miniAppLaunchContext.value = context ?? null;
+  miniAppModalOpen.value = true;
+};
 
 const applyInitialState = () => {
   const initial = resolveInitialExplorerState({
@@ -109,6 +121,7 @@ const onGlobalKeyDown = (event: KeyboardEvent) => {
     !searchOpen.value &&
     !parityOpen.value &&
     !guideOpen.value &&
+    !miniAppModalOpen.value &&
     !explorer.scenarioDialogOpen.value &&
     explorer.selectedNodeId.value
   ) {
@@ -152,16 +165,23 @@ onBeforeUnmount(() => {
       @open-search="searchOpen = true"
       @open-parity="parityOpen = true"
       @open-guide="guideOpen = true"
+      @open-miniapp-bridge="openMiniAppBridge()"
     />
 
     <div class="relative flex min-h-0 flex-1 overflow-hidden">
       <FlowCanvas class="min-w-0 flex-1" @open-guide="guideOpen = true" />
-      <DetailDrawer />
+      <DetailDrawer @open-miniapp-bridge="openMiniAppBridge" />
     </div>
 
     <SearchModal v-model:open="searchOpen" />
     <GuideGlossaryModal v-model:open="guideOpen" />
     <ScenarioFlowDialog />
     <component :is="ParityMatrixModal" v-if="ParityMatrixModal" v-model:open="parityOpen" />
+    <component
+      :is="MiniAppBridgeModal"
+      v-if="MiniAppBridgeModal"
+      v-model:open="miniAppModalOpen"
+      :initial-context="miniAppLaunchContext"
+    />
   </div>
 </template>
