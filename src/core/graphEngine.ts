@@ -249,7 +249,7 @@ export function sanitizeForPublic(dataset: MergedFlowDataset): MergedFlowDataset
     };
   }
 
-  const { techBranch: _techBranch, ...publicApp } = dataset.app;
+  const { techBranch: _techBranch, repoConfig: _repoConfig, ...publicApp } = dataset.app;
 
   return {
     app: publicApp,

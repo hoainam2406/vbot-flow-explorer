@@ -4,6 +4,10 @@ import type {
   FlowNodeData,
   MergedFlowDataset,
   NodeKind,
+  ParityAssessment,
+  ParityFixTarget,
+  ParityNeedsFix,
+  ParityVerdict,
   Platform,
 } from '../data/schema';
 
@@ -16,6 +20,11 @@ export type ParityCategory =
 export interface BridgeParityNote {
   messageName: string;
   parityNote: string;
+}
+
+export interface ResolvedParityAssessment extends Omit<ParityAssessment, 'fixTarget'> {
+  fixTarget: ParityFixTarget;
+  isInferred: boolean;
 }
 
 export interface ParityItem {
@@ -32,6 +41,7 @@ export interface ParityItem {
   bridgeParityNotes: BridgeParityNote[];
   iosSummary?: string;
   androidSummary?: string;
+  assessment: ResolvedParityAssessment;
 }
 
 export interface ParityBranchCount {
@@ -46,9 +56,32 @@ export interface ParitySummary {
   androidOnly: number;
   behaviorDiff: number;
   bridgeParity: number;
+  byVerdict: Record<ParityVerdict, number>;
+  byFixTarget: Record<ParityFixTarget, number>;
   byBranch: ParityBranchCount[];
   items: ParityItem[];
 }
+
+export const PARITY_VERDICT_LABELS: Record<ParityVerdict, string> = {
+  action_needed: 'Nên sửa (Lỗi / Parity Gap)',
+  logic_diff: 'Khác logic / Kết quả',
+  os_impl_only: 'Chỉ khác OS / Ngôn ngữ',
+  synced: 'Đã đồng bộ (Chỉ ghi chú)',
+};
+
+export const PARITY_NEEDS_FIX_LABELS: Record<ParityNeedsFix, string> = {
+  yes: 'Nên sửa',
+  consider: 'Cân nhắc đồng bộ',
+  no: 'Không cần sửa',
+};
+
+export const PARITY_FIX_TARGET_LABELS: Record<ParityFixTarget, string> = {
+  ios: 'Cần sửa iOS',
+  android: 'Cần sửa Android',
+  both: 'Cần sửa cả 2 bên',
+  tbd: 'Chờ chốt bên chuẩn',
+  none: 'Không cần sửa',
+};
 
 const CATEGORY_LABELS: Record<ParityCategory, string> = {
   ios_only: 'Chỉ có trên iOS',
@@ -56,6 +89,143 @@ const CATEGORY_LABELS: Record<ParityCategory, string> = {
   bridge_parity: 'Khác Bridge',
   behavior_diff: 'Khác hành vi',
 };
+
+function inferFixTarget(
+  verdict: ParityVerdict,
+  needsFix: ParityNeedsFix,
+  combinedText: string,
+  categories: ParityCategory[],
+): ParityFixTarget {
+  if (needsFix === 'no' || verdict === 'os_impl_only' || verdict === 'synced') {
+    return 'none';
+  }
+  const hasIosDefect =
+    /(iOS\s+(?:chỉ|chưa|không|thiếu|comment|dropFirst|ép|bỏ sót|#warning))/i.test(combinedText);
+  const hasAndroidDefect =
+    /(Android\s+(?:chưa|không|thiếu|bỏ sót)|thay vì \|\||Parity Gap|vb-ma-android-sdk|VerifyFragment)/i.test(
+      combinedText,
+    );
+  if (hasIosDefect && hasAndroidDefect) {
+    return 'both';
+  }
+  if (hasAndroidDefect) {
+    return 'android';
+  }
+  if (hasIosDefect) {
+    return 'ios';
+  }
+  if (categories.includes('ios_only')) {
+    return 'android';
+  }
+  if (categories.includes('android_only')) {
+    return 'ios';
+  }
+  return 'tbd';
+}
+
+export function resolveParityAssessment(
+  node: FlowNodeData,
+  categories: ParityCategory[],
+): ResolvedParityAssessment {
+  const diffNote = node.techDetail?.platformDiffNote ?? '';
+  const bridgeNotes = (node.techDetail?.miniAppBridge?.messages ?? [])
+    .map((m) => m.parityNote)
+    .filter((n): n is string => Boolean(n))
+    .join(' ');
+  const combined = `${diffNote} ${bridgeNotes}`.trim();
+
+  const explicit = node.techDetail?.parityAssessment;
+  if (explicit) {
+    return {
+      ...explicit,
+      fixTarget:
+        explicit.fixTarget ??
+        inferFixTarget(
+          explicit.verdict,
+          explicit.needsFix,
+          `${combined} ${explicit.explanation} ${explicit.recommendation}`,
+          categories,
+        ),
+      isInferred: false,
+    };
+  }
+
+  if (combined.includes('Parity Gap') || combined.includes('thay vì ||')) {
+    return {
+      verdict: 'action_needed',
+      sameLogic: false,
+      sameOutcome: false,
+      needsFix: 'yes',
+      fixTarget: inferFixTarget('action_needed', 'yes', combined, categories),
+      explanation:
+        'Phát hiện thiếu sót hoặc lỗi logic rõ rệt (Parity Gap) khiến kết quả/contract giữa 2 nền tảng bị lệch.',
+      recommendation: 'Nên tạo task sửa và đồng bộ giữa iOS và Android.',
+      isInferred: true,
+    };
+  }
+
+  if (categories.includes('ios_only') || categories.includes('android_only')) {
+    const onlyLabel = categories.includes('ios_only') ? 'iOS' : 'Android';
+    return {
+      verdict: 'logic_diff',
+      sameLogic: false,
+      sameOutcome: false,
+      needsFix: 'consider',
+      fixTarget: inferFixTarget('logic_diff', 'consider', combined, categories),
+      explanation: `Bước hoặc màn hình này hiện mới tồn tại trên ${onlyLabel}, nền tảng còn lại chưa có luồng tương ứng.`,
+      recommendation: `Cân nhắc với PO xem có cần bổ sung trải nghiệm tương đương ở nền tảng còn lại hay giữ đặc thù ${onlyLabel}.`,
+      isInferred: true,
+    };
+  }
+
+  if (
+    /(Đã đồng bộ|Cả 2 HĐH đều|Cả hai HĐH đều)/i.test(combined) &&
+    !/\b(NHƯNG|CHƯA|KHÔNG)\b|khác biệt/i.test(combined)
+  ) {
+    return {
+      verdict: 'synced',
+      sameLogic: true,
+      sameOutcome: true,
+      needsFix: 'no',
+      fixTarget: 'none',
+      explanation:
+        'Hai nền tảng đã áp dụng cùng logic nghiệp vụ và cho ra kết quả tương đồng; ghi chú chủ yếu để xác nhận đã đối soát.',
+      recommendation: 'Không cần sửa — 2 nền tảng đã đồng bộ.',
+      isInferred: true,
+    };
+  }
+
+  if (
+    /(PushKit|CallKit|FCM|WKWebView|JavascriptInterface|SQLiteOpenHelper|Keychain|Realm)/i.test(
+      combined,
+    ) &&
+    !/(khác biệt hành vi|KHÔNG truyền|chưa có)/i.test(combined)
+  ) {
+    return {
+      verdict: 'os_impl_only',
+      sameLogic: true,
+      sameOutcome: true,
+      needsFix: 'no',
+      fixTarget: 'none',
+      explanation:
+        'Khác biệt xuất phát từ framework/API đặc thù của iOS (Swift) và Android (Kotlin/Java), còn logic nghiệp vụ và kết quả đầu ra tương đương.',
+      recommendation: 'Không cần sửa — chấp nhận khác biệt theo đặc thù hệ điều hành.',
+      isInferred: true,
+    };
+  }
+
+  return {
+    verdict: 'logic_diff',
+    sameLogic: false,
+    sameOutcome: false,
+    needsFix: 'consider',
+    fixTarget: inferFixTarget('logic_diff', 'consider', combined, categories),
+    explanation:
+      'Có khác biệt về luồng xử lý, API gọi hoặc hành vi hiển thị giữa 2 nền tảng nên kết quả có thể không đồng nhất hoàn toàn.',
+    recommendation: 'Cân nhắc đối chiếu với PO/Tech để thống nhất hoặc ghi nhận chấp nhận khác biệt.',
+    isInferred: true,
+  };
+}
 
 function pickPrimaryCategory(categories: ParityCategory[]): ParityCategory {
   if (categories.includes('ios_only')) return 'ios_only';
@@ -125,6 +295,7 @@ function buildParityItem(
     bridgeParityNotes,
     ...(iosSummary ? { iosSummary } : {}),
     ...(androidSummary ? { androidSummary } : {}),
+    assessment: resolveParityAssessment(node, categories),
   };
 }
 
@@ -203,12 +374,27 @@ export function extractParityReport(dataset: MergedFlowDataset): ParitySummary {
   let androidOnly = 0;
   let behaviorDiff = 0;
   let bridgeParity = 0;
+  const byVerdict: Record<ParityVerdict, number> = {
+    action_needed: 0,
+    logic_diff: 0,
+    os_impl_only: 0,
+    synced: 0,
+  };
+  const byFixTarget: Record<ParityFixTarget, number> = {
+    ios: 0,
+    android: 0,
+    both: 0,
+    tbd: 0,
+    none: 0,
+  };
 
   for (const item of items) {
     if (item.categories.includes('ios_only')) iosOnly += 1;
     if (item.categories.includes('android_only')) androidOnly += 1;
     if (item.categories.includes('behavior_diff')) behaviorDiff += 1;
     if (item.categories.includes('bridge_parity')) bridgeParity += 1;
+    byVerdict[item.assessment.verdict] += 1;
+    byFixTarget[item.assessment.fixTarget] += 1;
   }
 
   return {
@@ -217,6 +403,8 @@ export function extractParityReport(dataset: MergedFlowDataset): ParitySummary {
     androidOnly,
     behaviorDiff,
     bridgeParity,
+    byVerdict,
+    byFixTarget,
     byBranch,
     items,
   };
@@ -232,13 +420,21 @@ export function exportParityReportToMarkdown(
     '',
     '## Tổng quan chỉ số',
     '',
-    '| Nhóm chênh lệch | Số lượng |',
+    '| Nhóm chênh lệch / Kết luận | Số lượng |',
     '| --- | ---: |',
     `| Tổng số điểm ghi nhận | ${report.total} |`,
     `| Chỉ có trên iOS | ${report.iosOnly} |`,
     `| Chỉ có trên Android | ${report.androidOnly} |`,
     `| Khác hành vi / Kiến trúc | ${report.behaviorDiff} |`,
     `| Khác Bridge / Mini App | ${report.bridgeParity} |`,
+    `| Nên sửa (Lỗi / Parity Gap) | ${report.byVerdict.action_needed} |`,
+    `| Khác logic / Kết quả (Cân nhắc đồng bộ) | ${report.byVerdict.logic_diff} |`,
+    `| Chỉ khác OS / Ngôn ngữ (Cùng kết quả — Không cần sửa) | ${report.byVerdict.os_impl_only} |`,
+    `| Đã đồng bộ (Chỉ ghi chú — Không cần sửa) | ${report.byVerdict.synced} |`,
+    `| Cần sửa iOS | ${report.byFixTarget.ios} |`,
+    `| Cần sửa Android | ${report.byFixTarget.android} |`,
+    `| Cần sửa cả 2 bên | ${report.byFixTarget.both} |`,
+    `| Chờ chốt bên chuẩn | ${report.byFixTarget.tbd} |`,
     '',
   ];
 
@@ -254,8 +450,14 @@ export function exportParityReportToMarkdown(
     const branchItems = itemsByBranch.get(branch.branchId) ?? [];
     for (const item of branchItems) {
       const catBadges = item.categories.map((c) => `\`${CATEGORY_LABELS[c]}\``).join(' ');
+      const { assessment } = item;
       lines.push(`### ${item.nodeLabel} (\`${item.nodeId}\`)`);
       lines.push(`- **Phân loại:** ${catBadges}`);
+      lines.push(
+        `- **Kết luận:** ${PARITY_VERDICT_LABELS[assessment.verdict]} (Logic: ${assessment.sameLogic ? 'Giống nhau' : 'Khác nhau'} · Kết quả: ${assessment.sameOutcome ? 'Giống nhau' : 'Khác nhau'} · Hành động: ${PARITY_NEEDS_FIX_LABELS[assessment.needsFix]} · Bên cần sửa: ${PARITY_FIX_TARGET_LABELS[assessment.fixTarget]})`,
+      );
+      lines.push(`- **Giải thích:** ${assessment.explanation}`);
+      lines.push(`- **Khuyến nghị:** ${assessment.recommendation}`);
       lines.push(`- **Đường dẫn:** ${item.breadcrumb.join(' → ')}`);
       if (item.platformDiffNote) {
         lines.push(`- **Khác biệt:** ${item.platformDiffNote}`);

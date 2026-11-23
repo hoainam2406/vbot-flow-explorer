@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, markRaw, nextTick, watch } from 'vue';
+import { computed, defineAsyncComponent, inject, markRaw, nextTick, watch } from 'vue';
 import {
   VueFlow,
   getTransformForBounds,
@@ -44,6 +44,9 @@ const { dimensions, fitView, setViewport, viewport, zoomIn, zoomOut, zoomTo } = 
 const isTechView = computed(
   () => __ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech',
 );
+const CanvasFilterBar = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./CanvasFilterBar.vue'))
+  : null;
 const zoomPercent = computed(() => Math.round((viewport.value?.zoom ?? 1) * 100));
 
 const nodeTypes: NodeTypesObject = {
@@ -247,6 +250,7 @@ const onPaneReady = () => {
       class="pointer-events-none absolute top-3 left-3 z-10 flex max-w-2xl flex-col items-start gap-2"
     >
       <TelemetryHud @open-parity="emit('openParity')" />
+      <component :is="CanvasFilterBar" v-if="CanvasFilterBar && isTechView" />
       <CanvasGuideOverlay @open-guide="emit('openGuide')" />
     </div>
 

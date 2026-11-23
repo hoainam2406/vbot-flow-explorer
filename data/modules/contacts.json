@@ -206,6 +206,15 @@
                   "note": "Gọi nhanh từ dòng liên hệ giữ nguyên tên hiển thị."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Khác biệt đến từ cơ chế chống vòng lặp userInfo vs computeContactsSignature (chặn LiveData sticky replay) và việc bỏ FLAG_ACTIVITY_NEW_TASK khi mở Cài đặt Android để nhấn Back quay về VBot.",
+              "recommendation": "Không cần sửa — cùng mang lại trải nghiệm danh bạ & quay lại từ Settings mượt mà trên cả 2 HĐH.",
+              "fixTarget": "none"
             }
           }
         },
@@ -234,6 +243,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "iOS đọc danh bạ máy qua framework CNContactStore, Android đọc qua ContactsContract & ActivityResultContracts.RequestPermission — API hệ thống bắt buộc khác nhau giữa Apple và Google.",
+              "recommendation": "Không cần sửa — logic xin quyền và kết quả đồng bộ danh bạ giống nhau.",
+              "fixTarget": "none"
             }
           }
         },
@@ -257,6 +275,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Kiến trúc Android cần bắt click MainActivity.ivAddContact chuyển xuống UserContactsFragment để phát event toggle_actions_menu tới Mini App, tương ứng button header của iOS.",
+              "recommendation": "Không cần sửa — hành vi CRUD hàng loạt (tối đa 50) giống nhau trên cả 2 OS.",
+              "fixTarget": "none"
             }
           }
         },
@@ -348,6 +375,15 @@
                   "response": "{ [action]: Bool } / { success }"
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Nút \"+\" thêm mới ở Tab 1 đã được đồng bộ quyền Admin giữa iOS và Android, cùng chuyển hẳn Tab 1 sang Mini App vb-ma-contact-forward và chỉ giữ lớp ContactV2 cũ cho lúc chuyển tiếp cuộc gọi.",
+              "recommendation": "Không cần sửa — 2 nền tảng đã đồng bộ.",
+              "fixTarget": "none"
             }
           }
         },
@@ -378,9 +414,21 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Khác biệt về lớp cầu nối (@JavascriptInterface vs WKWebView), thư viện SQLiteOpenHelper vs C API, và cơ chế Settings/loop guard đặc thù Android LiveData.",
+              "recommendation": "Không cần sửa — logic Mini App Danh bạ cá nhân và trải nghiệm người dùng giống nhau.",
+              "fixTarget": "none"
             }
           },
-          "relatedNodeIds": ["contact-personal", "miniapp-list"]
+          "relatedNodeIds": [
+            "contact-personal",
+            "miniapp-list"
+          ]
         },
         {
           "id": "ma-contact-forward",
@@ -406,9 +454,21 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/MainActivity.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS và Android đều chỉ hiện nút \"+\" mở modal \"add\" cho Admin và giữ dữ liệu ContactV2 cục bộ phục vụ sheet chuyển tiếp cuộc gọi.",
+              "recommendation": "Không cần sửa — phân quyền và kết quả đã đồng bộ.",
+              "fixTarget": "none"
             }
           },
-          "relatedNodeIds": ["contact-forward-v2", "miniapp-list"]
+          "relatedNodeIds": [
+            "contact-forward-v2",
+            "miniapp-list"
+          ]
         }
       ],
       "edges": []
@@ -417,7 +477,9 @@
       "title": "Kiến trúc Tab Danh bạ cá nhân",
       "layoutHint": "flow",
       "direction": "LR",
-      "entryNodeIds": ["ct-open-tab"],
+      "entryNodeIds": [
+        "ct-open-tab"
+      ],
       "nodes": [
         {
           "id": "ct-open-tab",
@@ -440,7 +502,9 @@
           ],
           "techDetail": {
             "platformDiffNote": "Android dùng MainActivity (AHBottomNavigation giữ sống WebView bằng add/show/hide) nhúng MiniAppFragment(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData) bên trong UserContactsFragment.",
-            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"],
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"
+            ],
             "byPlatform": {
               "android": {
                 "summary": "UserContactsFragment.kt nhúng MiniAppFragment(\"vb-ma-user-contact\", startParam=\"embedded\", extraData=themeExtraData); MainActivity.ivAddContact gọi onPlusButtonClicked() để emit toggle_actions_menu.",
@@ -505,6 +569,15 @@
                   "note": "Bấm nút '+' trên thanh điều hướng native để bật/tắt menu trong Mini App."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Android dùng MainActivity (AHBottomNavigation add/show/hide Fragment) để giữ sống WebView khi chuyển tab giống cơ chế tab giữ VC + WKWebView của iOS.",
+              "recommendation": "Không cần sửa — cách giữ state WebView tương đương trên UIKit vs Android Fragment.",
+              "fixTarget": "none"
             }
           }
         },
@@ -616,6 +689,15 @@
                   "parityNote": "iOS dùng userInfo['source'] = 'miniapp_bridge'; Android dùng lastDeliveredSignature = computeContactsSignature(uid, items) & bỏ qua null ban đầu để chặn LiveData sticky replay."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "iOS dùng WKWebView ScriptMessageHandler (\"vbma\") + NotificationCenter; Android dùng @JavascriptInterface (\"VbMABridge\") + LiveData signature + ActivityResultContracts — bắt buộc khác API WebView từng OS.",
+              "recommendation": "Không cần sửa — đây là cầu nối kỹ thuật gốc khác nhau giữa WKWebView và Android WebView.",
+              "fixTarget": "none"
             }
           }
         },
@@ -644,9 +726,21 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/db/UserContactDatabaseHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "iOS gọi trực tiếp C API sqlite3_open còn Android dùng Android SDK SQLiteOpenHelper, nhưng cả 2 đều dùng chung cấu trúc PRIMARY KEY (local_key, uid) để tách dữ liệu theo từng tài khoản.",
+              "recommendation": "Không cần sửa — chỉ khác API thư viện SQLite giữa Swift và Kotlin, schema & kết quả giống hệt nhau.",
+              "fixTarget": "none"
             }
           },
-          "relatedNodeIds": ["call-in-raw-log", "call-out-preserve-name"]
+          "relatedNodeIds": [
+            "call-in-raw-log",
+            "call-out-preserve-name"
+          ]
         },
         {
           "id": "ct-two-badges",
@@ -660,16 +754,30 @@
         }
       ],
       "edges": [
-        { "id": "e-cp-1", "source": "ct-open-tab", "target": "ct-host-bridge" },
-        { "id": "e-cp-2", "source": "ct-host-bridge", "target": "ct-sqlite-uid" },
-        { "id": "e-cp-3", "source": "ct-sqlite-uid", "target": "ct-two-badges" }
+        {
+          "id": "e-cp-1",
+          "source": "ct-open-tab",
+          "target": "ct-host-bridge"
+        },
+        {
+          "id": "e-cp-2",
+          "source": "ct-host-bridge",
+          "target": "ct-sqlite-uid"
+        },
+        {
+          "id": "e-cp-3",
+          "source": "ct-sqlite-uid",
+          "target": "ct-two-badges"
+        }
       ]
     },
     "contact-sync-perm": {
       "title": "Luồng Đồng bộ Server & Quyền danh bạ máy",
       "layoutHint": "flow",
       "direction": "LR",
-      "entryNodeIds": ["ct-perm-check"],
+      "entryNodeIds": [
+        "ct-perm-check"
+      ],
       "nodes": [
         {
           "id": "ct-perm-check",
@@ -684,7 +792,9 @@
             "byPlatform": {
               "android": {
                 "summary": "Kiểm tra Manifest.permission.READ_CONTACTS kết hợp cờ has_prompted_read_contacts và số bản ghi trong vbot_user_contact.db.",
-                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"]
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"
+                ]
               }
             }
           }
@@ -700,7 +810,9 @@
           },
           "techDetail": {
             "platformDiffNote": "Android kiểm soát prompt lần đầu qua has_prompted_read_contacts và khi mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS cố ý không gắn FLAG_ACTIVITY_NEW_TASK.",
-            "codeRefs": ["VBot/Service/Database/UserContactDatabaseHelper.swift"],
+            "codeRefs": [
+              "VBot/Service/Database/UserContactDatabaseHelper.swift"
+            ],
             "byPlatform": {
               "android": {
                 "summary": "Giữ nguyên dữ liệu trong UserContactDatabaseHelper (vbot_user_contact.db); chỉ mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS (không gắn FLAG_ACTIVITY_NEW_TASK) khi danh bạ trống và user bấm nút mở Cài đặt.",
@@ -709,6 +821,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Android quản lý cờ has_prompted_read_contacts để phân biệt lần đầu với lần từ chối vĩnh viễn và mở Settings không tạo Task riêng nhằm khớp luồng quay lại ứng dụng giống iOS.",
+              "recommendation": "Không cần sửa — đặc thù quản lý permission flow của Android so với iOS.",
+              "fixTarget": "none"
             }
           }
         },
@@ -723,7 +844,9 @@
           },
           "techDetail": {
             "platformDiffNote": "Android dùng ActivityResultContracts.RequestPermission gộp các yêu cầu trùng lặp và đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI.",
-            "codeRefs": ["VBot/Service/UserContactService.swift"],
+            "codeRefs": [
+              "VBot/Service/UserContactService.swift"
+            ],
             "byPlatform": {
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper xin quyền READ_CONTACTS (coalesced ActivityResultContracts.RequestPermission) rồi UserContactManager đọc ContactsContract.CommonDataKinds.Phone.CONTENT_URI.",
@@ -732,6 +855,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/domain/service/UserContactManager.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Android gộp các yêu cầu xin quyền READ_CONTACTS đồng thời bằng ActivityResultContracts và đọc qua ContactsContract URI, tương ứng CNContactStore trên iOS.",
+              "recommendation": "Không cần sửa — là cài đặt đọc danh bạ thiết bị chuẩn theo từng HĐH.",
+              "fixTarget": "none"
             }
           }
         },
@@ -746,7 +878,10 @@
             "tech": "Gọi API đồng bộ đẩy danh sách chưa synced và tải GET /api/user-contact/get-all (iOS UserContactService; Android UserContactManager + UserContactBatchHelper trong UserContactModels.kt)."
           },
           "techDetail": {
-            "apisOrEvents": ["GET /api/user-contact/get-all", "APIService+UserContact sync"],
+            "apisOrEvents": [
+              "GET /api/user-contact/get-all",
+              "APIService+UserContact sync"
+            ],
             "codeRefs": [
               "VBot/Service/API/Endpoints/APIService+UserContact.swift",
               "VBot/Service/UserContactService.swift"
@@ -782,11 +917,36 @@
         }
       ],
       "edges": [
-        { "id": "e-cs-1", "source": "ct-perm-check", "target": "ct-perm-revoked", "label": "Đã có dữ liệu nhưng tắt quyền" },
-        { "id": "e-cs-2", "source": "ct-perm-check", "target": "ct-device-import", "label": "Có quyền & quét thêm từ máy" },
-        { "id": "e-cs-3", "source": "ct-perm-revoked", "target": "ct-server-sync", "label": "Bấm Đồng bộ lên app" },
-        { "id": "e-cs-4", "source": "ct-device-import", "target": "ct-server-sync", "label": "Bấm Đồng bộ lên app" },
-        { "id": "e-cs-5", "source": "ct-server-sync", "target": "ct-failed-phones", "label": "Có số điện thoại lỗi" }
+        {
+          "id": "e-cs-1",
+          "source": "ct-perm-check",
+          "target": "ct-perm-revoked",
+          "label": "Đã có dữ liệu nhưng tắt quyền"
+        },
+        {
+          "id": "e-cs-2",
+          "source": "ct-perm-check",
+          "target": "ct-device-import",
+          "label": "Có quyền & quét thêm từ máy"
+        },
+        {
+          "id": "e-cs-3",
+          "source": "ct-perm-revoked",
+          "target": "ct-server-sync",
+          "label": "Bấm Đồng bộ lên app"
+        },
+        {
+          "id": "e-cs-4",
+          "source": "ct-device-import",
+          "target": "ct-server-sync",
+          "label": "Bấm Đồng bộ lên app"
+        },
+        {
+          "id": "e-cs-5",
+          "source": "ct-server-sync",
+          "target": "ct-failed-phones",
+          "label": "Có số điện thoại lỗi"
+        }
       ],
       "scenarios": [
         {
@@ -794,16 +954,30 @@
           "name": "Quét danh bạ máy và đồng bộ lên Server VBot",
           "description": "Cập nhật số mới từ thiết bị rồi đẩy lên tài khoản VBot để dùng trên nhiều máy.",
           "audience": "all",
-          "nodeIds": ["ct-perm-check", "ct-device-import", "ct-server-sync"],
-          "edgeIds": ["e-cs-2", "e-cs-4"]
+          "nodeIds": [
+            "ct-perm-check",
+            "ct-device-import",
+            "ct-server-sync"
+          ],
+          "edgeIds": [
+            "e-cs-2",
+            "e-cs-4"
+          ]
         },
         {
           "id": "sc-contact-revoked-perm",
           "name": "Đã nạp danh bạ nhưng sau đó tắt quyền danh bạ",
           "description": "App giữ nguyên danh bạ trong bộ nhớ và vẫn cho đồng bộ lên Server mà không hỏi quyền lại.",
           "audience": "all",
-          "nodeIds": ["ct-perm-check", "ct-perm-revoked", "ct-server-sync"],
-          "edgeIds": ["e-cs-1", "e-cs-3"]
+          "nodeIds": [
+            "ct-perm-check",
+            "ct-perm-revoked",
+            "ct-server-sync"
+          ],
+          "edgeIds": [
+            "e-cs-1",
+            "e-cs-3"
+          ]
         }
       ]
     },
@@ -811,7 +985,9 @@
       "title": "Thao tác Thêm / Sửa / Xoá hàng loạt & Gọi nhanh",
       "layoutHint": "flow",
       "direction": "LR",
-      "entryNodeIds": ["ct-plus-menu"],
+      "entryNodeIds": [
+        "ct-plus-menu"
+      ],
       "nodes": [
         {
           "id": "ct-plus-menu",
@@ -823,7 +999,9 @@
             "tech": "Nút '+' native (iOS handlePlusTapped / Android MainActivity.ivAddContact -> onPlusButtonClicked()) phát toggle_actions_menu bật Popover menu (tối đa 50 mục/lần)."
           },
           "techDetail": {
-            "codeRefs": ["VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"],
+            "codeRefs": [
+              "VBot/Controller/NewController/Contact/UserContactsMiniAppViewController.swift"
+            ],
             "byPlatform": {
               "android": {
                 "summary": "MainActivity.ivAddContact gọi UserContactsFragment.onPlusButtonClicked() phát toggle_actions_menu vào MiniAppFragment.",
@@ -918,22 +1096,49 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "Trên Android, gọi từ Mini App Danh bạ đi qua MiniAppHelper.makeDirectCall nên giữ được miniAppDisplayName, còn gọi từ Dialpad/Danh bạ native lại không gắn trường này — khác iOS vốn giữ đồng nhất suppliedCallerName.",
+              "recommendation": "Cân nhắc đồng bộ cách giữ tên người nhận cho cả cuộc gọi từ Dialpad/Danh bạ native nếu cần.",
+              "fixTarget": "android"
             }
           },
-          "relatedNodeIds": ["call-out-start"]
+          "relatedNodeIds": [
+            "call-out-start"
+          ]
         }
       ],
       "edges": [
-        { "id": "e-cb-1", "source": "ct-plus-menu", "target": "ct-action-type" },
-        { "id": "e-cb-2", "source": "ct-action-type", "target": "ct-crud-api", "label": "Thêm / Sửa / Xoá <= 50" },
-        { "id": "e-cb-3", "source": "ct-action-type", "target": "ct-quick-call", "label": "Gọi điện" }
+        {
+          "id": "e-cb-1",
+          "source": "ct-plus-menu",
+          "target": "ct-action-type"
+        },
+        {
+          "id": "e-cb-2",
+          "source": "ct-action-type",
+          "target": "ct-crud-api",
+          "label": "Thêm / Sửa / Xoá <= 50"
+        },
+        {
+          "id": "e-cb-3",
+          "source": "ct-action-type",
+          "target": "ct-quick-call",
+          "label": "Gọi điện"
+        }
       ]
     },
     "contact-forward-v2": {
       "title": "Danh bạ chuyển tiếp (Khách hàng / Đơn vị)",
       "layoutHint": "flow",
       "direction": "LR",
-      "entryNodeIds": ["ctv2-open"],
+      "entryNodeIds": [
+        "ctv2-open"
+      ],
       "nodes": [
         {
           "id": "ctv2-open",
@@ -1028,6 +1233,15 @@
                   "response": "{ [action]: Bool } / { success }"
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS và Android đều nhúng vb-ma-contact-forward tại Tab 1, ẩn bàn phím nổi và chỉ bật nút \"+\" cho user có quyền Admin.",
+              "recommendation": "Không cần sửa — luồng và kết quả trên 2 OS giống hệt nhau.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1081,12 +1295,22 @@
               }
             }
           },
-          "relatedNodeIds": ["call-tr-open"]
+          "relatedNodeIds": [
+            "call-tr-open"
+          ]
         }
       ],
       "edges": [
-        { "id": "e-v2-1", "source": "ctv2-open", "target": "ctv2-filter" },
-        { "id": "e-v2-2", "source": "ctv2-filter", "target": "ctv2-action" }
+        {
+          "id": "e-v2-1",
+          "source": "ctv2-open",
+          "target": "ctv2-filter"
+        },
+        {
+          "id": "e-v2-2",
+          "source": "ctv2-filter",
+          "target": "ctv2-action"
+        }
       ]
     },
     "ma-user-contact": {
@@ -1146,6 +1370,15 @@
                   "note": "Khi Mini App báo 'ready', SDK mở khóa hàng đợi sự kiện và đẩy refresh_data / theme_changed vào JS."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Khác biệt chỉ ở container chứa WebView: Fragment với AHBottomNavigation add/show/hide (Android) và ViewController với WKWebView (iOS).",
+              "recommendation": "Không cần sửa — cùng kết quả nhúng và giữ sống WebView.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1199,6 +1432,15 @@
                   "note": "Sau đó Store gọi tiếp refreshServerContactsViaHost() để gộp danh bạ Server; nếu chưa có quyền mới xin quét danh bạ thiết bị."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Android truy vấn vbot_user_contact.db qua SQLiteOpenHelper và READ_CONTACTS; iOS đọc qua C SQLite API — cả hai đều cô lập theo uid.",
+              "recommendation": "Không cần sửa — kết quả trả danh bạ SQLite theo uid cho Mini App giống nhau.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1257,6 +1499,15 @@
                   "note": "Liên hệ chỉ mới có trên máy mang id = 0, isSynced = false, localKey = 'dev_<phone>'."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Khác biệt thuần túy do API xin quyền và đọc danh bạ máy khác nhau giữa ContactsContract Android và CNContactStore iOS.",
+              "recommendation": "Không cần sửa — cùng quét danh bạ máy và nạp vào SQLite theo uid.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1278,8 +1529,12 @@
             "byPlatform": {
               "android": {
                 "summary": "UserContactMiniAppBridgeHelper mở Settings.ACTION_APPLICATION_DETAILS_SETTINGS không gắn FLAG_ACTIVITY_NEW_TASK.",
-                "edgeCases": ["Bỏ FLAG_ACTIVITY_NEW_TASK giúp nhấn Back từ Cài đặt Android quay về thẳng app VBot"],
-                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"]
+                "edgeCases": [
+                  "Bỏ FLAG_ACTIVITY_NEW_TASK giúp nhấn Back từ Cài đặt Android quay về thẳng app VBot"
+                ],
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"
+                ]
               }
             },
             "miniAppBridge": {
@@ -1308,6 +1563,15 @@
                   "parityNote": "Android bỏ FLAG_ACTIVITY_NEW_TASK để Back trên hệ thống đưa user về thẳng Mini App Danh bạ thay vì tác vụ Settings riêng."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Android cố ý không gắn FLAG_ACTIVITY_NEW_TASK khi gọi ACTION_APPLICATION_DETAILS_SETTINGS để người dùng bấm Back hệ thống quay lại đúng Tab Danh bạ giống nút \"<- VBot\" của iOS.",
+              "recommendation": "Không cần sửa — đây là xử lý navigation chuẩn để trải nghiệm trên 2 OS tương đương nhau.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1383,7 +1647,9 @@
             "byPlatform": {
               "android": {
                 "summary": "VbMABridge xử lý request_mini_app_token qua MiniAppHelper (VbMaSDKDelegate cung cấp currentAccessToken / refreshHostToken) -> VbMaMiniAppTokenService (không prewarm trước).",
-                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"]
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
               }
             },
             "miniAppBridge": {
@@ -1412,6 +1678,15 @@
                   "parityNote": "iOS Host throttle prewarm 600s; còn RAM cache TTL trong VbMaMiniAppTokenService ở cả 2 HĐH theo expiresAt/JWT exp (fallback 900s trừ hao 300s). Android chưa có prewarm phía Host."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": true,
+              "needsFix": "consider",
+              "explanation": "Cả 2 đều dùng chung TTL cache token SDK nhưng iOS chạy trước prewarmMiniAppTokenIfNeeded (throttle 600s) giúp các thao tác gọi API đầu tiên trong Mini App Danh bạ không phải chờ Host đi xin token mới.",
+              "recommendation": "Cân nhắc bổ sung bước prewarm token lúc vào Tab/App trên Android để cải thiện độ trễ.",
+              "fixTarget": "android"
             }
           }
         },
@@ -1546,6 +1821,15 @@
                   "parityNote": "Android ghi recordDeliveredContacts(uid, remainingItems) trước khi kích hoạt reloadFromLocalDB() thay vì gắn metadata notification như iOS."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Android cần gọi recordDeliveredContacts trước reloadFromLocalDB để tránh cơ chế LiveData sticky replay phát lại event xóa vừa xong, tương đương việc iOS gắn source metadata.",
+              "recommendation": "Không cần sửa — chỉ khác kỹ thuật chống lặp của Android LiveData vs iOS NotificationCenter.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1571,7 +1855,9 @@
                 "edgeCases": [
                   "Chống LiveData sticky replay lúc mới đăng ký Observer bằng điều kiện bỏ qua lastDeliveredSignature == null"
                 ],
-                "codeRefs": ["VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"]
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/UserContactMiniAppBridgeHelper.kt"
+                ]
               }
             },
             "miniAppBridge": {
@@ -1598,6 +1884,15 @@
                   "parityNote": "iOS lọc theo source == 'miniapp_bridge'; Android lọc theo computeContactsSignature + chặn null ban đầu cho LiveData sticky replay."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Do Android LiveData có hành vi sticky replay khi mở lại Fragment, Android dùng chữ ký hash computeContactsSignature & bỏ qua null ban đầu; còn iOS gắn tag source=\"miniapp_bridge\" trên NotificationCenter.",
+              "recommendation": "Không cần sửa — 2 kỹ thuật khác nhau cho cùng 1 kết quả là không bị vòng lặp user_contacts_updated.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1618,7 +1913,9 @@
             "byPlatform": {
               "android": {
                 "summary": "JS gọi @vbotma/sdk makeCall sang VbMABridge trên WebView Android.",
-                "codeRefs": ["vb-ma-user-contact/src/lib/bridge/hostBridge.ts"]
+                "codeRefs": [
+                  "vb-ma-user-contact/src/lib/bridge/hostBridge.ts"
+                ]
               }
             },
             "miniAppBridge": {
@@ -1699,20 +1996,79 @@
                   "parityNote": "iOS trả call_result sau khi dispatch VPMAppService.makeCall (có validate MISSING_PHONE_NUMBER); Android đợi chọn Hotline ở ChooseHotlineCallBottomSheet (nếu chưa có mặc định) rồi trả call_result ngay sau makeDirectCall (hoặc USER_CANCELLED / NO_HOTLINE / ERROR) và giữ tên qua CallModel.miniAppDisplayName."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "Khi Mini App Danh bạ gọi make_call mà chưa có hotline mặc định: Android mở ChooseHotlineCallBottomSheet đợi user chọn rồi mới trả \"call_result\" (hỗ trợ USER_CANCELLED / NO_HOTLINE / ERROR), còn iOS phát \"call_result\" ngay sau dispatch makeCall.",
+              "recommendation": "Cân nhắc chuẩn hóa payload và thời điểm trả call_result giữa 2 HĐH.",
+              "fixTarget": "tbd"
             }
           },
-          "relatedNodeIds": ["call-out-start"]
+          "relatedNodeIds": [
+            "call-out-start"
+          ]
         }
       ],
       "edges": [
-        { "id": "e-mauc-1", "source": "mauc-init", "target": "mauc-get-local", "label": "Mini App → Host: user_contact_get_local", "audience": "tech" },
-        { "id": "e-mauc-2", "source": "mauc-get-local", "target": "mauc-import-device", "label": "Mini App → Host: user_contact_import_device", "audience": "tech" },
-        { "id": "e-mauc-3", "source": "mauc-import-device", "target": "mauc-render-list", "label": "Host trả contacts[]", "audience": "tech" },
-        { "id": "e-mauc-4", "source": "mauc-plus-menu", "target": "mauc-crud-api", "label": "User điền form Thêm/Sửa", "audience": "tech" },
-        { "id": "e-mauc-5", "source": "mauc-crud-api", "target": "mauc-refresh-host", "label": "Mini App → Host: user_contact_refresh_server", "audience": "tech" },
-        { "id": "e-mauc-6", "source": "mauc-delete-server", "target": "mauc-delete-host", "label": "Mini App → Host: user_contact_delete_local", "audience": "tech" },
-        { "id": "e-mauc-7", "source": "mauc-delete-host", "target": "mauc-loop-guard", "label": "Host xoá DB & trả deletedCount", "audience": "tech" },
-        { "id": "e-mauc-8", "source": "mauc-call-click", "target": "mauc-call-native", "label": "Mini App → Host: make_call", "audience": "tech" }
+        {
+          "id": "e-mauc-1",
+          "source": "mauc-init",
+          "target": "mauc-get-local",
+          "label": "Mini App → Host: user_contact_get_local",
+          "audience": "tech"
+        },
+        {
+          "id": "e-mauc-2",
+          "source": "mauc-get-local",
+          "target": "mauc-import-device",
+          "label": "Mini App → Host: user_contact_import_device",
+          "audience": "tech"
+        },
+        {
+          "id": "e-mauc-3",
+          "source": "mauc-import-device",
+          "target": "mauc-render-list",
+          "label": "Host trả contacts[]",
+          "audience": "tech"
+        },
+        {
+          "id": "e-mauc-4",
+          "source": "mauc-plus-menu",
+          "target": "mauc-crud-api",
+          "label": "User điền form Thêm/Sửa",
+          "audience": "tech"
+        },
+        {
+          "id": "e-mauc-5",
+          "source": "mauc-crud-api",
+          "target": "mauc-refresh-host",
+          "label": "Mini App → Host: user_contact_refresh_server",
+          "audience": "tech"
+        },
+        {
+          "id": "e-mauc-6",
+          "source": "mauc-delete-server",
+          "target": "mauc-delete-host",
+          "label": "Mini App → Host: user_contact_delete_local",
+          "audience": "tech"
+        },
+        {
+          "id": "e-mauc-7",
+          "source": "mauc-delete-host",
+          "target": "mauc-loop-guard",
+          "label": "Host xoá DB & trả deletedCount",
+          "audience": "tech"
+        },
+        {
+          "id": "e-mauc-8",
+          "source": "mauc-call-click",
+          "target": "mauc-call-native",
+          "label": "Mini App → Host: make_call",
+          "audience": "tech"
+        }
       ],
       "scenarios": [
         {
@@ -1720,32 +2076,60 @@
           "name": "VD1: Host nạp danh bạ thiết bị → Mini App",
           "description": "Host nhúng WebView → Mini App xin user_contact_get_local → yêu cầu user_contact_import_device (CNContactStore / ContactsContract) → nhận mảng contacts[] render A-Z.",
           "audience": "tech",
-          "nodeIds": ["mauc-init", "mauc-get-local", "mauc-import-device", "mauc-render-list"],
-          "edgeIds": ["e-mauc-1", "e-mauc-2", "e-mauc-3"]
+          "nodeIds": [
+            "mauc-init",
+            "mauc-get-local",
+            "mauc-import-device",
+            "mauc-render-list"
+          ],
+          "edgeIds": [
+            "e-mauc-1",
+            "e-mauc-2",
+            "e-mauc-3"
+          ]
         },
         {
           "id": "sc-mauc-add-edit",
           "name": "VD2: Mini App Thêm/Sửa → đồng bộ Host SQLite",
           "description": "Host bấm '+' (toggle_actions_menu) → Mini App gọi REST insert/update (MiniAppToken) → gọi ngược user_contact_refresh_server để Host kéo lại vào SQLite.",
           "audience": "tech",
-          "nodeIds": ["mauc-plus-menu", "mauc-crud-api", "mauc-refresh-host"],
-          "edgeIds": ["e-mauc-4", "e-mauc-5"]
+          "nodeIds": [
+            "mauc-plus-menu",
+            "mauc-crud-api",
+            "mauc-refresh-host"
+          ],
+          "edgeIds": [
+            "e-mauc-4",
+            "e-mauc-5"
+          ]
         },
         {
           "id": "sc-mauc-delete",
           "name": "VD3: Mini App Xoá → Host xoá SQLite & chống lặp",
           "description": "Mini App xoá Server trước (POST /delete) → gọi user_contact_delete_local({ syncedIds, unsyncedLocalKeys }) → Host xoá SQLite & chống lặp (source / computeContactsSignature).",
           "audience": "tech",
-          "nodeIds": ["mauc-delete-server", "mauc-delete-host", "mauc-loop-guard"],
-          "edgeIds": ["e-mauc-6", "e-mauc-7"]
+          "nodeIds": [
+            "mauc-delete-server",
+            "mauc-delete-host",
+            "mauc-loop-guard"
+          ],
+          "edgeIds": [
+            "e-mauc-6",
+            "e-mauc-7"
+          ]
         },
         {
           "id": "sc-mauc-call",
           "name": "VD4: Mini App bấm Gọi → Host mở cuộc gọi",
           "description": "Mini App gọi makeCallViaHost() → gửi make_call({ phoneNumber, displayName }) → Host giữ tên (suppliedCallerName / miniAppDisplayName) & mở màn hình gọi.",
           "audience": "tech",
-          "nodeIds": ["mauc-call-click", "mauc-call-native"],
-          "edgeIds": ["e-mauc-8"]
+          "nodeIds": [
+            "mauc-call-click",
+            "mauc-call-native"
+          ],
+          "edgeIds": [
+            "e-mauc-8"
+          ]
         }
       ]
     },
@@ -1753,7 +2137,9 @@
       "title": "Luồng giao tiếp Host ↔ Mini App Danh bạ chuyển tiếp (vb-ma-contact-forward)",
       "layoutHint": "flow",
       "direction": "LR",
-      "entryNodeIds": ["macf-embed"],
+      "entryNodeIds": [
+        "macf-embed"
+      ],
       "nodes": [
         {
           "id": "macf-embed",
@@ -1801,6 +2187,15 @@
                   "examplePayload": "{\n  \"id\": \"vb-ma-contact-forward\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": { \"bg_color\": \"#FFFFFF\" }\n  }\n}"
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "os_impl_only",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Ghi chú chỉ tên lớp Fragment container Android (ContactForwardFragment thay thế ContactV2Fragment cũ) tương ứng ContactForwardViewController bên iOS.",
+              "recommendation": "Không cần sửa — kết quả nhúng Tab Chuyển tiếp trên 2 OS giống hệt nhau.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1854,6 +2249,15 @@
                   "note": "Khi Modal Thêm/Sửa đóng lại, Host kích hoạt refreshData() trên Tab đang nhúng."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả 2 nền tảng đã đồng bộ phân quyền Admin cho nút \"+\"; điểm nhắc tới chỉ là cách trình bày modal gốc của từng HĐH (.pageSheet iOS vs MiniAppHelper.openMiniApp Android).",
+              "recommendation": "Không cần sửa — logic phân quyền và kết quả mở form đã đồng bộ.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1953,15 +2357,44 @@
                   "exampleResponse": "{\n  \"request_id\": \"req_11\",\n  \"success\": true\n}"
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "Tương tự luồng gọi từ Danh bạ cá nhân: Android có bước chờ ChooseHotlineCallBottomSheet trước khi gọi makeDirectCall và phát \"call_result\", khác thời điểm callback với iOS.",
+              "recommendation": "Cân nhắc thống nhất quy trình xử lý khi chưa chọn hotline mặc định và kết quả trả về cho make_call trên 2 OS.",
+              "fixTarget": "tbd"
             }
           },
-          "relatedNodeIds": ["call-out-start"]
+          "relatedNodeIds": [
+            "call-out-start"
+          ]
         }
       ],
       "edges": [
-        { "id": "e-macf-1", "source": "macf-embed", "target": "macf-add-modal", "label": "Mở Modal Thêm/Sửa", "audience": "tech" },
-        { "id": "e-macf-2", "source": "macf-add-modal", "target": "macf-refresh", "label": "Đóng Modal → emit refresh_data", "audience": "tech" },
-        { "id": "e-macf-3", "source": "macf-embed", "target": "macf-perm-call", "label": "Mini App → Host: make_call", "audience": "tech" }
+        {
+          "id": "e-macf-1",
+          "source": "macf-embed",
+          "target": "macf-add-modal",
+          "label": "Mở Modal Thêm/Sửa",
+          "audience": "tech"
+        },
+        {
+          "id": "e-macf-2",
+          "source": "macf-add-modal",
+          "target": "macf-refresh",
+          "label": "Đóng Modal → emit refresh_data",
+          "audience": "tech"
+        },
+        {
+          "id": "e-macf-3",
+          "source": "macf-embed",
+          "target": "macf-perm-call",
+          "label": "Mini App → Host: make_call",
+          "audience": "tech"
+        }
       ],
       "scenarios": [
         {
@@ -1969,16 +2402,28 @@
           "name": "VD: Mở Modal Thêm/Sửa & tự làm mới Tab Contact V2",
           "description": "Từ Tab Danh bạ chuyển tiếp mở modal full-screen ('add' hoặc open_mini_app 'edit/{id}') → khi đóng modal Host emit refresh_data để Tab tự tải lại.",
           "audience": "tech",
-          "nodeIds": ["macf-embed", "macf-add-modal", "macf-refresh"],
-          "edgeIds": ["e-macf-1", "e-macf-2"]
+          "nodeIds": [
+            "macf-embed",
+            "macf-add-modal",
+            "macf-refresh"
+          ],
+          "edgeIds": [
+            "e-macf-1",
+            "e-macf-2"
+          ]
         },
         {
           "id": "sc-macf-call",
           "name": "VD: Gọi trực tiếp đơn vị từ Mini App Contact V2",
           "description": "Chạm nút gọi trên đơn vị hành chính → Mini App gọi makeCall(phone, { displayName }) → Host quay số qua CallKit.",
           "audience": "tech",
-          "nodeIds": ["macf-embed", "macf-perm-call"],
-          "edgeIds": ["e-macf-3"]
+          "nodeIds": [
+            "macf-embed",
+            "macf-perm-call"
+          ],
+          "edgeIds": [
+            "e-macf-3"
+          ]
         }
       ]
     }

@@ -1,5 +1,5 @@
 // src/composables/useFlowExplorer.ts
-import { computed, ref, type InjectionKey } from 'vue';
+import { computed, ref, shallowRef, type InjectionKey } from 'vue';
 import {
   buildVisibleTreeFlow,
   countDescendants,
@@ -14,9 +14,34 @@ import type {
   FlowNodeData,
   MediaItem,
   MergedFlowDataset,
+  NodeKind,
+  NodeStatus,
   PlatformViewMode,
   Scenario,
 } from '../data/schema';
+
+export interface CanvasLensFilter {
+  kinds: NodeKind[];
+  onlyParityDiff: boolean;
+  onlyMiniAppBridge: boolean;
+  onlyMissingMedia: boolean;
+  statuses: NodeStatus[];
+}
+
+export interface ImpactHighlightState {
+  label: string;
+  nodeIds: Set<string>;
+}
+
+function createDefaultCanvasLens(): CanvasLensFilter {
+  return {
+    kinds: [],
+    onlyParityDiff: false,
+    onlyMiniAppBridge: false,
+    onlyMissingMedia: false,
+    statuses: [],
+  };
+}
 
 export interface NodeLineageResult {
   nodeIds: Set<string>;
@@ -24,6 +49,9 @@ export interface NodeLineageResult {
 }
 
 export type KeyboardNavKey = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight';
+
+const ALLOW_TECH_RUNTIME =
+  typeof __ENABLE_TECH_MODE__ === 'boolean' ? __ENABLE_TECH_MODE__ : true;
 
 export function computeNodeLineage(
   visibleFlow: VisibleFlowResult,
@@ -219,11 +247,13 @@ export function getVisibleMedia(node: FlowNodeData, mode: ViewMode): MediaItem[]
 }
 
 export function createFlowExplorerState(
-  dataset: MergedFlowDataset,
+  initialDataset: MergedFlowDataset,
   allowTechMode: boolean,
 ) {
   const MAX_NAV_HISTORY = 25;
   const MAX_RECENT_NODES = 8;
+  const baseDataset = initialDataset;
+  const datasetRef = shallowRef<MergedFlowDataset>(initialDataset);
   const audienceMode = ref<ViewMode>('overview');
   const platformMode = ref<PlatformViewMode>('compare');
   const layoutDirection = ref<LayoutDirection>('LR');
@@ -240,11 +270,13 @@ export function createFlowExplorerState(
   const showCanvasMedia = ref(false);
   const zenMode = ref(false);
   const fitRequestSeq = ref(0);
+  const impactHighlight = ref<ImpactHighlightState | null>(null);
+  const canvasLens = ref<CanvasLensFilter>(createDefaultCanvasLens());
   let cameraSeq = 0;
   const cameraTarget = ref<CameraTarget>({ kind: 'all', seq: 0 });
 
   const isNodeCurrentlyVisible = (nodeId: string): boolean => {
-    const found = findNodeById(dataset, nodeId);
+    const found = findNodeById(datasetRef.value, nodeId);
     if (!found) return false;
     return (
       isVisibleForMode(found.audience, audienceMode.value) &&
@@ -329,11 +361,11 @@ export function createFlowExplorerState(
     scenarioDialogOpen.value = false;
   };
 
-  const parentIndex = buildParentIndex(dataset);
+  const parentIndex = computed(() => buildParentIndex(datasetRef.value));
 
   const visibleFlow = computed(() =>
     buildVisibleTreeFlow(
-      dataset,
+      datasetRef.value,
       expandedIds.value,
       audienceMode.value,
       focusRootId.value,
@@ -350,7 +382,7 @@ export function createFlowExplorerState(
     audienceMode.value = allowTechMode ? next : 'overview';
     clearScenarioState();
     if (selectedNodeId.value) {
-      const sel = findNodeById(dataset, selectedNodeId.value);
+      const sel = findNodeById(datasetRef.value, selectedNodeId.value);
       if (
         sel &&
         (!isVisibleForMode(sel.audience, audienceMode.value) ||
@@ -370,13 +402,13 @@ export function createFlowExplorerState(
     if (!allowTechMode) return;
     platformMode.value = next;
     if (selectedNodeId.value) {
-      const sel = findNodeById(dataset, selectedNodeId.value);
+      const sel = findNodeById(datasetRef.value, selectedNodeId.value);
       if (sel && !isVisibleForPlatform(sel.platforms, audienceMode.value, next)) {
         selectedNodeId.value = null;
       }
     }
     if (focusRootId.value) {
-      const focusNode = findNodeById(dataset, focusRootId.value);
+      const focusNode = findNodeById(datasetRef.value, focusRootId.value);
       if (focusNode && !isVisibleForPlatform(focusNode.platforms, audienceMode.value, next)) {
         focusRootId.value = null;
       }
@@ -408,7 +440,7 @@ export function createFlowExplorerState(
       }
     }
     if (cameraTarget.value.kind === 'subtree' && cameraTarget.value.nodeId) {
-      const subNode = findNodeById(dataset, cameraTarget.value.nodeId);
+      const subNode = findNodeById(datasetRef.value, cameraTarget.value.nodeId);
       if (subNode && isVisibleForPlatform(subNode.platforms, audienceMode.value, next)) {
         setCameraTarget('subtree', cameraTarget.value.nodeId);
         return;
@@ -424,13 +456,13 @@ export function createFlowExplorerState(
     while (cursor && !guard.has(cursor)) {
       guard.add(cursor);
       chain.unshift(cursor);
-      cursor = parentIndex[cursor];
+      cursor = parentIndex.value[cursor];
     }
     return chain;
   };
 
   const toggleExpand = (nodeId: string) => {
-    if (!dataset.subtreesByParentId[nodeId]) return;
+    if (!datasetRef.value.subtreesByParentId[nodeId]) return;
     const next = new Set(expandedIds.value);
     const wasExpanded = next.has(nodeId);
 
@@ -438,10 +470,10 @@ export function createFlowExplorerState(
       next.delete(nodeId);
     } else {
       if (accordionMode.value) {
-        const parent = parentIndex[nodeId];
+        const parent = parentIndex.value[nodeId];
         const collapsedSiblings = new Set<string>();
         for (const id of next) {
-          if (id !== nodeId && parentIndex[id] === parent) {
+          if (id !== nodeId && parentIndex.value[id] === parent) {
             collapsedSiblings.add(id);
           }
         }
@@ -466,8 +498,11 @@ export function createFlowExplorerState(
       setCameraTarget('subtree', nodeId);
     } else if (next.size === 0 && !focusRootId.value) {
       setCameraTarget('all');
-    } else if (parentIndex[nodeId] && parentIndex[nodeId] !== dataset.rootNode.id) {
-      setCameraTarget('subtree', parentIndex[nodeId]);
+    } else if (
+      parentIndex.value[nodeId] &&
+      parentIndex.value[nodeId] !== datasetRef.value.rootNode.id
+    ) {
+      setCameraTarget('subtree', parentIndex.value[nodeId]);
     } else {
       setCameraTarget('all');
     }
@@ -477,7 +512,7 @@ export function createFlowExplorerState(
     const ancestors = getAncestorChain(nodeId);
     const next = new Set(accordionMode.value ? [] : expandedIds.value);
     for (const ancId of ancestors.slice(0, -1)) {
-      if (dataset.subtreesByParentId[ancId]) {
+      if (datasetRef.value.subtreesByParentId[ancId]) {
         next.add(ancId);
       }
     }
@@ -495,7 +530,7 @@ export function createFlowExplorerState(
       const candidateId = navigationHistory.value[i];
       if (candidateId === curId) continue;
       if (isNodeCurrentlyVisible(candidateId)) {
-        return findNodeById(dataset, candidateId) ?? null;
+        return findNodeById(datasetRef.value, candidateId) ?? null;
       }
     }
     return null;
@@ -517,9 +552,9 @@ export function createFlowExplorerState(
   };
 
   const setFocusRoot = (nodeId: string | null) => {
-    const nextFocus = nodeId && nodeId !== dataset.rootNode.id ? nodeId : null;
+    const nextFocus = nodeId && nodeId !== datasetRef.value.rootNode.id ? nodeId : null;
     focusRootId.value = nextFocus;
-    if (nextFocus && dataset.subtreesByParentId[nextFocus]) {
+    if (nextFocus && datasetRef.value.subtreesByParentId[nextFocus]) {
       const next = new Set(expandedIds.value);
       next.add(nextFocus);
       expandedIds.value = next;
@@ -628,22 +663,28 @@ export function createFlowExplorerState(
   };
 
   const selectedNode = computed<FlowNodeData | null>(() =>
-    selectedNodeId.value ? findNodeById(dataset, selectedNodeId.value) ?? null : null,
+    selectedNodeId.value ? findNodeById(datasetRef.value, selectedNodeId.value) ?? null : null,
   );
 
   const breadcrumbNodes = computed<FlowNodeData[]>(() => {
-    const anchor = focusRootId.value ?? selectedNodeId.value ?? dataset.rootNode.id;
+    const anchor = focusRootId.value ?? selectedNodeId.value ?? datasetRef.value.rootNode.id;
     return getAncestorChain(anchor)
-      .map((id) => findNodeById(dataset, id))
+      .map((id) => findNodeById(datasetRef.value, id))
       .filter((n): n is FlowNodeData => Boolean(n));
   });
 
   const getChildCount = (nodeId: string) =>
-    countDescendants(dataset, nodeId, audienceMode.value, new Set(), platformMode.value);
+    countDescendants(
+      datasetRef.value,
+      nodeId,
+      audienceMode.value,
+      new Set(),
+      platformMode.value,
+    );
 
-  const hasSubtree = (nodeId: string) => Boolean(dataset.subtreesByParentId[nodeId]);
+  const hasSubtree = (nodeId: string) => Boolean(datasetRef.value.subtreesByParentId[nodeId]);
 
-  const findNode = (nodeId: string) => findNodeById(dataset, nodeId);
+  const findNode = (nodeId: string) => findNodeById(datasetRef.value, nodeId);
 
   const hoveredLineage = computed<NodeLineageResult | null>(() => {
     if (!hoveredNodeId.value || activeScenario.value) return null;
@@ -654,7 +695,7 @@ export function createFlowExplorerState(
   const recentNodes = computed<FlowNodeData[]>(() =>
     recentNodeIds.value
       .filter((id) => isNodeCurrentlyVisible(id))
-      .map((id) => findNodeById(dataset, id))
+      .map((id) => findNodeById(datasetRef.value, id))
       .filter((n): n is FlowNodeData => Boolean(n)),
   );
 
@@ -669,11 +710,11 @@ export function createFlowExplorerState(
         seen.add(node.id);
       }
     };
-    addIfVisible(dataset.rootNode);
-    for (const branch of dataset.branches) {
+    addIfVisible(datasetRef.value.rootNode);
+    for (const branch of datasetRef.value.branches) {
       addIfVisible(branch);
     }
-    for (const sub of Object.values(dataset.subtreesByParentId)) {
+    for (const sub of Object.values(datasetRef.value.subtreesByParentId)) {
       for (const node of sub.nodes) {
         addIfVisible(node);
       }
@@ -681,8 +722,110 @@ export function createFlowExplorerState(
     return seen.size;
   });
 
+  const setImpactHighlight = (nodeIds: string[], label: string) => {
+    const cleanIds = nodeIds.filter(Boolean);
+    if (cleanIds.length === 0) {
+      impactHighlight.value = null;
+      return;
+    }
+    const nextExpanded = new Set(expandedIds.value);
+    for (const id of cleanIds) {
+      for (const ancId of getAncestorChain(id).slice(0, -1)) {
+        if (datasetRef.value.subtreesByParentId[ancId]) {
+          nextExpanded.add(ancId);
+        }
+      }
+    }
+    expandedIds.value = nextExpanded;
+    impactHighlight.value = { label, nodeIds: new Set(cleanIds) };
+    setCameraTarget('all');
+  };
+
+  const clearImpactHighlight = () => {
+    impactHighlight.value = null;
+  };
+
+  const resetCanvasLens = () => {
+    canvasLens.value = createDefaultCanvasLens();
+  };
+
+  const hasActiveCanvasLens = computed(() => {
+    const l = canvasLens.value;
+    return (
+      l.kinds.length > 0 ||
+      l.onlyParityDiff ||
+      l.onlyMiniAppBridge ||
+      l.onlyMissingMedia ||
+      l.statuses.length > 0
+    );
+  });
+
+  const canvasLensMatchedIds = computed<Set<string> | null>(() => {
+    if (
+      !ALLOW_TECH_RUNTIME ||
+      !allowTechMode ||
+      audienceMode.value !== 'tech' ||
+      !hasActiveCanvasLens.value
+    ) {
+      return null;
+    }
+    const l = canvasLens.value;
+    const existingMediaSet = new Set(
+      (datasetRef.value.existingMediaPaths ?? []).map((p) => p.replace(/^\/+/, '')),
+    );
+    const matched = new Set<string>();
+    for (const node of visibleFlow.value.nodes) {
+      if (l.kinds.length > 0 && !l.kinds.includes(node.kind)) continue;
+      if (l.onlyParityDiff) {
+        const d = node.techDetail;
+        const hasDiff = Boolean(
+          node.platforms?.length === 1 ||
+            d?.platformDiffNote ||
+            d?.byPlatform?.android ||
+            d?.miniAppBridge?.messages.some((m) => m.hostFnByPlatform?.android || m.parityNote),
+        );
+        if (!hasDiff) continue;
+      }
+      if (l.onlyMiniAppBridge && !node.techDetail?.miniAppBridge && node.kind !== 'miniapp') {
+        continue;
+      }
+      if (l.onlyMissingMedia) {
+        const hasMissing = (node.media ?? []).some(
+          (m) => !existingMediaSet.has(m.src.replace(/^\/+/, '')),
+        );
+        if (!hasMissing) continue;
+      }
+      if (l.statuses.length > 0) {
+        const st: NodeStatus = node.meta?.status ?? 'stable';
+        if (!l.statuses.includes(st)) continue;
+      }
+      matched.add(node.id);
+    }
+    return matched;
+  });
+
+  const setDatasetOverride = (next: MergedFlowDataset | null) => {
+    const resolved = next ?? baseDataset;
+    datasetRef.value = resolved;
+    if (selectedNodeId.value && !findNodeById(resolved, selectedNodeId.value)) {
+      selectedNodeId.value = null;
+    }
+    if (
+      focusRootId.value &&
+      (!findNodeById(resolved, focusRootId.value) ||
+        !resolved.subtreesByParentId[focusRootId.value])
+    ) {
+      focusRootId.value = null;
+    }
+  };
+
   return {
-    dataset,
+    get dataset() {
+      return datasetRef.value;
+    },
+    datasetRef,
+    baseDataset,
+    setDatasetOverride,
     allowTechMode,
     audienceMode,
     platformMode,
@@ -693,6 +836,10 @@ export function createFlowExplorerState(
     selectedNodeId,
     hoveredNodeId,
     hoveredLineage,
+    impactHighlight,
+    canvasLens,
+    hasActiveCanvasLens,
+    canvasLensMatchedIds,
     navigationHistory,
     recentNodeIds,
     recentNodes,
@@ -728,6 +875,9 @@ export function createFlowExplorerState(
     setZenMode,
     toggleZenMode,
     requestFitView,
+    setImpactHighlight,
+    clearImpactHighlight,
+    resetCanvasLens,
     getChildCount,
     hasSubtree,
     findNode,

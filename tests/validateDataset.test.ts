@@ -350,4 +350,64 @@ describe('validateDataset', () => {
     };
     expect(validateDataset(validManifest, [withInvalidPlatform]).length).toBeGreaterThan(0);
   });
+
+  it('validates node.meta and app.repoConfig while rejecting unsafe workTaskUrl or bad date', () => {
+    const manifestWithRepo: AppManifest = {
+      ...validManifest,
+      app: {
+        ...validManifest.app,
+        repoConfig: {
+          iosRepoWebUrl: 'https://github.com/vpmedia/VBot-iOS',
+          vbotWorkBaseUrl: 'https://work.vpmedia.vn',
+        },
+      },
+    };
+    const moduleWithMeta: FlowModuleFile = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Bước 1',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'OK' },
+              meta: {
+                status: 'wip',
+                owner: 'Team iOS',
+                lastVerifiedAt: '2026-11-23',
+                workTaskUrl: 'https://work.vpmedia.vn/tasks/99',
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(manifestWithRepo, [moduleWithMeta])).toEqual([]);
+
+    const badMetaModule = {
+      ...validModule,
+      subtrees: {
+        'mod-a': {
+          ...validModule.subtrees['mod-a'],
+          nodes: [
+            {
+              id: 'a-1',
+              label: 'Bad Meta',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'Bad' },
+              meta: {
+                lastVerifiedAt: '23/11/2026',
+                workTaskUrl: 'javascript:alert(1)',
+              },
+            },
+          ],
+        },
+      },
+    };
+    expect(validateDataset(validManifest, [badMetaModule]).length).toBeGreaterThan(0);
+  });
 });

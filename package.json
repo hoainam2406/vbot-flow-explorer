@@ -11,6 +11,10 @@
     "build:internal": "BUILD_TARGET=internal vite build --outDir dist-internal",
     "test": "vitest run",
     "validate:data": "tsx scripts/validate-data.ts",
+    "audit:sync": "tsx scripts/audit-sync.ts",
+    "sync:miniapps": "tsx scripts/sync-miniapps.ts",
+    "check:public-leak": "tsx scripts/check-public-leak.ts",
+    "media:optimize": "tsx scripts/media-optimize.ts",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {

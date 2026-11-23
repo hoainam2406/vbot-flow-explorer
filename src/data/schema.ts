@@ -11,6 +11,40 @@ export const NodeKindSchema = z.enum([
   'error',
 ]);
 
+export const NodeStatusSchema = z.enum(['stable', 'wip', 'needs_review', 'deprecated']);
+
+export const NodeMetaSchema = z
+  .object({
+    status: NodeStatusSchema.optional(),
+    owner: z.string().min(1).optional(),
+    lastVerifiedAt: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, 'lastVerifiedAt must use YYYY-MM-DD')
+      .optional(),
+    workTaskUrl: z
+      .string()
+      .refine((v) => /^https?:\/\//i.test(v), 'workTaskUrl must be http(s) URL')
+      .optional(),
+  })
+  .strict();
+
+export const AppRepoConfigSchema = z
+  .object({
+    iosRepoWebUrl: z.string().min(1).optional(),
+    androidRepoWebUrl: z.string().min(1).optional(),
+    vbotWorkBaseUrl: z.string().min(1).optional(),
+    vbotWorkProjectUrls: z
+      .object({
+        ios: z.string().min(1).optional(),
+        android: z.string().min(1).optional(),
+        miniapp: z.string().min(1).optional(),
+        general: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 export const AudienceScopeSchema = z.enum(['all', 'tech']);
 
 export const PlatformSchema = z.enum(['ios', 'android']);
@@ -75,9 +109,33 @@ export const MiniAppBridgeSchema = z
   })
   .strict();
 
+export const ParityVerdictSchema = z.enum([
+  'action_needed',
+  'logic_diff',
+  'os_impl_only',
+  'synced',
+]);
+
+export const ParityNeedsFixSchema = z.enum(['yes', 'consider', 'no']);
+
+export const ParityFixTargetSchema = z.enum(['ios', 'android', 'both', 'tbd', 'none']);
+
+export const ParityAssessmentSchema = z
+  .object({
+    verdict: ParityVerdictSchema,
+    sameLogic: z.boolean(),
+    sameOutcome: z.boolean(),
+    needsFix: ParityNeedsFixSchema,
+    fixTarget: ParityFixTargetSchema.optional(),
+    explanation: z.string().min(1),
+    recommendation: z.string().min(1),
+  })
+  .strict();
+
 export const TechDetailSchema = z
   .object({
     platformDiffNote: z.string().min(1).optional(),
+    parityAssessment: ParityAssessmentSchema.optional(),
     inputs: z.array(z.string()).optional(),
     outputs: z.array(z.string()).optional(),
     apisOrEvents: z.array(z.string()).optional(),
@@ -109,6 +167,7 @@ export const FlowNodeDataSchema = z
     media: z.array(MediaItemSchema).optional(),
     techDetail: TechDetailSchema.optional(),
     relatedNodeIds: z.array(z.string()).optional(),
+    meta: NodeMetaSchema.optional(),
   })
   .strict();
 
@@ -159,6 +218,7 @@ export const AppManifestSchema = z.object({
     tagline: z.string().min(1),
     version: z.string().optional(),
     techBranch: z.string().min(1).optional(),
+    repoConfig: AppRepoConfigSchema.optional(),
   }),
   rootNode: FlowNodeDataSchema,
   branches: z.array(FlowNodeDataSchema).min(1),
@@ -168,11 +228,18 @@ export const AppManifestSchema = z.object({
 });
 
 export type NodeKind = z.infer<typeof NodeKindSchema>;
+export type NodeStatus = z.infer<typeof NodeStatusSchema>;
+export type NodeMeta = z.infer<typeof NodeMetaSchema>;
+export type AppRepoConfig = z.infer<typeof AppRepoConfigSchema>;
 export type AudienceScope = z.infer<typeof AudienceScopeSchema>;
 export type MediaItem = z.infer<typeof MediaItemSchema>;
 export type BridgeMessage = z.infer<typeof BridgeMessageSchema>;
 export type MiniAppBridge = z.infer<typeof MiniAppBridgeSchema>;
 export type PlatformTechDetail = z.infer<typeof PlatformTechDetailSchema>;
+export type ParityVerdict = z.infer<typeof ParityVerdictSchema>;
+export type ParityNeedsFix = z.infer<typeof ParityNeedsFixSchema>;
+export type ParityFixTarget = z.infer<typeof ParityFixTargetSchema>;
+export type ParityAssessment = z.infer<typeof ParityAssessmentSchema>;
 export type TechDetail = z.infer<typeof TechDetailSchema>;
 export type FlowNodeData = z.infer<typeof FlowNodeDataSchema>;
 export type FlowEdgeData = z.infer<typeof FlowEdgeDataSchema>;
@@ -181,6 +248,11 @@ export type SubtreeDefinition = z.infer<typeof SubtreeDefinitionSchema>;
 export type FlowModuleFile = z.infer<typeof FlowModuleFileSchema>;
 export type AppManifest = z.infer<typeof AppManifestSchema>;
 
+export interface SourceFileMap {
+  subtrees: Record<string, string>;
+  moduleFiles: string[];
+}
+
 export interface MergedFlowDataset {
   app: AppManifest['app'];
   rootNode: FlowNodeData;
@@ -188,4 +260,6 @@ export interface MergedFlowDataset {
   branchEdges: FlowEdgeData[];
   subtreesByParentId: Record<string, SubtreeDefinition>;
   hasRealMedia?: boolean;
+  existingMediaPaths?: string[];
+  sourceFileMap?: SourceFileMap;
 }

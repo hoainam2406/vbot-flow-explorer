@@ -15,9 +15,11 @@ import {
   Maximize,
   Maximize2,
   Moon,
+  Network,
   Play,
   Scale,
   Search,
+  Settings,
   Smartphone,
   Sun,
   X,
@@ -38,10 +40,13 @@ const emit = defineEmits<{
   'update:open': [value: boolean];
   openParity: [];
   openGuide: [];
+  openSettings: [];
+  openImpact: [];
   openMiniappBridge: [];
   exportPng: [];
   exportSvg: [];
   exportMd: [];
+  exportMermaid: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -250,6 +255,30 @@ const allCommands = computed<PaletteCommand[]>(() => {
           emit('openParity');
         },
       },
+      {
+        id: 'cmd-impact',
+        title: 'Phân tích ảnh hưởng (Impact Analysis)',
+        subtitle: 'Tra cứu ngược mọi Node, Kịch bản & Mini App phụ thuộc vào API/File/Quyền',
+        keywords: 'phan tich anh huong impact reverse lookup api code ref rbac',
+        badge: 'Tech',
+        icon: Network,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openImpact');
+        },
+      },
+      {
+        id: 'cmd-settings',
+        title: 'Cài đặt Workspace & Độ phủ Media',
+        subtitle: 'Cấu hình đường dẫn local VBot-iOS/Android và kiểm tra ảnh thiếu',
+        keywords: 'cai dat settings media coverage antigravity vscode cursor git path',
+        badge: 'Tech',
+        icon: Settings,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openSettings');
+        },
+      },
     );
   }
 
@@ -291,6 +320,14 @@ const allCommands = computed<PaletteCommand[]>(() => {
       keywords: 'xuat export tai markdown md tai lieu',
       icon: FileText,
       run: () => emit('exportMd'),
+    },
+    {
+      id: 'cmd-export-mermaid',
+      title: 'Copy sơ đồ dạng Mermaid',
+      subtitle: 'Sao chép cú pháp flowchart để dán vào PR / Wiki / Task',
+      keywords: 'xuat export copy mermaid mmd flowchart',
+      icon: FileCode2,
+      run: () => emit('exportMermaid'),
     },
   );
 

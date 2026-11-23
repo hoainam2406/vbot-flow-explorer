@@ -153,6 +153,15 @@
             "parityNote": "Android (MiniAppHelper.handleRequestCall) đã bỏ delay 200ms và đợi kết quả ChooseHotlineCallBottomSheet (trả success=true sau makeDirectCall hoặc USER_CANCELLED / NO_HOTLINE / ERROR); iOS (MiniAppService.onRequestCall) validate MISSING_PHONE_NUMBER rồi trả success=true ngay sau khi dispatch VPMAppService.makeCall. Ngoài ra cả Android lẫn iOS đều cố tình không đăng ký CallActionBridgeHelper.SUPPORTED_ACTIONS do UI in-call là Native."
           }
         ]
+      },
+      "parityAssessment": {
+        "verdict": "logic_diff",
+        "sameLogic": false,
+        "sameOutcome": false,
+        "needsFix": "consider",
+        "explanation": "Phần khung nền tảng (UIKit/WKWebView vs Activity/@JavascriptInterface) là đặc thù OS, NHƯNG có 3 điểm khác logic/hành vi bridge tổng quát: Android chưa prewarmMiniAppToken, có auto-logout 401/403 1 lần, và đợi BottomSheet ở make_call.",
+        "recommendation": "Cân nhắc rà soát 3 điểm bridge tổng quát (đặc biệt prewarm token và chuẩn callback make_call) xem có cần thống nhất hoàn toàn hay giữ đặc thù.",
+        "fixTarget": "both"
       }
     }
   },
@@ -199,6 +208,15 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/CallPipHelper.kt"
             ]
           }
+        },
+        "parityAssessment": {
+          "verdict": "os_impl_only",
+          "sameLogic": true,
+          "sameOutcome": true,
+          "needsFix": "no",
+          "explanation": "Khác biệt do bắt buộc dùng thư viện & cơ chế gọi nền của từng hệ điều hành: Apple yêu cầu PushKit + CallKit (TelephoneSDK PJSIP), còn Google Android dùng FCM + Foreground CallService + FullScreenIntent (vbotphonesdk PJSIP).",
+          "recommendation": "Không cần sửa — sự khác biệt này là bắt buộc về kiến trúc VoIP giữa iOS và Android, nghiệp vụ chung vẫn giống nhau.",
+          "fixTarget": "none"
         }
       }
     },
@@ -244,6 +262,15 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/SecurityManager.kt"
             ]
           }
+        },
+        "parityAssessment": {
+          "verdict": "os_impl_only",
+          "sameLogic": true,
+          "sameOutcome": true,
+          "needsFix": "no",
+          "explanation": "Ở cấp tổng quan module, cả 2 nền tảng đều dùng chung cơ chế RAM temporaryAccessToken 300s, dedup WebSocket SETUP_2FA 1000ms và khóa 429; chỉ khác cách chia Fragment/ViewController (các điểm lệch chi tiết đã tách riêng ở node con).",
+          "recommendation": "Không cần sửa phần kiến trúc module (theo dõi các điểm lỗi cụ thể ở các bước 2FA/OTP/Khóa 429 bên dưới).",
+          "fixTarget": "none"
         }
       }
     },
@@ -289,6 +316,15 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/ContactForwardFragment.kt"
             ]
           }
+        },
+        "parityAssessment": {
+          "verdict": "os_impl_only",
+          "sameLogic": true,
+          "sameOutcome": true,
+          "needsFix": "no",
+          "explanation": "Module Danh bạ dùng chung bộ bridge, SQLite uid và quyền nút \"+\" Admin; chỉ khác kỹ thuật chống lặp event user_contacts_updated (NotificationCenter userInfo trên iOS vs hash chữ ký LiveData trên Android).",
+          "recommendation": "Không cần sửa — đều chặn được vòng lặp cập nhật vô hạn ở WebView trên mỗi hệ điều hành.",
+          "fixTarget": "none"
         }
       }
     },
@@ -325,6 +361,15 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/VbUserStateHolder.kt"
             ]
           }
+        },
+        "parityAssessment": {
+          "verdict": "logic_diff",
+          "sameLogic": false,
+          "sameOutcome": false,
+          "needsFix": "consider",
+          "explanation": "Trên Mini App Hub, Android hỗ trợ lưu & kéo-thả sắp xếp Gợi ý/Yêu thích trong Realm FeatureView và khác iOS ở chỗ Giám sát Android thiếu emit monitor_call_state_changed.",
+          "recommendation": "Cân nhắc đối chiếu tính năng sắp xếp Gợi ý/Yêu thích trên iOS và hoàn thiện event Giám sát cho Android.",
+          "fixTarget": "both"
         }
       }
     },
@@ -361,6 +406,15 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/hotline/ListHotlineActivity.kt"
             ]
           }
+        },
+        "parityAssessment": {
+          "verdict": "action_needed",
+          "sameLogic": false,
+          "sameOutcome": false,
+          "needsFix": "yes",
+          "explanation": "Module Lịch sử cuộc gọi trên Android còn thiếu truyền theme_params và không phát theme_changed cho Mini App vb-ma-user-history-call, dẫn tới lệch theme Sáng/Tối so với phần còn lại của app Android.",
+          "recommendation": "Nên cập nhật CallHistoryFragment.kt truyền theme_params lúc init và emit theme_changed khi người dùng đổi NightMode.",
+          "fixTarget": "android"
         }
       }
     },
@@ -400,14 +454,35 @@
               "VBot-Android/vbotphonesdk/src/main/java/com/vpmedia/vbotphonesdk/telemetry/TelemetryManager.kt"
             ]
           }
+        },
+        "parityAssessment": {
+          "verdict": "logic_diff",
+          "sameLogic": false,
+          "sameOutcome": false,
+          "needsFix": "consider",
+          "explanation": "Nhiều tính năng hệ thống lệch nhau theo chiều ngược: Android có Dark Mode, xem gói cước, xóa từng thông báo và Push deep-link đầy đủ; trong khi iOS có màn Xóa tài khoản và Chọn kiểu gọi mặc định mà Android không có.",
+          "recommendation": "Rà soát danh sách chi tiết từng mục con (Dark Mode, SetTypeCall, DeleteAccount, Push routing) để lên backlog đồng bộ theo ưu tiên PO.",
+          "fixTarget": "both"
         }
       }
     }
   ],
   "branchEdges": [
-    { "id": "e-root-calling", "source": "vbot-app", "target": "mod-calling" },
-    { "id": "e-root-auth", "source": "vbot-app", "target": "mod-auth" },
-    { "id": "e-root-contacts", "source": "vbot-app", "target": "mod-contacts" },
+    {
+      "id": "e-root-calling",
+      "source": "vbot-app",
+      "target": "mod-calling"
+    },
+    {
+      "id": "e-root-auth",
+      "source": "vbot-app",
+      "target": "mod-auth"
+    },
+    {
+      "id": "e-root-contacts",
+      "source": "vbot-app",
+      "target": "mod-contacts"
+    },
     {
       "id": "e-root-miniapp",
       "source": "vbot-app",
@@ -424,7 +499,13 @@
       "target": "mod-account-system"
     }
   ],
-  "moduleFiles": ["calling", "auth", "contacts", "account", "miniapp-hub"],
+  "moduleFiles": [
+    "calling",
+    "auth",
+    "contacts",
+    "account",
+    "miniapp-hub"
+  ],
   "inlineSubtrees": {
     "mod-history-hotline": {
       "title": "Lịch sử cuộc gọi & Hotline",
@@ -536,9 +617,20 @@
                   "response": "{ [action]: Bool }"
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "action_needed",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "yes",
+              "explanation": "Việc tự phát ghi âm do Mini App lo đã giống nhau trên 2 OS, nhưng bước nhúng CallHistoryFragment trên Android bị thiếu theme_params và theme_changed gây lệch giao diện Dark Mode khi mở lịch sử.",
+              "recommendation": "Nên bổ sung theme_params + theme_changed cho CallHistoryFragment trên Android để đồng bộ chuẩn Host Bridge.",
+              "fixTarget": "android"
             }
           },
-          "relatedNodeIds": ["ma-history-call"]
+          "relatedNodeIds": [
+            "ma-history-call"
+          ]
         },
         {
           "id": "hotline-project",
@@ -576,7 +668,10 @@
               }
             }
           },
-          "relatedNodeIds": ["project-management", "prj-default-hotline"]
+          "relatedNodeIds": [
+            "project-management",
+            "prj-default-hotline"
+          ]
         }
       ],
       "edges": []

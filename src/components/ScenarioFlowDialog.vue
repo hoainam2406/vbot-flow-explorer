@@ -11,7 +11,9 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
   Columns3,
+  Copy,
   Download,
   ExternalLink,
   GitFork,
@@ -26,7 +28,11 @@ import {
 import { getVisibleMedia, FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useToast } from '../composables/useToast';
 import { svgToPngBlob } from '../core/diagramExport';
-import { downloadBlob, downloadTextFile, slugifyFilename } from '../core/downloadHelper';
+import { copyTextToClipboard, downloadBlob, downloadTextFile, slugifyFilename } from '../core/downloadHelper';
+import {
+  exportScenarioSequenceToMermaid,
+  exportScenarioTimelineToMermaid,
+} from '../core/mermaidExport';
 import {
   buildScenarioTimeline,
   renderScenarioActivitySvg,
@@ -46,6 +52,9 @@ const TechStepDetailPanel = __ENABLE_TECH_MODE__
   : null;
 const TechPlatformSwitcher = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./TechPlatformSwitcher.vue'))
+  : null;
+const TechQaChecklistPanel = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./ScenarioQaChecklistPanel.vue'))
   : null;
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -82,7 +91,7 @@ const visibleMedia = computed(() => {
   return getVisibleMedia(currentStep.value.node, explorer.audienceMode.value);
 });
 
-const viewTab = ref<'flowchart' | 'sequence'>('flowchart');
+const viewTab = ref<'flowchart' | 'sequence' | 'qa'>('flowchart');
 const activityDisplayMode = ref<'diagram' | 'cards'>('diagram');
 const sequenceModel = shallowRef<ScenarioSequenceModel | null>(null);
 const isPlaying = ref(false);
@@ -200,6 +209,26 @@ const exportPng = async () => {
   }
 };
 
+const copyMermaid = async () => {
+  if (!timeline.value) return;
+  let mmd: string;
+  if (
+    __ENABLE_TECH_MODE__ &&
+    isTechView.value &&
+    viewTab.value === 'sequence' &&
+    sequenceModel.value
+  ) {
+    mmd = exportScenarioSequenceToMermaid(sequenceModel.value);
+  } else {
+    mmd = exportScenarioTimelineToMermaid(timeline.value);
+  }
+  const ok = await copyTextToClipboard(mmd);
+  pushToast(
+    ok ? 'Đã sao chép sơ đồ Mermaid vào clipboard' : 'Không thể sao chép vào clipboard',
+    ok ? 'success' : 'error',
+  );
+};
+
 const onWindowKeyDown = (event: KeyboardEvent) => {
   if (!isOpen.value) return;
   const tag = (document.activeElement as HTMLElement | null)?.tagName;
@@ -310,6 +339,19 @@ onBeforeUnmount(() => {
                   <ListOrdered class="h-3.5 w-3.5" />
                   Luồng tuần tự
                 </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 transition"
+                  :class="
+                    viewTab === 'qa'
+                      ? 'bg-white text-emerald-700 shadow-xs dark:bg-emerald-500/20 dark:text-emerald-300'
+                      : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                  "
+                  @click="viewTab = 'qa'"
+                >
+                  <ClipboardCheck class="h-3.5 w-3.5" />
+                  QA Checklist
+                </button>
               </div>
               <span
                 v-else
@@ -333,7 +375,10 @@ onBeforeUnmount(() => {
           </div>
 
           <!-- Toolbar -->
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-5 py-2 dark:border-slate-800 dark:bg-slate-900/60">
+          <div
+            v-if="viewTab !== 'qa'"
+            class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/80 px-5 py-2 dark:border-slate-800 dark:bg-slate-900/60"
+          >
             <div class="flex flex-wrap items-center gap-2">
               <div class="inline-flex items-center rounded-lg border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-800">
                 <button
@@ -398,6 +443,14 @@ onBeforeUnmount(() => {
               <button
                 type="button"
                 class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                @click="copyMermaid"
+              >
+                <Copy class="h-3.5 w-3.5" />
+                Copy Mermaid
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 @click="exportSvg"
               >
                 <Download class="h-3.5 w-3.5" />
@@ -415,8 +468,23 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <!-- QA Checklist Full Panel -->
+          <div
+            v-if="TechQaChecklistPanel && isTechView && viewTab === 'qa'"
+            class="min-h-0 flex-1 overflow-hidden bg-slate-50/70 p-4 dark:bg-[#090d16]"
+          >
+            <component
+              :is="TechQaChecklistPanel"
+              :timeline="timeline"
+              :platform-mode="explorer.platformMode.value"
+            />
+          </div>
+
           <!-- 2-column Body -->
-          <div class="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div
+            v-else
+            class="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_420px]"
+          >
             <div class="min-h-0 overflow-y-auto bg-slate-50/70 p-3.5 sm:p-4 lg:border-r lg:border-slate-200 dark:bg-[#090d16] dark:lg:border-slate-800">
               <component
                 :is="TechSequenceDiagramView"

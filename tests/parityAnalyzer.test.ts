@@ -1,6 +1,7 @@
 // tests/parityAnalyzer.test.ts
 import { describe, expect, it } from 'vitest';
 import { loadMergedDataset } from '../plugins/flowDataPlugin';
+import { findNodeById } from '../src/core/graphEngine';
 import {
   exportParityReportToMarkdown,
   extractParityReport,
@@ -120,6 +121,19 @@ describe('parityAnalyzer', () => {
     expect(report.androidOnly).toBe(1);
     expect(report.behaviorDiff).toBe(2);
     expect(report.bridgeParity).toBe(1);
+    expect(
+      report.byVerdict.action_needed +
+        report.byVerdict.logic_diff +
+        report.byVerdict.os_impl_only +
+        report.byVerdict.synced,
+    ).toBe(report.total);
+    expect(
+      report.byFixTarget.ios +
+        report.byFixTarget.android +
+        report.byFixTarget.both +
+        report.byFixTarget.tbd +
+        report.byFixTarget.none,
+    ).toBe(report.total);
 
     expect(report.byBranch).toEqual([
       { branchId: 'root', branchLabel: 'VBot App', count: 1 },
@@ -130,10 +144,13 @@ describe('parityAnalyzer', () => {
     expect(iosItem?.primaryCategory).toBe('ios_only');
     expect(iosItem?.categories).toContain('behavior_diff');
     expect(iosItem?.androidSummary).toBeUndefined();
+    expect(iosItem?.assessment.verdict).toBe('logic_diff');
+    expect(iosItem?.assessment.isInferred).toBe(true);
 
     const andItem = report.items.find((i) => i.nodeId === 'and-step');
     expect(andItem?.primaryCategory).toBe('android_only');
     expect(andItem?.iosSummary).toBeUndefined();
+    expect(andItem?.assessment.needsFix).toBe('consider');
 
     const bridgeItem = report.items.find((i) => i.nodeId === 'bridge-step');
     expect(bridgeItem?.primaryCategory).toBe('bridge_parity');
@@ -146,6 +163,9 @@ describe('parityAnalyzer', () => {
     const md = exportParityReportToMarkdown(report, syntheticDataset.app);
     expect(md).toContain('# Báo cáo chênh lệch iOS ↔ Android — VBot Test (1.0)');
     expect(md).toContain('| Tổng số điểm ghi nhận | 4 |');
+    expect(md).toContain('| Chỉ khác OS / Ngôn ngữ (Cùng kết quả — Không cần sửa) |');
+    expect(md).toContain('- **Giải thích:**');
+    expect(md).toContain('- **Khuyến nghị:**');
     expect(md).toContain('Android callback trễ 200ms');
   });
 
@@ -153,15 +173,56 @@ describe('parityAnalyzer', () => {
     const realDataset = loadMergedDataset(process.cwd());
     const report = extractParityReport(realDataset);
 
-    expect(report.total).toBeGreaterThan(20);
+    expect(report.total).toBe(125);
     expect(report.iosOnly).toBeGreaterThan(0);
     expect(report.androidOnly).toBeGreaterThan(0);
     expect(report.behaviorDiff).toBeGreaterThan(0);
     expect(report.bridgeParity).toBeGreaterThan(0);
+    expect(
+      report.byVerdict.action_needed +
+        report.byVerdict.logic_diff +
+        report.byVerdict.os_impl_only +
+        report.byVerdict.synced,
+    ).toBe(report.total);
+    expect(
+      report.byFixTarget.ios +
+        report.byFixTarget.android +
+        report.byFixTarget.both +
+        report.byFixTarget.tbd +
+        report.byFixTarget.none,
+    ).toBe(report.total);
+
+    // 100% mục parity trong dataset thật phải được gắn parityAssessment + fixTarget tường minh
+    const inferredItems = report.items.filter((i) => i.assessment.isInferred);
+    expect(inferredItems).toEqual([]);
+    const missingFixTargets = report.items
+      .filter((i) => !findNodeById(realDataset, i.nodeId)?.techDetail?.parityAssessment?.fixTarget)
+      .map((i) => i.nodeId);
+    expect(missingFixTargets).toEqual([]);
 
     const byId = new Map(report.items.map((item) => [item.nodeId, item]));
 
     expect(byId.get('call-in-android-fsi')?.primaryCategory).toBe('android_only');
+    expect(byId.get('call-in-android-fsi')?.assessment.verdict).toBe('os_impl_only');
+    expect(byId.get('call-in-android-fsi')?.assessment.needsFix).toBe('no');
+    expect(byId.get('call-in-android-fsi')?.assessment.fixTarget).toBe('none');
+
+    expect(byId.get('call-in-pushkit')?.assessment.verdict).toBe('os_impl_only');
+    expect(byId.get('call-in-pushkit')?.assessment.sameLogic).toBe(true);
+    expect(byId.get('call-in-pushkit')?.assessment.sameOutcome).toBe(true);
+    expect(byId.get('call-in-pushkit')?.assessment.fixTarget).toBe('none');
+
+    expect(byId.get('ct-sqlite-uid')?.assessment.verdict).toBe('os_impl_only');
+    expect(byId.get('ma-autodial')?.assessment.verdict).toBe('synced');
+    expect(byId.get('call-out-preserve-name')?.assessment.verdict).toBe('logic_diff');
+    expect(byId.get('su-verify-otp')?.assessment.verdict).toBe('action_needed');
+    expect(byId.get('su-verify-otp')?.assessment.fixTarget).toBe('android');
+    expect(byId.get('mamon-state')?.assessment.verdict).toBe('action_needed');
+    expect(byId.get('mamon-state')?.assessment.fixTarget).toBe('android');
+    expect(byId.get('auth-ram-challenge')?.assessment.fixTarget).toBe('ios');
+    expect(byId.get('qr-code-hub')?.assessment.fixTarget).toBe('both');
+    expect(byId.get('call-tr-att-confirm')?.assessment.fixTarget).toBe('tbd');
+
     expect(byId.get('call-ctrl-sip-code')?.primaryCategory).toBe('android_only');
     expect(byId.get('call-in-raw-log')?.primaryCategory).toBe('ios_only');
     expect(byId.get('prj-call-type-ios')?.primaryCategory).toBe('ios_only');
@@ -171,9 +232,11 @@ describe('parityAnalyzer', () => {
     expect(loopGuard).toBeDefined();
     expect(loopGuard?.categories).toContain('bridge_parity');
     expect(loopGuard?.categories).toContain('behavior_diff');
+    expect(loopGuard?.assessment.verdict).toBe('os_impl_only');
 
     const md = exportParityReportToMarkdown(report, realDataset.app);
     expect(md).toContain('call-in-android-fsi');
     expect(md).toContain('mauc-loop-guard');
+    expect(md).toContain('Chỉ khác OS / Ngôn ngữ');
   });
 });

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, onMounted, ref } from 'vue';
-import { ChevronDown, Download, FileCode2, FileImage, FileText, Loader2 } from 'lucide-vue-next';
+import { ChevronDown, Copy, Download, FileCode2, FileImage, FileText, GitFork, Loader2 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useToast } from '../composables/useToast';
 import { computeDagreGraphLayout } from '../composables/useGraphLayout';
 import { exportFlowToPng, exportFlowToSvg, type DiagramExportOptions } from '../core/diagramExport';
-import { downloadTextFile, slugifyFilename } from '../core/downloadHelper';
+import { copyTextToClipboard, downloadTextFile, slugifyFilename } from '../core/downloadHelper';
 import { getNodeDisplayLabel } from '../core/graphEngine';
+import { exportFlowToMermaid } from '../core/mermaidExport';
 import { exportNodeOverviewMarkdown } from '../core/publicMarkdownExport';
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -141,6 +142,37 @@ const handleExportMarkdown = async () => {
   pushToast('Đã tải tài liệu Markdown (.md)', 'success');
 };
 
+const buildMermaidText = (): { mmd: string; filenameBase: string } => {
+  const { filenameBase } = buildDiagramOptions();
+  const activeEdgeIds = activeScenario.value
+    ? new Set(activeScenario.value.edgeIds)
+    : undefined;
+  const mmd = exportFlowToMermaid(explorer.visibleFlow.value, {
+    direction: explorer.layoutDirection.value,
+    mode: explorer.audienceMode.value,
+    activeEdgeIds,
+  });
+  return { mmd, filenameBase };
+};
+
+const handleCopyMermaid = async () => {
+  const { mmd } = buildMermaidText();
+  const ok = await copyTextToClipboard(mmd);
+  menuOpen.value = false;
+  if (ok) {
+    pushToast('Đã sao chép mã Mermaid vào clipboard', 'success');
+  } else {
+    pushToast('Không thể sao chép vào clipboard', 'error');
+  }
+};
+
+const handleDownloadMermaid = () => {
+  const { mmd, filenameBase } = buildMermaidText();
+  downloadTextFile(`${slugifyFilename(filenameBase)}.mmd`, mmd, 'text/plain;charset=utf-8');
+  menuOpen.value = false;
+  pushToast('Đã tải file Mermaid (.mmd)', 'success');
+};
+
 const onDocumentClick = (event: MouseEvent) => {
   if (!menuOpen.value) return;
   const target = event.target as Node | null;
@@ -233,6 +265,34 @@ onBeforeUnmount(() => {
           <div class="text-[10px] text-slate-500 dark:text-slate-400">
             {{ isTechExport ? 'Xuất node đang chọn hoặc nhánh đang xem' : 'Xuất mục đang chọn hoặc nhánh đang xem' }}
           </div>
+        </div>
+      </button>
+
+      <div class="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+      <button
+        type="button"
+        role="menuitem"
+        class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+        @click="handleCopyMermaid"
+      >
+        <Copy class="h-4 w-4 shrink-0 text-cyan-600 dark:text-cyan-400" />
+        <div>
+          <div class="font-semibold text-slate-900 dark:text-slate-100">Copy mã Mermaid</div>
+          <div class="text-[10px] text-slate-500 dark:text-slate-400">Dán vào GitLab / GitHub / Notion</div>
+        </div>
+      </button>
+
+      <button
+        type="button"
+        role="menuitem"
+        class="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-xs font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+        @click="handleDownloadMermaid"
+      >
+        <GitFork class="h-4 w-4 shrink-0 text-violet-600 dark:text-violet-400" />
+        <div>
+          <div class="font-semibold text-slate-900 dark:text-slate-100">Tải file Mermaid (.mmd)</div>
+          <div class="text-[10px] text-slate-500 dark:text-slate-400">Sơ đồ luồng văn bản theo khung nhìn</div>
         </div>
       </button>
 

@@ -534,4 +534,49 @@ describe('createFlowExplorerState', () => {
     state.setAudienceMode('overview');
     expect(state.recentNodes.value.map((n) => n.id)).toEqual(['b1-1']);
   });
+
+  it('updates reactive visibleFlow, selectedNode, and findNode when dataset override changes', () => {
+    const state = createFlowExplorerState(sampleDataset, true);
+    state.setAudienceMode('tech');
+    state.toggleExpand('b1');
+    state.selectNode('b1-1');
+    expect(state.selectedNode.value?.label).toBe('B1.1');
+
+    const overridden: MergedFlowDataset = {
+      ...sampleDataset,
+      subtreesByParentId: {
+        ...sampleDataset.subtreesByParentId,
+        b1: {
+          ...sampleDataset.subtreesByParentId.b1,
+          nodes: [
+            ...sampleDataset.subtreesByParentId.b1.nodes.map((n) =>
+              n.id === 'b1-1' ? { ...n, label: 'B1.1 Edited' } : n,
+            ),
+            {
+              id: 'b1-new',
+              label: 'New Step',
+              kind: 'process',
+              audience: 'all',
+              summary: { overview: 'Added in draft' },
+            },
+          ],
+          edges: [
+            ...sampleDataset.subtreesByParentId.b1.edges,
+            { id: 'e-b1-new', source: 'b1-1', target: 'b1-new' },
+          ],
+        },
+      },
+    };
+
+    state.setDatasetOverride(overridden);
+    expect(state.selectedNode.value?.label).toBe('B1.1 Edited');
+    expect(state.findNode('b1-new')?.label).toBe('New Step');
+    expect(state.visibleFlow.value.nodes.some((n) => n.id === 'b1-new')).toBe(true);
+    expect(state.dataset.rootNode.id).toBe('root');
+
+    state.setDatasetOverride(null);
+    expect(state.selectedNode.value?.label).toBe('B1.1');
+    expect(state.findNode('b1-new')).toBeUndefined();
+    expect(state.visibleFlow.value.nodes.some((n) => n.id === 'b1-new')).toBe(false);
+  });
 });

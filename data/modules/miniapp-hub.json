@@ -94,6 +94,15 @@
                   "response": "{ session_id, socket_url, isAdmin }"
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": true,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "Cùng tải danh mục động từ /api/apps/global với 7 adminOnlyApps & 15 memberAppPermissions giống hệt nhau, nhưng cách quản lý bridge mở đa Mini App khác nhau (MiniAppActiveTracker trên iOS vs activeBridge toàn cục trên Android).",
+              "recommendation": "Cân nhắc kiểm tra quyền áp dụng cho 7 Mini App mới trên Prod (nếu cần chặn Member) và nâng cấp per-appId tracker cho Android.",
+              "fixTarget": "android"
             }
           },
           "relatedNodeIds": [
@@ -145,6 +154,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/manager/VbDeviceInboundHolder.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "Khác API lấy trạng thái ban đầu (iOS gọi getStateBySip?sip=..., Android gọi getState?uid=...) và khác điểm mở UI (iOS chỉ mở ở Capsule trang Tính năng, Android mở thêm được từ MenuActivity).",
+              "recommendation": "Cần đối chiếu với Backend xác nhận nên thống nhất gọi theo uid hay sip, và xem iOS có cần mở khóa dòng trạng thái trong Menu Tài khoản/Dự án không.",
+              "fixTarget": "tbd"
             }
           }
         },
@@ -180,6 +198,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/SearchPhoneBookFragment.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "iOS qSearchViewController chỉ có 2 tab chạy được (tab Task bị rỗng) và luôn hiện trên mọi tab; Android có 6 tab đầy đủ + danh sách gợi ý khi rỗng nhưng lại ẩn icon kính lúp khi đang đứng ở Tab 3.",
+              "recommendation": "Cân nhắc với PO: mở rộng tab tìm kiếm cho iOS (hoặc bỏ tab stub qTaskVC) và thống nhất có hiện icon Tìm kiếm ở Tab 3 hay không.",
+              "fixTarget": "both"
             }
           },
           "relatedNodeIds": [
@@ -416,6 +443,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "App mới trên Prod vb-ma-blacklist hiện hành xử giống nhau trên cả 2 Host iOS & Android: chưa đưa vào danh sách lọc Admin/Member nên hiển thị cho mọi Member.",
+              "recommendation": "Không cần sửa lệch giữa 2 OS; chỉ cần bổ sung đồng thời ở cả 2 Host nếu PO yêu cầu giới hạn quyền riêng sau này.",
+              "fixTarget": "none"
             }
           }
         },
@@ -504,6 +540,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả Host iOS và Host Android đều giống nhau (chưa lọc vb-ma-ipcall-control trong adminOnlyApps hay memberAppPermissions, mặc định mở cho mọi Member).",
+              "recommendation": "Không cần sửa lệch OS; chỉ cập nhật đồng bộ cả 2 bên nếu sau này bổ sung rule phân quyền.",
+              "fixTarget": "none"
             }
           }
         },
@@ -562,6 +607,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/SearchRecentlyFragment.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "action_needed",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "yes",
+              "explanation": "Android có chế độ Dark Mode nhưng CallHistoryFragment lại không truyền theme_params khi khởi tạo MiniAppFragment và không emit theme_changed khi đổi giao diện, làm Mini App Lịch sử cuộc gọi có thể sai màu nền trên Android.",
+              "recommendation": "Nên bổ sung MiniAppThemeParams vào extraData của CallHistoryFragment và đăng ký đồng bộ theme_changed giống ContactForwardFragment/UserContactsFragment.",
+              "fixTarget": "android"
             }
           },
           "relatedNodeIds": [
@@ -733,6 +787,15 @@
                   "note": "Đẩy về Mini App khi gặp lỗi kết nối/chiến dịch."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS và Android đã đồng bộ đầy đủ contract 5 action + 2 event (ping 10s, cooldown 2s, reconnect 3 lần 2s/4s/8s và handleAutoDialError). Khác biệt chỉ là cách chia 1 hàm hay 5 hàm trong mã nguồn Host.",
+              "recommendation": "Không cần sửa — logic, protocol và kết quả trên 2 OS đã khớp 100%.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [
@@ -1006,6 +1069,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả Host iOS và Host Android đều xử lý giống nhau đối với vb-ma-group-member (chưa lọc trong memberAppPermissions nên hiển thị cho mọi Member).",
+              "recommendation": "Không cần sửa lệch OS; chỉ bổ sung đồng bộ 2 bên nếu cần khóa quyền theo role.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1063,6 +1135,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả 2 Host iOS và Android đều chưa lọc quyền riêng cho vb-ma-storage-management, hành vi hiển thị trên Mini App Hub hoàn toàn đồng nhất.",
+              "recommendation": "Không cần sửa lệch OS.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1092,6 +1173,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả 2 Host iOS và Android hiện xử lý giống nhau cho vb-ma-sdk-mobile-push (mở mặc định trên Hub cho mọi Member).",
+              "recommendation": "Không cần sửa lệch OS.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1121,6 +1211,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "action_needed",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "yes",
+              "explanation": "Android EnumPermissionMember khai báo đủ 6 quyền chi tiết gồm cả GIA_HAN, còn iOS VPMRoleAction chưa định nghĩa case GIA_HAN trong enum (chỉ khớp nếu rawValue string truyền thô), dễ sót khi kiểm tra phân quyền.",
+              "recommendation": "Nên bổ sung case GIA_HAN vào enum VPMRoleAction trên VBot-iOS để đảm bảo an toàn type và khớp 100% tập quyền với Android.",
+              "fixTarget": "ios"
             }
           }
         },
@@ -1206,6 +1305,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả 2 Host iOS và Android hiện xử lý giống nhau cho vb-ma-widget (mở mặc định cho mọi Member trên Hub).",
+              "recommendation": "Không cần sửa lệch OS.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1455,6 +1563,15 @@
                   "parityNote": "VbMABridge.sendMonitorCallStateChanged đã khai báo trong vb-ma-android-sdk nhưng CHƯA ĐƯỢC GỌI ở bất kỳ đâu trong VBot-Android (chỉ cập nhật VbMaCallStateManager phía native)."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "action_needed",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "yes",
+              "explanation": "Khóa slot & miễn quyền Micro khi listen đã khớp, NHƯNG có Parity Gap ở Bridge: Android SDK đã khai báo VbMABridge.sendMonitorCallStateChanged() nhưng VBot-Android chưa gọi khiến Mini App Giám sát không nhận được trạng thái SIP live.",
+              "recommendation": "Cần đấu nối gọi VbMABridge.sendMonitorCallStateChanged() theo vòng đời trạng thái cuộc gọi SIP trong VBot-Android.",
+              "fixTarget": "android"
             }
           },
           "relatedNodeIds": [
@@ -1562,6 +1679,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS và Android đều mở vb-ma-crm-v2 cho mọi Member và dùng chung tập quyền KHACH_HANG / CUOC_GOI trên server giống vb-ma-crm.",
+              "recommendation": "Không cần sửa — hành vi phân quyền trên 2 OS giống nhau.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [
@@ -1604,6 +1730,15 @@
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/SearchAllFullActivity.kt"
                 ]
               }
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "Android ẩn icon kính lúp ở Tab 3, tự chuyển tab tìm kiếm theo vị trí tab hiện tại và hiện gợi ý lịch sử gọi/chat khi ô search trống — tính năng phong phú hơn hẳn iOS.",
+              "recommendation": "Cân nhắc đồng bộ quy tắc hiện nút Search theo tab và cân nhắc thêm lịch sử gần nhất cho iOS.",
+              "fixTarget": "tbd"
             }
           }
         },
@@ -1891,6 +2026,15 @@
                   "parityNote": "Android CallHistoryFragment không truyền theme_params và không emit theme_changed."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "action_needed",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "yes",
+              "explanation": "CallHistoryFragment trên Android bỏ sót tham số theme_params trong extraData lúc khởi tạo MiniAppFragment, khác với chuẩn Host Init trên iOS và các tab Mini App khác trên chính Android.",
+              "recommendation": "Nên truyền đủ MiniAppThemeParams khi tạo MiniAppFragment trong CallHistoryFragment.kt để Mini App nhận đúng theme hiện tại.",
+              "fixTarget": "android"
             }
           }
         },
@@ -2050,6 +2194,15 @@
                   "exampleResponse": "{\n  \"request_id\": \"req_31\",\n  \"success\": true\n}"
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS (PlayerManager.swift là dead code 0 caller) và Android đều thống nhất để Mini App vb-ma-user-history-call tự phát audio ghi âm ngay trong WebView.",
+              "recommendation": "Không cần sửa — luồng phát ghi âm đã đồng bộ hoàn toàn.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [
@@ -2230,6 +2383,15 @@
                   "note": "Quay số / gọi trực tiếp 1 số đơn lẻ trong danh sách chiến dịch."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "logic_diff",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "consider",
+              "explanation": "Cả 2 đều hỗ trợ quay số lẻ từ Autodial bằng make_call, nhưng khi chưa có hotline mặc định Android đợi ChooseHotlineCallBottomSheet và trả USER_CANCELLED / NO_HOTLINE, khác luồng trả tức thì của iOS.",
+              "recommendation": "Cân nhắc đồng bộ cách xử lý thiếu hotline mặc định giữa 2 nền tảng cho luồng quay số lẻ.",
+              "fixTarget": "tbd"
             }
           }
         },
@@ -2720,6 +2882,15 @@
                   "note": "Nếu đang có cuộc gọi thường hoặc đã giữ 1 phiên giám sát khác, Host trả status = 'CALL_BUSY'; các lỗi đầu vào/quyền trả success: false kèm reason."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS và Android đều đã đồng bộ khóa slot nguyên tử và đều miễn xin quyền Micro khi action == \"listen\" (chế độ chỉ nghe). Android dùng thêm native PiP hệ thống.",
+              "recommendation": "Không cần sửa ở bước acquire slot & kiểm tra quyền Micro.",
+              "fixTarget": "none"
             }
           }
         },
@@ -2773,6 +2944,15 @@
                   "parityNote": "Trên Android hàm VbMABridge.sendMonitorCallStateChanged đã có sẵn trong SDK nhưng CHƯA được gọi từ VBot-Android."
                 }
               ]
+            },
+            "parityAssessment": {
+              "verdict": "action_needed",
+              "sameLogic": false,
+              "sameOutcome": false,
+              "needsFix": "yes",
+              "explanation": "Parity Gap rõ ràng: VbMABridge.sendMonitorCallStateChanged() mới có chữ ký trong vb-ma-android-sdk mà có 0 caller bên trong app VBot-Android, nên chỉ iOS đẩy được monitor_call_state_changed xuống Mini App.",
+              "recommendation": "Cần bổ sung caller gọi sendMonitorCallStateChanged() tại nơi cập nhật VbMaCallStateManager / PJSIP listener trên Android.",
+              "fixTarget": "android"
             }
           }
         }

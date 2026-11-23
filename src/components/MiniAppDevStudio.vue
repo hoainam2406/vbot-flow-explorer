@@ -5,21 +5,26 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Code2,
   Copy,
   Cpu,
   Download,
   ExternalLink,
   FileJson,
+  FlaskConical,
   HelpCircle,
   Link2,
   Play,
   PlayCircle,
+  PlaySquare,
   RotateCcw,
   Send,
   Sparkles,
   Terminal,
   Trash2,
+  Upload,
   X,
   Zap,
 } from 'lucide-vue-next';
@@ -33,6 +38,21 @@ import {
   FEATURED_STUDIO_APP_IDS,
   type ContractCommandSpec,
 } from '../core/miniAppContractBuilder';
+import {
+  evaluateLiveIframeWireLogs,
+  exportContractReportMarkdown,
+  runSimulationContractSuite,
+  type ContractTestSuiteReport,
+  type LiveComplianceCheck,
+} from '../core/miniAppContractTestRunner';
+import {
+  parseWireSessionJson,
+  replayWireSessionOnEngine,
+  restoreHostConfigFromSession,
+  serializeWireSession,
+  type WireReplaySummary,
+  type WireSessionFile,
+} from '../core/miniAppWireSession';
 import {
   buildHostPushEvent,
   buildLaunchHashString,
@@ -80,12 +100,19 @@ const emit = defineEmits<{
 
 const { pushToast } = useToast();
 
-type StudioViewMode = 'sandbox' | 'contract';
+type StudioViewMode = 'sandbox' | 'contract' | 'testsuite';
 type InspectorTab = 'response' | 'sdk' | 'native';
 
 const studioView = ref<StudioViewMode>('sandbox');
 const inspectorTab = ref<InspectorTab>('response');
 const bannerDismissed = ref<boolean>(loadStudioBannerDismissed());
+const suiteReport = ref<ContractTestSuiteReport | null>(null);
+const suiteFilter = ref<'all' | 'fail' | 'warning' | 'pass'>('all');
+const studioOpenedAt = ref<number>(Date.now());
+const replaySession = ref<WireSessionFile | null>(null);
+const replaySummary = ref<WireReplaySummary | null>(null);
+const replayStepIndex = ref(0);
+const importFileRef = ref<HTMLInputElement | null>(null);
 
 function resolveValidAppId(candidate?: string): string {
   if (candidate && MINI_APP_CATALOG.some((a) => a.id === candidate)) {
@@ -185,6 +212,10 @@ watch(
     wireLogs.value = [];
     lastResult.value = null;
     selectedLogId.value = null;
+    suiteReport.value = null;
+    replaySession.value = null;
+    replaySummary.value = null;
+    studioOpenedAt.value = Date.now();
     const nextContract = buildMiniAppContract(nextAppId);
     const preferred =
       nextContract.outgoingCommands.find((c) => c.isHostAction)?.method ??
@@ -327,6 +358,145 @@ const downloadAppMarkdown = () => {
   const md = exportAppIntegrationMarkdown(contract.value);
   downloadTextFile(`${selectedAppId.value}-integration-spec.md`, md);
   pushToast(`Đã tải ${selectedAppId.value}-integration-spec.md`, 'success');
+};
+
+const runContractTestSuite = () => {
+  suiteReport.value = runSimulationContractSuite(contract.value);
+  const r = suiteReport.value;
+  pushToast(
+    `Hoàn tất ${r.total} test: ${r.passed} Pass · ${r.warnings} Cảnh báo · ${r.failed} Fail`,
+    r.failed > 0 ? 'error' : 'success',
+  );
+};
+
+const openTestSuiteView = () => {
+  studioView.value = 'testsuite';
+  if (!suiteReport.value) {
+    suiteReport.value = runSimulationContractSuite(contract.value);
+  }
+};
+
+const liveComplianceChecks = computed<LiveComplianceCheck[]>(() =>
+  evaluateLiveIframeWireLogs(contract.value, wireLogs.value, {
+    elapsedMs: Date.now() - studioOpenedAt.value,
+  }),
+);
+
+const filteredSuiteResults = computed(() => {
+  if (!suiteReport.value) return [];
+  if (suiteFilter.value === 'all') return suiteReport.value.results;
+  return suiteReport.value.results.filter((r) => r.status === suiteFilter.value);
+});
+
+const downloadSuiteMarkdown = () => {
+  const report = suiteReport.value ?? runSimulationContractSuite(contract.value);
+  suiteReport.value = report;
+  const md = exportContractReportMarkdown(report, liveComplianceChecks.value);
+  downloadTextFile(`${selectedAppId.value}-bridge-test-report.md`, md);
+  pushToast('Đã tải biên bản kiểm thử Bridge (.md)', 'success');
+};
+
+const downloadSuiteJson = () => {
+  const report = suiteReport.value ?? runSimulationContractSuite(contract.value);
+  suiteReport.value = report;
+  downloadTextFile(
+    `${selectedAppId.value}-bridge-test-report.json`,
+    JSON.stringify(report, null, 2) + '\n',
+    'application/json;charset=utf-8',
+  );
+  pushToast('Đã tải kết quả kiểm thử (.json)', 'success');
+};
+
+const triggerQuickLiveFault = async (fault: SandboxFaultId) => {
+  studioView.value = 'sandbox';
+  hostConfig.value = { ...hostConfig.value, fault };
+  await nextTick();
+  phonePreviewRef.value?.switchPreviewMode('iframe', false);
+  pushToast(`Đã bật giả lập "${fault}" cho Iframe Live`, 'info');
+};
+
+const exportWireSessionJson = () => {
+  const json = serializeWireSession(
+    hostConfig.value,
+    wireLogs.value,
+    suiteReport.value
+      ? {
+          passed: suiteReport.value.passed,
+          warnings: suiteReport.value.warnings,
+          failed: suiteReport.value.failed,
+          total: suiteReport.value.total,
+        }
+      : undefined,
+  );
+  downloadTextFile(
+    `${selectedAppId.value}-wire-session.json`,
+    json,
+    'application/json;charset=utf-8',
+  );
+  pushToast('Đã xuất phiên Wire Log (.json, đã che token)', 'success');
+};
+
+const copyWireSessionJson = async () => {
+  const json = serializeWireSession(hostConfig.value, wireLogs.value);
+  await copyValue('wire-session', json, 'Wire Session JSON (đã che token)');
+};
+
+const triggerImportWireSession = () => {
+  importFileRef.value?.click();
+};
+
+const handleImportWireSession = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const parsed = parseWireSessionJson(raw);
+    if (!parsed.ok) {
+      pushToast(parsed.error, 'error');
+      return;
+    }
+    const session = parsed.session;
+    const validApp = resolveValidAppId(session.appId);
+    if (selectedAppId.value !== validApp) {
+      selectedAppId.value = validApp;
+      await nextTick();
+    }
+    hostConfig.value = restoreHostConfigFromSession(session);
+    hostState.value = createInitialHostState(hostConfig.value);
+    wireLogs.value = session.wireLogs;
+    replaySession.value = session;
+    replaySummary.value = null;
+    replayStepIndex.value = 0;
+    selectedLogId.value = session.wireLogs[0]?.id ?? null;
+    studioView.value = 'sandbox';
+    pushToast(`Đã nạp phiên Replay (${session.wireLogs.length} frames)`, 'success');
+  } catch {
+    pushToast('Không thể đọc file phiên JSON', 'error');
+  }
+};
+
+const runReplayEngineComparison = () => {
+  if (!replaySession.value) return;
+  replaySummary.value = replayWireSessionOnEngine(replaySession.value);
+  const r = replaySummary.value;
+  pushToast(
+    `Replay ${r.totalCommands} lệnh: khớp ${r.matchedCount}, khác ${r.changedCount}`,
+    r.changedCount > 0 ? 'info' : 'success',
+  );
+};
+
+const stepReplayFrame = (delta: number) => {
+  if (wireLogs.value.length === 0) return;
+  const next = Math.max(0, Math.min(wireLogs.value.length - 1, replayStepIndex.value + delta));
+  replayStepIndex.value = next;
+  selectedLogId.value = wireLogs.value[next]?.id ?? null;
+};
+
+const exitReplayMode = () => {
+  replaySession.value = null;
+  replaySummary.value = null;
 };
 
 const jumpToSandboxWithCommand = (method: string) => {
@@ -491,6 +661,19 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
           >
             <FileJson class="h-3.5 w-3.5" />
             Hợp đồng 2 Chiều &amp; Starter Code
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition"
+            :class="
+              studioView === 'testsuite'
+                ? 'bg-white text-emerald-700 shadow-2xs dark:bg-emerald-500/20 dark:text-emerald-300'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+            "
+            @click="openTestSuiteView"
+          >
+            <FlaskConical class="h-3.5 w-3.5" />
+            Kiểm thử chuẩn
           </button>
         </div>
       </div>
@@ -781,24 +964,106 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
         <div data-studio-tour="console-col" class="flex min-h-0 flex-col gap-3 xl:col-span-4">
           <!-- Wire Console Log -->
           <div class="flex min-h-[180px] flex-1 flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/75">
-            <div class="flex items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-800">
+            <div class="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-200 px-3 py-2 dark:border-slate-800">
               <span class="inline-flex items-center gap-1 text-xs font-bold text-slate-900 dark:text-slate-100">
-                Live Bridge Wire Console ({{ wireLogs.length }})
+                Live Wire ({{ wireLogs.length }})
                 <span
-                  title="Bấm bất kỳ dòng TX / NATIVE / RX nào để soi payload JSON, lấy code @vbotma/sdk và hàm Swift/Kotlin tương ứng ở khung dưới"
+                  title="Bấm bất kỳ dòng TX / NATIVE / RX nào để soi payload JSON, xuất/nhập phiên JSON hoặc replay"
                   class="inline-flex cursor-help items-center text-slate-400 hover:text-cyan-500 dark:text-slate-500 dark:hover:text-cyan-300"
                 >
                   <HelpCircle class="h-3 w-3" />
                 </span>
               </span>
-              <button
-                type="button"
-                class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-rose-500 dark:text-slate-400"
-                @click="wireLogs = []; selectedLogId = null"
-              >
-                <Trash2 class="h-3 w-3" />
-                Xoá log
-              </button>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <input
+                  ref="importFileRef"
+                  type="file"
+                  accept="application/json,.json"
+                  class="hidden"
+                  @change="handleImportWireSession"
+                />
+                <button
+                  type="button"
+                  title="Nhập file phiên Wire Log (.json) để xem & Replay"
+                  class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  @click="triggerImportWireSession"
+                >
+                  <Upload class="h-2.5 w-2.5" />
+                  Nhập
+                </button>
+                <button
+                  type="button"
+                  :disabled="wireLogs.length === 0"
+                  title="Copy phiên JSON (đã che token)"
+                  class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  @click="copyWireSessionJson"
+                >
+                  <Copy class="h-2.5 w-2.5" />
+                  Copy
+                </button>
+                <button
+                  type="button"
+                  :disabled="wireLogs.length === 0"
+                  title="Tải file phiên Wire Log (.json)"
+                  class="inline-flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  @click="exportWireSessionJson"
+                >
+                  <Download class="h-2.5 w-2.5" />
+                  .json
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-rose-500 dark:text-slate-400"
+                  @click="wireLogs = []; selectedLogId = null; exitReplayMode()"
+                >
+                  <Trash2 class="h-3 w-3" />
+                  Xoá
+                </button>
+              </div>
+            </div>
+
+            <div
+              v-if="replaySession"
+              class="flex flex-wrap items-center justify-between gap-1.5 border-b border-cyan-200 bg-cyan-50/80 px-3 py-1.5 text-[10.5px] text-cyan-950 dark:border-cyan-500/30 dark:bg-cyan-500/10 dark:text-cyan-200"
+            >
+              <div class="flex items-center gap-1.5">
+                <span class="font-bold">Replay: {{ replaySession.appId }}</span>
+                <button
+                  type="button"
+                  class="rounded border border-cyan-300 bg-white p-0.5 dark:border-cyan-500/40 dark:bg-slate-900"
+                  @click="stepReplayFrame(-1)"
+                >
+                  <ChevronLeft class="h-3 w-3" />
+                </button>
+                <span class="font-mono">{{ replayStepIndex + 1 }}/{{ wireLogs.length }}</span>
+                <button
+                  type="button"
+                  class="rounded border border-cyan-300 bg-white p-0.5 dark:border-cyan-500/40 dark:bg-slate-900"
+                  @click="stepReplayFrame(1)"
+                >
+                  <ChevronRight class="h-3 w-3" />
+                </button>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded bg-cyan-600 px-2 py-0.5 font-semibold text-white hover:bg-cyan-500"
+                  @click="runReplayEngineComparison"
+                >
+                  <PlaySquare class="h-3 w-3" />
+                  Chạy lại Engine
+                </button>
+                <span v-if="replaySummary" class="font-mono font-bold">
+                  Khớp {{ replaySummary.matchedCount }}/{{ replaySummary.totalCommands }}
+                </span>
+                <button
+                  type="button"
+                  class="rounded p-0.5 hover:bg-cyan-200/70 dark:hover:bg-cyan-500/30"
+                  @click="exitReplayMode"
+                >
+                  <X class="h-3 w-3" />
+                </button>
+              </div>
             </div>
 
             <div class="min-h-0 flex-1 space-y-1.5 overflow-y-auto p-2.5">
@@ -988,7 +1253,7 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
     </template>
 
     <!-- VIEW 2: 2-WAY CONTRACT SHEET & STARTER CODE -->
-    <div v-else class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+    <div v-else-if="studioView === 'contract'" class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
       <!-- App Contract Header Summary -->
       <div class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/80">
         <div class="flex flex-wrap items-start justify-between gap-2">
@@ -1195,6 +1460,200 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
           </div>
           <pre class="max-h-72 overflow-auto rounded-lg border border-slate-800 bg-[#0b1120] p-3 font-mono text-[11px] leading-relaxed text-cyan-100"><code>{{ starterCode }}</code></pre>
         </div>
+      </div>
+    </div>
+
+    <!-- VIEW 3: AUTOMATED BRIDGE CONTRACT TEST SUITE & LIVE COMPLIANCE -->
+    <div v-else class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/80">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">
+            Kiểm thử Chuẩn Hợp đồng Bridge — {{ contract.app.nameVi }} ({{ contract.app.id }})
+          </h3>
+          <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            Chạy tự động trên cả iOS &amp; Android (Lifecycle, 401 Refresh/Logout, RBAC 2 tầng, Bảo mật &amp; Custom Actions) + Đánh giá Live Iframe.
+          </p>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-emerald-500"
+            @click="runContractTestSuite"
+          >
+            <FlaskConical class="h-3.5 w-3.5" />
+            Chạy lại Test Suite
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            @click="downloadSuiteMarkdown"
+          >
+            <Download class="h-3.5 w-3.5" />
+            Biên bản (.md)
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            @click="downloadSuiteJson"
+          >
+            <FileJson class="h-3.5 w-3.5" />
+            Kết quả (.json)
+          </button>
+        </div>
+      </div>
+
+      <div v-if="suiteReport" class="space-y-3">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="rounded-full bg-emerald-100 px-3 py-1 font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+              Pass: {{ suiteReport.passed }}
+            </span>
+            <span class="rounded-full bg-amber-100 px-3 py-1 font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-300">
+              Cảnh báo Parity: {{ suiteReport.warnings }}
+            </span>
+            <span class="rounded-full bg-rose-100 px-3 py-1 font-bold text-rose-800 dark:bg-rose-500/20 dark:text-rose-300">
+              Fail: {{ suiteReport.failed }}
+            </span>
+            <span class="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+              ({{ suiteReport.durationMs }} ms)
+            </span>
+          </div>
+
+          <div class="flex flex-wrap gap-1">
+            <button
+              v-for="tab in [
+                { id: 'all', label: `Tất cả (${suiteReport.total})` },
+                { id: 'fail', label: `Fail (${suiteReport.failed})` },
+                { id: 'warning', label: `Parity (${suiteReport.warnings})` },
+                { id: 'pass', label: `Pass (${suiteReport.passed})` },
+              ] as const"
+              :key="tab.id"
+              type="button"
+              class="rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition"
+              :class="
+                suiteFilter === tab.id
+                  ? 'border-indigo-600 bg-indigo-600 text-white dark:border-cyan-500 dark:bg-cyan-500 dark:text-slate-950'
+                  : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+              "
+              @click="suiteFilter = tab.id"
+            >
+              {{ tab.label }}
+            </button>
+          </div>
+        </div>
+
+        <ul class="space-y-2">
+          <li
+            v-for="item in filteredSuiteResults"
+            :key="item.id"
+            class="rounded-xl border border-slate-200 bg-white p-3.5 text-xs dark:border-slate-800 dark:bg-slate-900/75"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span
+                  class="rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase"
+                  :class="
+                    item.platform === 'ios'
+                      ? 'bg-slate-800 text-white'
+                      : 'bg-emerald-600 text-white'
+                  "
+                >
+                  {{ item.platform }}
+                </span>
+                <code class="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-slate-800 dark:bg-slate-800 dark:text-cyan-300">
+                  {{ item.method }}
+                </code>
+                <span class="font-bold text-slate-900 dark:text-slate-100">
+                  {{ item.title }}
+                </span>
+              </div>
+
+              <span
+                class="rounded-full px-2 py-0.5 font-mono text-[10px] font-bold uppercase"
+                :class="
+                  item.status === 'pass'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                    : item.status === 'warning'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300'
+                      : 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+                "
+              >
+                {{ item.status === 'warning' ? 'PARITY WARN' : item.status }}
+              </span>
+            </div>
+
+            <div class="mt-2 grid gap-2 text-[11px] sm:grid-cols-2">
+              <div class="rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-600 dark:bg-slate-950/60 dark:text-slate-300">
+                <strong>Kỳ vọng:</strong> {{ item.expectedSummary }}
+              </div>
+              <div class="rounded-lg bg-slate-50 px-2.5 py-1.5 text-slate-600 dark:bg-slate-950/60 dark:text-slate-300">
+                <strong>Thực tế:</strong> {{ item.actualSummary }}
+              </div>
+            </div>
+            <p
+              v-if="item.parityNote"
+              class="mt-1.5 text-[11px] font-medium text-amber-800 dark:text-amber-300"
+            >
+              ⚠️ {{ item.parityNote }}
+            </p>
+          </li>
+        </ul>
+      </div>
+
+      <!-- Mode 2: Live Iframe Compliance -->
+      <div class="space-y-3 rounded-xl border border-cyan-200 bg-cyan-50/40 p-4 dark:border-cyan-500/30 dark:bg-cyan-500/10">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 class="text-xs font-bold text-cyan-950 uppercase dark:text-cyan-200">
+              Nghiệm thu Mini App thật đang nhúng qua Iframe (Live Wire Logs)
+            </h4>
+            <p class="mt-0.5 text-[11px] text-slate-600 dark:text-slate-300">
+              Tự động đối chiếu các lệnh Mini App localhost gửi lên trong tab Sandbox hiện tại ({{ wireLogs.length }} frames).
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              class="rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-900 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/20 dark:text-amber-200"
+              @click="triggerQuickLiveFault('token_401_refresh_fail')"
+            >
+              Thử Fault 401 Logout
+            </button>
+            <button
+              type="button"
+              class="rounded-lg border border-rose-300 bg-rose-50 px-2.5 py-1 text-[11px] font-semibold text-rose-900 hover:bg-rose-100 dark:border-rose-500/40 dark:bg-rose-500/20 dark:text-rose-200"
+              @click="triggerQuickLiveFault('rbac_denied')"
+            >
+              Thử Fault RBAC 403
+            </button>
+          </div>
+        </div>
+
+        <ul class="grid gap-2 sm:grid-cols-2">
+          <li
+            v-for="chk in liveComplianceChecks"
+            :key="chk.id"
+            class="rounded-lg border border-slate-200 bg-white p-3 text-xs dark:border-slate-800 dark:bg-slate-900/90"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-bold text-slate-900 dark:text-slate-100">{{ chk.title }}</span>
+              <span
+                class="rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase"
+                :class="
+                  chk.status === 'pass'
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                    : chk.status === 'warning'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-500/20 dark:text-amber-300'
+                      : 'bg-rose-100 text-rose-800 dark:bg-rose-500/20 dark:text-rose-300'
+                "
+              >
+                {{ chk.status }}
+              </span>
+            </div>
+            <p class="mt-1 text-[11px] text-slate-600 dark:text-slate-300">{{ chk.detail }}</p>
+          </li>
+        </ul>
       </div>
     </div>
   </div>

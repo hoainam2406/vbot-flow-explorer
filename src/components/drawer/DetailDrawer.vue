@@ -1,35 +1,51 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref } from 'vue';
+import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref, watch } from 'vue';
 import {
   ArrowLeft,
   Check,
+  ClipboardList,
   Download,
+  FilePenLine,
   FileText,
   Focus,
   GitBranch,
+  GitBranchPlus,
   Link2,
   RotateCcw,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
 import { useToast } from '../../composables/useToast';
+import type { DraftPatch } from '../../core/datasetDraftStore';
 import { copyTextToClipboard, downloadTextFile, slugifyFilename } from '../../core/downloadHelper';
+import type { ImpactAxis } from '../../core/impactAnalyzer';
 import {
   getNodeDisplayLabel,
   isVisibleForMode,
   isVisibleForPlatform,
 } from '../../core/graphEngine';
 import { exportNodeOverviewMarkdown } from '../../core/publicMarkdownExport';
-import type { NodeKind } from '../../data/schema';
+import type { VbotWorkTaskDraft } from '../../core/vbotWorkTemplates';
+import type { FlowNodeData, NodeKind } from '../../data/schema';
 import type { MiniAppBridgeLaunchContext } from '../MiniAppBridgeModal.vue';
 import MediaGallery from './MediaGallery.vue';
 
 const emit = defineEmits<{
   openMiniappBridge: [context: MiniAppBridgeLaunchContext];
+  openSettings: [];
+  openImpact: [context: { query: string; axis: ImpactAxis }];
+  applyDraftPatch: [patch: DraftPatch];
+  openAddFlow: [anchorNode: FlowNodeData];
 }>();
 
 const TechDetailPanel = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./TechDetailPanel.vue'))
+  : null;
+const NodeEditorPanel = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./NodeEditorPanel.vue'))
+  : null;
+const CreateVbotWorkTaskModal = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('../CreateVbotWorkTaskModal.vue'))
   : null;
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -143,6 +159,32 @@ const handleDownloadMd = async () => {
   pushToast('Đã tải tài liệu Markdown (.md)', 'success');
 };
 
+const workTaskModalOpen = ref(false);
+const workTaskDraft = ref<VbotWorkTaskDraft | null>(null);
+const workFallbackUrl = ref('');
+
+const handleOpenWorkTask = async () => {
+  const current = node.value;
+  if (!__ENABLE_TECH_MODE__ || !current) return;
+  const [{ buildNodeTaskDraft, resolveVbotWorkUrl }, { loadDevWorkspaceSettings }] =
+    await Promise.all([
+      import('../../core/vbotWorkTemplates'),
+      import('../../core/workspaceSettings'),
+    ]);
+  const fallback = resolveVbotWorkUrl(
+    loadDevWorkspaceSettings(),
+    explorer.dataset.app.repoConfig,
+    'general',
+  );
+  workFallbackUrl.value = fallback;
+  workTaskDraft.value = buildNodeTaskDraft(current, {
+    pageUrl: typeof window !== 'undefined' ? window.location.href : undefined,
+    platformMode: explorer.platformMode.value,
+    fallbackUrl: fallback,
+  });
+  workTaskModalOpen.value = true;
+};
+
 const handleCopyLink = async () => {
   if (typeof window === 'undefined') return;
   const ok = await copyTextToClipboard(window.location.href);
@@ -154,6 +196,48 @@ const handleCopyLink = async () => {
       copiedLink.value = false;
     }, 1500);
   }
+};
+
+const editing = ref(false);
+
+watch(
+  [() => node.value?.id, () => explorer.audienceMode.value],
+  () => {
+    editing.value = false;
+  },
+);
+
+const toggleEditMode = () => {
+  if (!__ENABLE_TECH_MODE__ || !isTechView.value) return;
+  editing.value = !editing.value;
+};
+
+const handleSaveNodeEdit = (updatedNode: FlowNodeData) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  emit('applyDraftPatch', {
+    id: `patch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: Date.now(),
+    kind: 'update_node',
+    nodeId: updatedNode.id,
+    node: updatedNode,
+  });
+  editing.value = false;
+};
+
+const handleDeleteNodeEdit = (nodeId: string) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  emit('applyDraftPatch', {
+    id: `patch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    timestamp: Date.now(),
+    kind: 'delete_node',
+    nodeId,
+  });
+  editing.value = false;
+};
+
+const handleOpenAddFlow = () => {
+  if (!__ENABLE_TECH_MODE__ || !node.value) return;
+  emit('openAddFlow', node.value);
 };
 
 onBeforeUnmount(() => {
@@ -278,47 +362,105 @@ onBeforeUnmount(() => {
           <Download class="h-3.5 w-3.5" />
           {{ isTechView ? 'Tải .md' : 'Tải tài liệu' }}
         </button>
+
+        <button
+          v-if="enableTechMode && isTechView"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
+          title="Tạo Task lên VBot Work (mặc định dự án vbot-mobile, Hoài Nam)"
+          @click="handleOpenWorkTask"
+        >
+          <ClipboardList class="h-3.5 w-3.5" />
+          Tạo Task VBot Work
+        </button>
+
+        <button
+          v-if="enableTechMode && isTechView"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition"
+          :class="
+            editing
+              ? 'border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200'
+              : 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/35 dark:bg-amber-500/12 dark:text-amber-300 dark:hover:bg-amber-500/20'
+          "
+          @click="toggleEditMode"
+        >
+          <FilePenLine class="h-3.5 w-3.5" />
+          {{ editing ? 'Đang sửa' : 'Chỉnh sửa' }}
+        </button>
+
+        <button
+          v-if="enableTechMode && isTechView"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100 dark:border-emerald-500/35 dark:bg-emerald-500/12 dark:text-emerald-300 dark:hover:bg-emerald-500/20"
+          @click="handleOpenAddFlow"
+        >
+          <GitBranchPlus class="h-3.5 w-3.5" />
+          + Thêm bước
+        </button>
       </div>
 
-      <MediaGallery
-        :media="node.media"
-        :audience-mode="explorer.audienceMode.value"
-      />
-
-      <section class="space-y-1.5">
-        <h3 class="text-xs font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          Mô tả tổng quan
-        </h3>
-        <p class="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-          {{ node.summary.overview }}
-        </p>
-      </section>
-
       <component
-        :is="TechDetailPanel"
-        v-if="TechDetailPanel && explorer.audienceMode.value === 'tech'"
+        :is="NodeEditorPanel"
+        v-if="NodeEditorPanel && enableTechMode && isTechView && editing"
         :node="node"
-        :platform-mode="explorer.platformMode.value"
-        @open-miniapp-bridge="emit('openMiniappBridge', $event)"
+        :can-delete="node.id !== explorer.dataset.rootNode.id"
+        @save="handleSaveNodeEdit"
+        @delete-node="handleDeleteNodeEdit"
+        @cancel="editing = false"
       />
 
-      <section v-if="relatedNodes.length > 0" class="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-        <h3 class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
-          <Link2 class="h-3.5 w-3.5" />
-          Liên kết chéo
-        </h3>
-        <div class="flex flex-wrap gap-2">
-          <button
-            v-for="target in relatedNodes"
-            :key="target.id"
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-300"
-            @click="explorer.jumpToNode(target.id)"
-          >
-            {{ getNodeDisplayLabel(target, explorer.audienceMode.value) }}
-          </button>
-        </div>
-      </section>
+      <template v-else>
+        <MediaGallery
+          :media="node.media"
+          :audience-mode="explorer.audienceMode.value"
+        />
+
+        <section class="space-y-1.5">
+          <h3 class="text-xs font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+            Mô tả tổng quan
+          </h3>
+          <p class="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+            {{ node.summary.overview }}
+          </p>
+        </section>
+
+        <component
+          :is="TechDetailPanel"
+          v-if="TechDetailPanel && explorer.audienceMode.value === 'tech'"
+          :node="node"
+          :platform-mode="explorer.platformMode.value"
+          @open-miniapp-bridge="emit('openMiniappBridge', $event)"
+          @open-settings="emit('openSettings')"
+          @open-impact="emit('openImpact', $event)"
+        />
+
+        <section v-if="relatedNodes.length > 0" class="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+          <h3 class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-slate-500 uppercase dark:text-slate-400">
+            <Link2 class="h-3.5 w-3.5" />
+            Liên kết chéo
+          </h3>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="target in relatedNodes"
+              :key="target.id"
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700 transition hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:border-cyan-500/40 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-300"
+              @click="explorer.jumpToNode(target.id)"
+            >
+              {{ getNodeDisplayLabel(target, explorer.audienceMode.value) }}
+            </button>
+          </div>
+        </section>
+      </template>
     </div>
+
+    <component
+      :is="CreateVbotWorkTaskModal"
+      v-if="CreateVbotWorkTaskModal && enableTechMode"
+      v-model:open="workTaskModalOpen"
+      :draft="workTaskDraft"
+      :fallback-url="workFallbackUrl"
+    />
   </aside>
 </template>

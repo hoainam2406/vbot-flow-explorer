@@ -430,4 +430,43 @@ describe('graphEngine', () => {
     expect(pubStr).not.toContain('DTMF');
     expect(pubStr).not.toContain('Nam-dev');
   });
+
+  it('strips node.meta, app.repoConfig, sourceFileMap, and existingMediaPaths in sanitizeForPublic', () => {
+    const manifestWithMeta: AppManifest = {
+      ...manifest,
+      app: {
+        ...manifest.app,
+        repoConfig: {
+          iosRepoWebUrl: 'https://github.com/org/VBot-iOS',
+          androidRepoWebUrl: 'https://github.com/org/VBot-Android',
+          vbotWorkBaseUrl: 'https://work.vpmedia.vn',
+        },
+      },
+      rootNode: {
+        ...manifest.rootNode,
+        meta: {
+          status: 'needs_review',
+          owner: 'Nam Hoang',
+          lastVerifiedAt: '2026-11-23',
+          workTaskUrl: 'https://work.vpmedia.vn/tasks/123',
+        },
+      },
+    };
+    const merged: ReturnType<typeof mergeDataset> = {
+      ...mergeDataset(manifestWithMeta, [modCall]),
+      existingMediaPaths: ['/media/app/vbot-home.webp'],
+      sourceFileMap: { subtrees: { 'mod-call': 'modules/calling.json' }, moduleFiles: ['calling'] },
+    };
+    const pub = sanitizeForPublic(merged);
+    expect(pub.app.repoConfig).toBeUndefined();
+    expect(pub.rootNode.meta).toBeUndefined();
+    expect(pub.existingMediaPaths).toBeUndefined();
+    expect(pub.sourceFileMap).toBeUndefined();
+    const pubJson = JSON.stringify(pub);
+    expect(pubJson).not.toContain('repoConfig');
+    expect(pubJson).not.toContain('workTaskUrl');
+    expect(pubJson).not.toContain('needs_review');
+    expect(pubJson).not.toContain('sourceFileMap');
+    expect(pubJson).not.toContain('existingMediaPaths');
+  });
 });

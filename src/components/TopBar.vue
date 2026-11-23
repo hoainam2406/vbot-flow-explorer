@@ -8,6 +8,7 @@ import {
   Moon,
   RotateCcw,
   Search,
+  Settings,
   Sun,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
@@ -16,11 +17,19 @@ import { useToast } from '../composables/useToast';
 import { getNodeDisplayLabel } from '../core/graphEngine';
 import ExportMenu from './ExportMenu.vue';
 
+const props = defineProps<{
+  miniAppStudioOpen?: boolean;
+  parityPageOpen?: boolean;
+}>();
+
 const emit = defineEmits<{
   openSearch: [];
   openParity: [];
+  closeParity: [];
   openGuide: [];
+  openSettings: [];
   openMiniappBridge: [];
+  closeMiniappBridge: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -43,6 +52,12 @@ const TechPlatformSwitcher = __ENABLE_TECH_MODE__
   : null;
 
 const onBreadcrumbClick = (nodeId: string) => {
+  if (props.miniAppStudioOpen) {
+    emit('closeMiniappBridge');
+  }
+  if (props.parityPageOpen) {
+    emit('closeParity');
+  }
   if (nodeId === explorer.dataset.rootNode.id) {
     explorer.setFocusRoot(null);
     explorer.selectedNodeId.value = null;
@@ -113,6 +128,7 @@ const onToggleTheme = () => {
       </button>
 
       <nav
+        v-if="!props.miniAppStudioOpen"
         aria-label="Breadcrumb"
         class="hidden min-w-0 items-center gap-1 overflow-x-auto text-xs text-slate-500 md:flex dark:text-slate-400"
       >
@@ -159,20 +175,47 @@ const onToggleTheme = () => {
         </kbd>
       </button>
 
-      <button
+      <div
         v-if="enableTechMode && explorer.audienceMode.value === 'tech'"
-        type="button"
-        class="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-800 transition hover:border-cyan-300 hover:bg-cyan-100 dark:border-cyan-500/35 dark:bg-cyan-500/12 dark:text-cyan-300 dark:hover:bg-cyan-500/20"
-        title="Trình chạy thử luồng giao tiếp, tra cứu hàm @vbotma/sdk và danh mục 41 Mini App"
-        @click="emit('openMiniappBridge')"
+        role="group"
+        aria-label="Chuyển đổi Workspace"
+        class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold dark:border-slate-700/80 dark:bg-slate-900"
       >
-        <ArrowLeftRight class="h-3.5 w-3.5" />
-        <span class="hidden sm:inline">Cầu nối Mini App</span>
-      </button>
+        <button
+          type="button"
+          class="rounded-md px-2.5 py-1 transition"
+          :class="
+            !props.miniAppStudioOpen && !props.parityPageOpen
+              ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white'
+              : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+          "
+          @click="
+            emit('closeMiniappBridge');
+            emit('closeParity');
+          "
+        >
+          Sơ đồ luồng
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition"
+          :class="
+            props.miniAppStudioOpen
+              ? 'bg-cyan-600 text-white shadow-xs dark:bg-cyan-500/25 dark:text-cyan-300 dark:ring-1 dark:ring-cyan-500/40'
+              : 'text-cyan-800 hover:text-cyan-950 dark:text-cyan-300 dark:hover:text-cyan-200'
+          "
+          title="Trình chạy thử luồng giao tiếp, tra cứu hàm @vbotma/sdk và danh mục 41 Mini App"
+          @click="emit('openMiniappBridge')"
+        >
+          <ArrowLeftRight class="h-3.5 w-3.5" />
+          <span class="hidden sm:inline">Mini App Studio</span>
+        </button>
+      </div>
 
       <component
         :is="TechPlatformSwitcher"
-        v-if="TechPlatformSwitcher && explorer.audienceMode.value === 'tech'"
+        v-if="TechPlatformSwitcher && explorer.audienceMode.value === 'tech' && !props.miniAppStudioOpen"
+        :parity-active="props.parityPageOpen"
         @open-parity="emit('openParity')"
       />
 
@@ -207,7 +250,7 @@ const onToggleTheme = () => {
         </button>
       </div>
 
-      <ExportMenu />
+      <ExportMenu v-if="!props.miniAppStudioOpen && !props.parityPageOpen" />
 
       <button
         type="button"
@@ -217,6 +260,17 @@ const onToggleTheme = () => {
       >
         <HelpCircle class="h-3.5 w-3.5 text-indigo-600 dark:text-cyan-400" />
         <span class="hidden lg:inline">Hướng dẫn</span>
+      </button>
+
+      <button
+        v-if="enableTechMode && explorer.audienceMode.value === 'tech'"
+        type="button"
+        title="Cài đặt đường dẫn code & Độ phủ Media"
+        aria-label="Cài đặt Workspace"
+        class="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+        @click="emit('openSettings')"
+      >
+        <Settings class="h-4 w-4" />
       </button>
 
       <button

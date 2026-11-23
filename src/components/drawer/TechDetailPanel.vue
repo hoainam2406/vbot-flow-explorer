@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
 import {
   AlertTriangle,
   ArrowLeftRight,
@@ -9,15 +9,34 @@ import {
   ChevronRight,
   Columns2,
   Copy,
+  ExternalLink,
+  FolderOpen,
+  Network,
   PlayCircle,
 } from 'lucide-vue-next';
 import type { MiniAppBridgeLaunchContext } from '../MiniAppBridgeModal.vue';
 import JsonCodeBlock from '../JsonCodeBlock.vue';
+import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
 import { useToast } from '../../composables/useToast';
 import { MINI_APP_CATALOG } from '../../data/miniAppBridgeCatalog';
 import { copyTextToClipboard } from '../../core/downloadHelper';
+import type { ImpactAxis } from '../../core/impactAnalyzer';
 import { detectCodeRefLanguage } from '../../core/jsonHighlight';
+import {
+  PARITY_FIX_TARGET_LABELS,
+  PARITY_NEEDS_FIX_LABELS,
+  PARITY_VERDICT_LABELS,
+  resolveParityAssessment,
+  type ParityCategory,
+} from '../../core/parityAnalyzer';
+import {
+  buildGitWebFileUrl,
+  buildIdeFileUrl,
+  isSafeExternalUrl,
+  loadDevWorkspaceSettings,
+} from '../../core/workspaceSettings';
 import type {
+  AppRepoConfig,
   BridgeMessage,
   FlowNodeData,
   MiniAppBridge,
@@ -28,10 +47,16 @@ import type {
 const props = defineProps<{
   node: FlowNodeData;
   platformMode: PlatformViewMode;
+  repoConfig?: AppRepoConfig;
+  techBranch?: string;
 }>();
+
+const explorer = inject(FLOW_EXPLORER_KEY, null);
 
 const emit = defineEmits<{
   openMiniappBridge: [context: MiniAppBridgeLaunchContext];
+  openSettings: [];
+  openImpact: [context: { query: string; axis: ImpactAxis }];
 }>();
 
 const AUTODIAL_NODE_SUBFLOW_MAP: Record<string, string> = {
@@ -95,6 +120,34 @@ const copyValue = async (key: string, value: string) => {
       copiedKey.value = null;
     }, 1500);
   }
+};
+
+const openCodeRefInIde = (codeRef: string) => {
+  const settings = loadDevWorkspaceSettings();
+  const ideUrl = buildIdeFileUrl(codeRef, settings);
+  if (!ideUrl) {
+    pushToast('Chưa cấu hình đường dẫn local VBot-iOS/Android — hãy nhập trong Cài đặt Dev', 'info');
+    emit('openSettings');
+    return;
+  }
+  window.open(ideUrl, '_self');
+};
+
+const getCodeRefGitUrl = (codeRef: string): string | null => {
+  const settings = loadDevWorkspaceSettings();
+  return buildGitWebFileUrl(
+    codeRef,
+    settings,
+    props.repoConfig ?? explorer?.dataset.app.repoConfig,
+    props.techBranch ?? explorer?.dataset.app.techBranch,
+  );
+};
+
+const nodeMetaStatusLabel: Record<string, string> = {
+  stable: 'Ổn định',
+  wip: 'Đang phát triển (WIP)',
+  needs_review: 'Cần đối soát lại',
+  deprecated: 'Đã cũ (Deprecated)',
 };
 
 onBeforeUnmount(() => {
@@ -161,6 +214,18 @@ const iosSummary = computed(() => {
 const androidSummary = computed(() => {
   if (singleOnlyPlatform.value === 'ios') return null;
   return props.node.techDetail?.byPlatform?.android?.summary ?? props.node.summary.tech ?? null;
+});
+
+const parityAssessment = computed(() => {
+  const categories: ParityCategory[] = [];
+  if (singleOnlyPlatform.value === 'ios') categories.push('ios_only');
+  else if (singleOnlyPlatform.value === 'android') categories.push('android_only');
+  if (props.node.techDetail?.platformDiffNote) categories.push('behavior_diff');
+  if (props.node.techDetail?.miniAppBridge?.messages.some((m) => m.parityNote)) {
+    categories.push('bridge_parity');
+  }
+  if (categories.length === 0) return null;
+  return resolveParityAssessment(props.node, categories);
 });
 
 const singleTechSummary = computed(() => {
@@ -386,6 +451,43 @@ const techSections = computed<RenderedTechSection[]>(() => {
 
 <template>
   <div
+    v-if="props.node.meta"
+    class="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-[11px] dark:border-slate-800 dark:bg-slate-900/70"
+  >
+    <span
+      v-if="props.node.meta.status"
+      class="rounded-md border px-2 py-0.5 font-semibold"
+      :class="
+        props.node.meta.status === 'wip'
+          ? 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-300'
+          : props.node.meta.status === 'needs_review'
+            ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300'
+            : props.node.meta.status === 'deprecated'
+              ? 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400'
+              : 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300'
+      "
+    >
+      {{ nodeMetaStatusLabel[props.node.meta.status] ?? props.node.meta.status }}
+    </span>
+    <span v-if="props.node.meta.owner" class="text-slate-600 dark:text-slate-300">
+      Phụ trách: <strong>{{ props.node.meta.owner }}</strong>
+    </span>
+    <span v-if="props.node.meta.lastVerifiedAt" class="font-mono text-slate-500 dark:text-slate-400">
+      Kiểm: {{ props.node.meta.lastVerifiedAt }}
+    </span>
+    <a
+      v-if="props.node.meta.workTaskUrl && isSafeExternalUrl(props.node.meta.workTaskUrl)"
+      :href="props.node.meta.workTaskUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="ml-auto inline-flex items-center gap-1 font-semibold text-indigo-600 hover:underline dark:text-cyan-300"
+    >
+      VBot Work
+      <ExternalLink class="h-3 w-3" />
+    </a>
+  </div>
+
+  <div
     v-if="isCompare"
     class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2 text-xs text-indigo-950 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-200"
   >
@@ -416,6 +518,49 @@ const techSections = computed<RenderedTechSection[]>(() => {
       </div>
       <p class="mt-0.5">{{ platformDiffNote }}</p>
     </div>
+  </div>
+
+  <div
+    v-if="parityAssessment"
+    class="space-y-2 rounded-xl border p-3 text-xs leading-relaxed"
+    :class="
+      parityAssessment.verdict === 'action_needed'
+        ? 'border-rose-200 bg-rose-50/80 text-rose-950 dark:border-rose-500/35 dark:bg-rose-500/10 dark:text-rose-100'
+        : parityAssessment.verdict === 'logic_diff'
+          ? 'border-amber-200 bg-amber-50/75 text-amber-950 dark:border-amber-500/35 dark:bg-amber-500/10 dark:text-amber-100'
+          : parityAssessment.verdict === 'os_impl_only'
+            ? 'border-sky-200 bg-sky-50/80 text-sky-950 dark:border-sky-500/35 dark:bg-sky-500/10 dark:text-sky-100'
+            : 'border-emerald-200 bg-emerald-50/80 text-emerald-950 dark:border-emerald-500/35 dark:bg-emerald-500/10 dark:text-emerald-100'
+    "
+  >
+    <div class="flex flex-wrap items-center justify-between gap-1.5">
+      <span class="text-[11px] font-bold tracking-wide uppercase">
+        {{ PARITY_VERDICT_LABELS[parityAssessment.verdict] }}
+      </span>
+      <span
+        class="rounded border px-2 py-0.5 text-[10px] font-bold"
+        :class="
+          parityAssessment.needsFix === 'yes'
+            ? 'border-rose-400 bg-rose-600 text-white'
+            : parityAssessment.needsFix === 'consider'
+              ? 'border-amber-400 bg-amber-500 text-white'
+              : 'border-emerald-300 bg-white/85 text-emerald-800 dark:border-emerald-500/40 dark:bg-slate-900 dark:text-emerald-300'
+        "
+      >
+        {{ PARITY_NEEDS_FIX_LABELS[parityAssessment.needsFix] }}
+      </span>
+    </div>
+    <div class="flex flex-wrap gap-2 text-[11px] font-semibold">
+      <span>Logic: {{ parityAssessment.sameLogic ? 'Giống nhau' : 'Khác nhau' }}</span>
+      <span>·</span>
+      <span>Kết quả: {{ parityAssessment.sameOutcome ? 'Giống nhau' : 'Khác nhau' }}</span>
+      <span>·</span>
+      <span>Bên cần sửa: {{ PARITY_FIX_TARGET_LABELS[parityAssessment.fixTarget] }}</span>
+    </div>
+    <p class="text-[11.5px] opacity-95">{{ parityAssessment.explanation }}</p>
+    <p class="border-t border-black/10 pt-1.5 text-[11px] font-medium dark:border-white/10">
+      <strong>Khuyến nghị:</strong> {{ parityAssessment.recommendation }}
+    </p>
   </div>
 
   <section
@@ -765,16 +910,46 @@ const techSections = computed<RenderedTechSection[]>(() => {
                 </span>
                 <span class="break-all">{{ item }}</span>
               </div>
-              <button
-                v-if="section.key === 'codeRefs'"
-                type="button"
-                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                :title="copiedKey === `ios-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
-                @click="copyValue(`ios-ref-${item}`, item)"
-              >
-                <Check v-if="copiedKey === `ios-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <Copy v-else class="h-3.5 w-3.5" />
-              </button>
+              <div class="flex shrink-0 items-center gap-0.5">
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+                  title="Mở file trong IDE (VS Code / Cursor)"
+                  @click="openCodeRefInIde(item)"
+                >
+                  <FolderOpen class="h-3.5 w-3.5" />
+                </button>
+                <a
+                  v-if="section.key === 'codeRefs' && getCodeRefGitUrl(item)"
+                  :href="getCodeRefGitUrl(item)!"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+                  title="Mở file trên Git Web"
+                >
+                  <ExternalLink class="h-3.5 w-3.5" />
+                </a>
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-cyan-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+                  title="Phân tích ảnh hưởng file này"
+                  @click="emit('openImpact', { query: item, axis: 'code_ref' })"
+                >
+                  <Network class="h-3.5 w-3.5" />
+                </button>
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
+                  class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  :title="copiedKey === `ios-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
+                  @click="copyValue(`ios-ref-${item}`, item)"
+                >
+                  <Check v-if="copiedKey === `ios-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <Copy v-else class="h-3.5 w-3.5" />
+                </button>
+              </div>
             </li>
           </ul>
           <p v-else class="rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs italic text-slate-400 dark:border-slate-700 dark:text-slate-500">
@@ -806,16 +981,46 @@ const techSections = computed<RenderedTechSection[]>(() => {
                 </span>
                 <span class="break-all">{{ item }}</span>
               </div>
-              <button
-                v-if="section.key === 'codeRefs'"
-                type="button"
-                class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                :title="copiedKey === `and-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
-                @click="copyValue(`and-ref-${item}`, item)"
-              >
-                <Check v-if="copiedKey === `and-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-                <Copy v-else class="h-3.5 w-3.5" />
-              </button>
+              <div class="flex shrink-0 items-center gap-0.5">
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-emerald-700 dark:hover:bg-slate-800 dark:hover:text-emerald-300"
+                  title="Mở file trong IDE (VS Code / Cursor)"
+                  @click="openCodeRefInIde(item)"
+                >
+                  <FolderOpen class="h-3.5 w-3.5" />
+                </button>
+                <a
+                  v-if="section.key === 'codeRefs' && getCodeRefGitUrl(item)"
+                  :href="getCodeRefGitUrl(item)!"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-emerald-700 dark:hover:bg-slate-800 dark:hover:text-emerald-300"
+                  title="Mở file trên Git Web"
+                >
+                  <ExternalLink class="h-3.5 w-3.5" />
+                </a>
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-cyan-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+                  title="Phân tích ảnh hưởng file này"
+                  @click="emit('openImpact', { query: item, axis: 'code_ref' })"
+                >
+                  <Network class="h-3.5 w-3.5" />
+                </button>
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
+                  class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                  :title="copiedKey === `and-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
+                  @click="copyValue(`and-ref-${item}`, item)"
+                >
+                  <Check v-if="copiedKey === `and-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <Copy v-else class="h-3.5 w-3.5" />
+                </button>
+              </div>
             </li>
           </ul>
           <p v-else class="rounded-lg border border-dashed border-emerald-200 px-3 py-2 text-xs italic text-slate-400 dark:border-emerald-500/30 dark:text-slate-500">
@@ -834,7 +1039,7 @@ const techSections = computed<RenderedTechSection[]>(() => {
             section.key === 'codeRefs' ? 'flex items-start justify-between gap-2' : '',
           ]"
         >
-          <div :class="section.key === 'codeRefs' ? 'min-w-0 flex-1' : ''">
+          <div :class="section.key === 'codeRefs' || section.key === 'apisOrEvents' ? 'min-w-0 flex-1' : ''">
             <span
               v-if="section.key === 'codeRefs' && detectCodeRefLanguage(item)"
               class="mr-1.5 inline-flex items-center rounded border px-1.5 py-0.2 font-sans text-[9.5px] font-bold"
@@ -844,16 +1049,58 @@ const techSections = computed<RenderedTechSection[]>(() => {
             </span>
             <span class="break-all">{{ item }}</span>
           </div>
-          <button
-            v-if="section.key === 'codeRefs'"
-            type="button"
-            class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            :title="copiedKey === `shared-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
-            @click="copyValue(`shared-ref-${item}`, item)"
+          <div
+            v-if="section.key === 'codeRefs' || section.key === 'apisOrEvents'"
+            class="flex shrink-0 items-center gap-0.5"
           >
-            <Check v-if="copiedKey === `shared-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-            <Copy v-else class="h-3.5 w-3.5" />
-          </button>
+            <button
+              v-if="section.key === 'apisOrEvents'"
+              type="button"
+              class="rounded p-1 text-slate-400 transition hover:bg-white hover:text-cyan-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+              title="Phân tích ảnh hưởng API / Sự kiện này"
+              @click="emit('openImpact', { query: item, axis: 'api_event' })"
+            >
+              <Network class="h-3.5 w-3.5" />
+            </button>
+            <button
+              v-if="section.key === 'codeRefs'"
+              type="button"
+              class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+              title="Mở file trong IDE (VS Code / Cursor)"
+              @click="openCodeRefInIde(item)"
+            >
+              <FolderOpen class="h-3.5 w-3.5" />
+            </button>
+            <a
+              v-if="section.key === 'codeRefs' && getCodeRefGitUrl(item)"
+              :href="getCodeRefGitUrl(item)!"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+              title="Mở file trên Git Web"
+            >
+              <ExternalLink class="h-3.5 w-3.5" />
+            </a>
+            <button
+              v-if="section.key === 'codeRefs'"
+              type="button"
+              class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-cyan-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+              title="Phân tích ảnh hưởng file này"
+              @click="emit('openImpact', { query: item, axis: 'code_ref' })"
+            >
+              <Network class="h-3.5 w-3.5" />
+            </button>
+            <button
+              v-if="section.key === 'codeRefs'"
+              type="button"
+              class="mt-0.5 shrink-0 rounded p-1 text-slate-400 transition hover:bg-white hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+              :title="copiedKey === `shared-ref-${item}` ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn file'"
+              @click="copyValue(`shared-ref-${item}`, item)"
+            >
+              <Check v-if="copiedKey === `shared-ref-${item}`" class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <Copy v-else class="h-3.5 w-3.5" />
+            </button>
+          </div>
         </li>
       </ul>
     </section>

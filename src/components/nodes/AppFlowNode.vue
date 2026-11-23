@@ -231,6 +231,16 @@ const lineageState = computed<'none' | 'hit' | 'dim'>(() => {
 
 const scenarioCardClass = computed(() => {
   if (!activeScenario.value) {
+    if (enableTechMode && isTechView.value && explorer.impactHighlight.value) {
+      return explorer.impactHighlight.value.nodeIds.has(props.data.id)
+        ? 'ring-2 ring-cyan-500 shadow-lg dark:ring-cyan-400'
+        : 'opacity-25 saturate-50';
+    }
+    if (enableTechMode && isTechView.value && explorer.canvasLensMatchedIds.value) {
+      return explorer.canvasLensMatchedIds.value.has(props.data.id)
+        ? 'ring-2 ring-indigo-500/80 shadow-md dark:ring-cyan-400/80'
+        : 'opacity-25 saturate-50';
+    }
     if (lineageState.value === 'dim') return 'opacity-35 saturate-50';
     if (lineageState.value === 'hit') {
       return 'border-indigo-400/80 dark:border-cyan-400/70 shadow-md';
@@ -245,6 +255,28 @@ const scenarioCardClass = computed(() => {
     return 'opacity-70 ring-1 ring-blue-300 dark:ring-cyan-500/40';
   }
   return 'ring-2 ring-blue-500 dark:ring-cyan-500/75 shadow-md';
+});
+
+const nodeMetaStatusBadge = computed<{ label: string; cls: string } | null>(() => {
+  if (!enableTechMode || !isTechView.value) return null;
+  const st = props.data.meta?.status;
+  if (!st || st === 'stable') return null;
+  if (st === 'wip') {
+    return {
+      label: 'WIP',
+      cls: 'border-sky-300 bg-sky-50 text-sky-800 dark:border-sky-500/40 dark:bg-sky-500/15 dark:text-sky-300',
+    };
+  }
+  if (st === 'needs_review') {
+    return {
+      label: 'Review',
+      cls: 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300',
+    };
+  }
+  return {
+    label: 'Cũ',
+    cls: 'border-slate-300 bg-slate-100 text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-400',
+  };
 });
 
 const onSelectNode = () => {
@@ -343,6 +375,14 @@ const onMouseLeave = () => {
           :class="platformBadge.cls"
         >
           {{ platformBadge.label }}
+        </span>
+
+        <span
+          v-if="enableTechMode && nodeMetaStatusBadge"
+          class="inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[10px] font-bold"
+          :class="nodeMetaStatusBadge.cls"
+        >
+          {{ nodeMetaStatusBadge.label }}
         </span>
       </div>
 

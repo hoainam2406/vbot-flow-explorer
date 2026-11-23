@@ -43,6 +43,12 @@ jobs:
       - name: Run unit tests
         run: pnpm test
 
+      - name: Audit Mini App & Media consistency
+        run: pnpm audit:sync --ci
+
+      - name: Build public bundle & verify OWASP A01 leak guard
+        run: pnpm build:public && pnpm check:public-leak
+
       - name: Configure GitHub Pages
         id: pages
         uses: actions/configure-pages@v5
