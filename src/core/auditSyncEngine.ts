@@ -79,6 +79,11 @@ export const PUBLIC_LEAK_FORBIDDEN_TOKENS: readonly string[] = [
   'DTMF',
   'logout_other_devices',
   'parityAssessment',
+  '__vbot-dev/host-fetch-proxy',
+  '__vbot-dev/git/inspect',
+  'GovernanceHubModal',
+  'QaReleaseHubPanel',
+  'FlowSnapshotDiffPanel',
 ];
 
 function collectAllNodesWithBranch(

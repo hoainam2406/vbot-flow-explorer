@@ -231,6 +231,18 @@ const lineageState = computed<'none' | 'hit' | 'dim'>(() => {
 
 const scenarioCardClass = computed(() => {
   if (!activeScenario.value) {
+    if (enableTechMode && isTechView.value && explorer.scenarioRecordingParentId.value) {
+      const idx = explorer.scenarioRecordingNodeIds.value.indexOf(props.data.id);
+      return idx >= 0
+        ? 'ring-2 ring-emerald-500 shadow-lg dark:ring-emerald-400'
+        : 'hover:ring-1 hover:ring-emerald-400';
+    }
+    if (enableTechMode && isTechView.value && explorer.snapshotDiffOverlay.value) {
+      const diffSt = explorer.snapshotDiffOverlay.value.nodeStatus[props.data.id];
+      if (diffSt === 'added') return 'ring-2 ring-emerald-500 shadow-lg dark:ring-emerald-400';
+      if (diffSt === 'modified') return 'ring-2 ring-amber-500 shadow-lg dark:ring-amber-400';
+      return 'opacity-55';
+    }
     if (enableTechMode && isTechView.value && explorer.impactHighlight.value) {
       return explorer.impactHighlight.value.nodeIds.has(props.data.id)
         ? 'ring-2 ring-cyan-500 shadow-lg dark:ring-cyan-400'
@@ -279,7 +291,22 @@ const nodeMetaStatusBadge = computed<{ label: string; cls: string } | null>(() =
   };
 });
 
+const recordingOrder = computed<number | null>(() => {
+  if (!enableTechMode || !isTechView.value || !explorer.scenarioRecordingParentId.value) return null;
+  const idx = explorer.scenarioRecordingNodeIds.value.indexOf(props.data.id);
+  return idx >= 0 ? idx + 1 : null;
+});
+
+const snapshotDiffBadge = computed<'added' | 'modified' | null>(() => {
+  if (!enableTechMode || !isTechView.value || !explorer.snapshotDiffOverlay.value) return null;
+  return explorer.snapshotDiffOverlay.value.nodeStatus[props.data.id] ?? null;
+});
+
 const onSelectNode = () => {
+  if (enableTechMode && isTechView.value && explorer.scenarioRecordingParentId.value) {
+    explorer.toggleScenarioRecordedNode(props.data.id);
+    return;
+  }
   explorer.selectNode(props.data.id);
 };
 
@@ -333,6 +360,21 @@ const onMouseLeave = () => {
       "
     >
       {{ scenarioStepNumber }}
+    </span>
+
+    <span
+      v-else-if="enableTechMode && recordingOrder !== null"
+      class="absolute -top-2.5 -left-2.5 z-10 flex h-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 font-mono text-[9.5px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-slate-900"
+    >
+      REC #{{ recordingOrder }}
+    </span>
+
+    <span
+      v-else-if="enableTechMode && snapshotDiffBadge"
+      class="absolute -top-2.5 -right-2 z-10 rounded-full px-1.5 py-0.5 font-mono text-[9px] font-bold text-white shadow-sm"
+      :class="snapshotDiffBadge === 'added' ? 'bg-emerald-600' : 'bg-amber-500'"
+    >
+      {{ snapshotDiffBadge === 'added' ? 'MỚI' : 'ĐÃ SỬA' }}
     </span>
 
     <Handle

@@ -28,7 +28,8 @@ import {
 import { getNodeDisplayLabel, isVisibleForMode, isVisibleForPlatform } from './core/graphEngine';
 import { exportNodeOverviewMarkdown } from './core/publicMarkdownExport';
 import type { DraftPatch } from './core/datasetDraftStore';
-import type { FlowNodeData } from './data/schema';
+import type { FlowEdgeData, FlowNodeData, Scenario } from './data/schema';
+import type { GovernanceHubTab } from './components/GovernanceHubModal.vue';
 
 const ParityMatrixModal = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./components/ParityMatrixModal.vue'))
@@ -48,6 +49,15 @@ const DraftBanner = __ENABLE_TECH_MODE__
 const AddFlowElementModal = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./components/AddFlowElementModal.vue'))
   : null;
+const GovernanceHubModal = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./components/GovernanceHubModal.vue'))
+  : null;
+const EdgeEditorPopover = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./components/EdgeEditorPopover.vue'))
+  : null;
+const ScenarioEditorModal = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./components/ScenarioEditorModal.vue'))
+  : null;
 
 const explorer = createFlowExplorerState(dataset, __ENABLE_TECH_MODE__);
 provide(FLOW_EXPLORER_KEY, explorer);
@@ -66,11 +76,22 @@ const localDevWritable = ref(false);
 const savingDraft = ref(false);
 const addFlowOpen = ref(false);
 const addFlowAnchor = ref<FlowNodeData | null>(null);
+const governanceOpen = ref(false);
+const governanceTab = ref<GovernanceHubTab>('qa');
+const edgeEditorOpen = ref(false);
+const editingEdge = ref<FlowEdgeData | null>(null);
+const editingEdgeParentId = ref('');
+const scenarioEditorOpen = ref(false);
+const editingScenario = ref<Scenario | null>(null);
+const editingScenarioParentId = ref<string | null>(null);
+const scenarioRecordedIds = ref<string[] | null>(null);
+const importPatchInputRef = ref<HTMLInputElement | null>(null);
 const hydrated = ref(false);
 
 const openMiniAppBridge = (context?: MiniAppBridgeLaunchContext) => {
   if (!__ENABLE_TECH_MODE__) return;
   parityOpen.value = false;
+  governanceOpen.value = false;
   miniAppLaunchContext.value = context ?? null;
   miniAppModalOpen.value = true;
 };
@@ -78,8 +99,18 @@ const openMiniAppBridge = (context?: MiniAppBridgeLaunchContext) => {
 const openParity = () => {
   if (!__ENABLE_TECH_MODE__) return;
   miniAppModalOpen.value = false;
+  governanceOpen.value = false;
   explorer.setAudienceMode('tech');
   parityOpen.value = true;
+};
+
+const openGovernance = (tab: GovernanceHubTab = 'qa') => {
+  if (!__ENABLE_TECH_MODE__) return;
+  miniAppModalOpen.value = false;
+  parityOpen.value = false;
+  explorer.setAudienceMode('tech');
+  governanceTab.value = tab;
+  governanceOpen.value = true;
 };
 
 const openSettings = () => {
@@ -97,6 +128,126 @@ const openAddFlow = (anchorNode: FlowNodeData) => {
   if (!__ENABLE_TECH_MODE__) return;
   addFlowAnchor.value = anchorNode;
   addFlowOpen.value = true;
+};
+
+const handleEditEdge = (edgeId: string) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  const branchEdge = explorer.dataset.branchEdges.find((e) => e.id === edgeId);
+  if (branchEdge) {
+    editingEdgeParentId.value = explorer.dataset.rootNode.id;
+    editingEdge.value = branchEdge;
+    edgeEditorOpen.value = true;
+    return;
+  }
+  for (const [parentId, sub] of Object.entries(explorer.dataset.subtreesByParentId)) {
+    const found = sub.edges.find((e) => e.id === edgeId);
+    if (found) {
+      editingEdgeParentId.value = parentId;
+      editingEdge.value = found;
+      edgeEditorOpen.value = true;
+      return;
+    }
+  }
+  pushToast('Cạnh tự nối tắt hoặc cạnh mở nhánh không thể sửa trực tiếp.', 'info');
+};
+
+const handleSaveEdge = async (payload: {
+  parentId: string;
+  edgeId: string;
+  edge: FlowEdgeData;
+}) => {
+  await handleApplyDraftPatch({
+    id: `patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: Date.now(),
+    kind: 'update_edge',
+    parentId: payload.parentId,
+    edgeId: payload.edgeId,
+    edge: payload.edge,
+  });
+};
+
+const handleDeleteEdge = async (payload: { parentId: string; edgeId: string }) => {
+  await handleApplyDraftPatch({
+    id: `patch-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: Date.now(),
+    kind: 'delete_edge',
+    parentId: payload.parentId,
+    edgeId: payload.edgeId,
+  });
+};
+
+const findScenarioOwnerParentId = (scenarioId: string): string | null => {
+  for (const [parentId, sub] of Object.entries(explorer.dataset.subtreesByParentId)) {
+    if (sub.scenarios?.some((s) => s.id === scenarioId)) return parentId;
+  }
+  return null;
+};
+
+const handleCreateScenario = () => {
+  if (!__ENABLE_TECH_MODE__) return;
+  editingScenario.value = null;
+  const preferredParent =
+    (explorer.focusRootId.value && explorer.dataset.subtreesByParentId[explorer.focusRootId.value]
+      ? explorer.focusRootId.value
+      : null) ??
+    [...explorer.expandedIds.value].find((id) => Boolean(explorer.dataset.subtreesByParentId[id])) ??
+    Object.keys(explorer.dataset.subtreesByParentId)[0] ??
+    null;
+  editingScenarioParentId.value = preferredParent;
+  scenarioRecordedIds.value = null;
+  scenarioEditorOpen.value = true;
+};
+
+const handleEditScenario = (sc: Scenario) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  editingScenario.value = sc;
+  editingScenarioParentId.value = findScenarioOwnerParentId(sc.id);
+  scenarioRecordedIds.value = null;
+  scenarioEditorOpen.value = true;
+};
+
+const handlePickScenarioOnCanvas = (payload: { parentId: string; nodeIds: string[] }) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  editingScenarioParentId.value = payload.parentId;
+  explorer.selectScenario(null);
+  explorer.startScenarioRecording(payload.parentId, payload.nodeIds);
+  pushToast('Click vào các node trên sơ đồ để thêm/bỏ bước kịch bản', 'info');
+};
+
+const handleFinishScenarioRecording = () => {
+  if (!__ENABLE_TECH_MODE__) return;
+  scenarioRecordedIds.value = [...explorer.scenarioRecordingNodeIds.value];
+  explorer.stopScenarioRecording();
+  scenarioEditorOpen.value = true;
+};
+
+const handleImportPatchFile = async (rawJson: string) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  const { parseImportedPatchesJson } = await import('./core/datasetDraftStore');
+  const parsed = parseImportedPatchesJson(rawJson);
+  if (!parsed.ok) {
+    pushToast(parsed.error, 'error');
+    return;
+  }
+  const merged = [...draftPatches.value, ...parsed.patches];
+  await syncDraftOverlay(merged, true);
+  if (draftPatches.value.length === merged.length) {
+    pushToast(`Đã nhập ${parsed.patches.length} thao tác từ Patch JSON`, 'success');
+  }
+};
+
+const triggerImportPatchFromPalette = () => {
+  if (!__ENABLE_TECH_MODE__) return;
+  importPatchInputRef.value?.click();
+};
+
+const onPalettePatchFileSelected = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  const text = await file.text();
+  await handleImportPatchFile(text);
 };
 
 const syncDraftOverlay = async (patches: DraftPatch[], persist = true) => {
@@ -335,6 +486,11 @@ const applyInitialState = () => {
       });
     } else if (viewParam === 'parity') {
       openParity();
+    } else if (viewParam === 'governance') {
+      const gtab = mergedParams.get('gtab');
+      const validGtab: GovernanceHubTab =
+        gtab === 'health' || gtab === 'diff' || gtab === 'qa' ? gtab : 'qa';
+      openGovernance(validGtab);
     }
   }
 
@@ -390,6 +546,9 @@ const syncToUrl = () => {
         }
       } else if (parityOpen.value) {
         params.set('view', 'parity');
+      } else if (governanceOpen.value) {
+        params.set('view', 'governance');
+        params.set('gtab', governanceTab.value);
       }
     }
   }
@@ -412,6 +571,9 @@ useKeyboardNavigation({
     settingsOpen.value ||
     impactOpen.value ||
     addFlowOpen.value ||
+    governanceOpen.value ||
+    edgeEditorOpen.value ||
+    scenarioEditorOpen.value ||
     miniAppModalOpen.value ||
     explorer.scenarioDialogOpen.value,
   onToggleSearch: () => {
@@ -458,6 +620,8 @@ watch(
     () => explorer.platformMode.value,
     () => miniAppModalOpen.value,
     () => parityOpen.value,
+    () => governanceOpen.value,
+    () => governanceTab.value,
   ],
   () => {
     if (!hydrated.value) return;
@@ -477,6 +641,7 @@ watch(
     if (mode !== 'tech') {
       if (miniAppModalOpen.value) miniAppModalOpen.value = false;
       if (parityOpen.value) parityOpen.value = false;
+      if (governanceOpen.value) governanceOpen.value = false;
     }
   },
 );
@@ -496,6 +661,7 @@ watch(
       v-if="!explorer.zenMode.value"
       :mini-app-studio-open="miniAppModalOpen"
       :parity-page-open="parityOpen"
+      :governance-page-open="governanceOpen"
       @open-search="searchOpen = true"
       @open-parity="openParity()"
       @close-parity="parityOpen = false"
@@ -503,12 +669,25 @@ watch(
       @open-settings="openSettings()"
       @open-miniapp-bridge="openMiniAppBridge()"
       @close-miniapp-bridge="miniAppModalOpen = false"
+      @open-governance="openGovernance()"
+      @close-governance="governanceOpen = false"
+    />
+
+    <input
+      v-if="GovernanceHubModal"
+      ref="importPatchInputRef"
+      type="file"
+      accept="application/json,.json"
+      class="hidden"
+      @change="onPalettePatchFileSelected"
     />
 
     <component
       :is="DraftBanner"
       v-if="DraftBanner && draftPatches.length > 0 && !explorer.zenMode.value"
       :patches="draftPatches"
+      :base-dataset="explorer.baseDataset"
+      :current-dataset="explorer.dataset"
       :local-dev-writable="localDevWritable"
       :saving="savingDraft"
       @undo="handleUndoDraftPatch"
@@ -516,14 +695,19 @@ watch(
       @save-local="handleSaveLocalDraft"
       @download-patch="handleDownloadDraftPatch"
       @copy-patch="handleCopyDraftPatch"
+      @import-patch-file="handleImportPatchFile"
     />
 
     <div class="relative flex min-h-0 flex-1 overflow-hidden">
-      <div v-show="!miniAppModalOpen && !parityOpen" class="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div v-show="!miniAppModalOpen && !parityOpen && !governanceOpen" class="relative flex min-h-0 min-w-0 flex-1 overflow-hidden">
         <FlowCanvas
           class="min-w-0 flex-1"
           @open-guide="guideOpen = true"
           @open-parity="openParity()"
+          @edit-edge="handleEditEdge"
+          @create-scenario="handleCreateScenario"
+          @edit-scenario="handleEditScenario"
+          @finish-scenario-recording="handleFinishScenarioRecording"
         />
 
         <Transition name="vbot-drawer">
@@ -566,6 +750,14 @@ watch(
         v-model:open="parityOpen"
         class="min-h-0 min-w-0 flex-1"
       />
+      <component
+        :is="GovernanceHubModal"
+        v-if="GovernanceHubModal && governanceOpen"
+        v-model:open="governanceOpen"
+        :initial-tab="governanceTab"
+        class="min-h-0 min-w-0 flex-1"
+        @update:tab="governanceTab = $event"
+      />
     </div>
 
     <SearchModal
@@ -575,6 +767,8 @@ watch(
       @open-settings="openSettings()"
       @open-impact="openImpact()"
       @open-miniapp-bridge="openMiniAppBridge()"
+      @open-governance="openGovernance($event)"
+      @import-patch="triggerImportPatchFromPalette"
       @export-png="handlePaletteExportPng"
       @export-svg="handlePaletteExportSvg"
       @export-md="handlePaletteExportMd"
@@ -592,6 +786,7 @@ watch(
       v-model:open="impactOpen"
       :initial-context="impactLaunchContext"
       @open-miniapp-bridge="openMiniAppBridge"
+      @open-settings="openSettings()"
     />
     <component
       :is="AddFlowElementModal"
@@ -599,6 +794,25 @@ watch(
       v-model:open="addFlowOpen"
       :anchor-node="addFlowAnchor"
       @submit-patch="handleApplyDraftPatch"
+    />
+    <component
+      :is="EdgeEditorPopover"
+      v-if="EdgeEditorPopover"
+      v-model:open="edgeEditorOpen"
+      :edge="editingEdge"
+      :parent-id="editingEdgeParentId"
+      @save="handleSaveEdge"
+      @delete-edge="handleDeleteEdge"
+    />
+    <component
+      :is="ScenarioEditorModal"
+      v-if="ScenarioEditorModal"
+      v-model:open="scenarioEditorOpen"
+      :initial-parent-id="editingScenarioParentId"
+      :initial-scenario="editingScenario"
+      :recorded-node-ids="scenarioRecordedIds"
+      @submit-patch="handleApplyDraftPatch"
+      @pick-on-canvas="handlePickScenarioOnCanvas"
     />
     <ToastHost />
   </div>

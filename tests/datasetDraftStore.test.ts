@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   applyDraftPatchesToDataset,
   applyDraftPatchesToRawFiles,
+  buildDraftDiffSummary,
+  parseImportedPatchesJson,
   summarizeDraftPatch,
   type DraftPatch,
 } from '../src/core/datasetDraftStore';
@@ -179,5 +181,54 @@ describe('datasetDraftStore', () => {
       [{ id: 'p-root', timestamp: 1, kind: 'delete_node', nodeId: 'vbot-app' }],
     );
     expect(badDelete.errors.length).toBeGreaterThan(0);
+  });
+
+  it('handles update_edge, upsert_scenario, delete_scenario, patch import and diff summary', () => {
+    const base = mergeDataset(sampleManifest, [sampleModA]);
+    const patches: DraftPatch[] = [
+      {
+        id: 'pe',
+        timestamp: 100,
+        kind: 'update_edge',
+        parentId: 'mod-a',
+        edgeId: 'e-a12',
+        edge: { id: 'e-a12', source: 'a-1', target: 'a-2', label: 'Điều kiện mới' },
+      },
+      {
+        id: 'ps1',
+        timestamp: 200,
+        kind: 'upsert_scenario',
+        parentId: 'mod-a',
+        scenario: {
+          id: 'sc-new',
+          name: 'Kịch bản mới',
+          nodeIds: ['a-1', 'a-2'],
+          edgeIds: ['e-a12'],
+        },
+      },
+    ];
+
+    const imported = parseImportedPatchesJson(JSON.stringify({ patches }));
+    expect(imported.ok).toBe(true);
+    if (imported.ok) {
+      expect(imported.patches).toHaveLength(2);
+    }
+    expect(parseImportedPatchesJson('{bad').ok).toBe(false);
+
+    const runtime = applyDraftPatchesToDataset(base, patches);
+    expect(runtime.errors).toEqual([]);
+    expect(runtime.dataset.subtreesByParentId['mod-a'].edges[0].label).toBe('Điều kiện mới');
+    expect(runtime.dataset.subtreesByParentId['mod-a'].scenarios).toHaveLength(2);
+
+    const diff = buildDraftDiffSummary(base, runtime.dataset);
+    expect(diff.edgesChanged).toBe(1);
+    expect(diff.scenariosChanged).toBe(1);
+
+    const raw = applyDraftPatchesToRawFiles(sampleManifest, { a: sampleModA }, [
+      ...patches,
+      { id: 'ps2', timestamp: 300, kind: 'delete_scenario', parentId: 'mod-a', scenarioId: 'sc-a' },
+    ]);
+    expect(raw.errors).toEqual([]);
+    expect(raw.modulesByFile.a.subtrees['mod-a'].scenarios?.map((s) => s.id)).toEqual(['sc-new']);
   });
 });

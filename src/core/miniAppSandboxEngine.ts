@@ -1,6 +1,11 @@
 // src/core/miniAppSandboxEngine.ts
 import { MINI_APP_CATALOG } from '../data/miniAppBridgeCatalog';
 import {
+  evaluateHostFetchMockRule,
+  matchHostFetchMockRule,
+  type HostFetchMockRule,
+} from './miniAppHostFetchMock';
+import {
   createRoleStateFromPreset,
   evaluateActionGrant,
   MINI_APP_PERMISSION_PROFILES,
@@ -504,6 +509,7 @@ export function executeHostCommand(
   rawPayload: Record<string, unknown>,
   config: SandboxHostConfig,
   state: SandboxHostState,
+  options?: { mockRules?: readonly HostFetchMockRule[] },
 ): SandboxCommandResult {
   const payload = rawPayload ?? {};
   const requestId =
@@ -878,6 +884,35 @@ export function executeHostCommand(
       if (config.fault === 'token_401_refresh_ok') {
         nextState.tokenRefreshCount += 1;
         nextState.currentAccessToken = `vbt_proxy_refreshed_${nextState.tokenRefreshCount}`;
+      }
+
+      const reqMethod =
+        typeof payload.method === 'string' && payload.method.trim()
+          ? payload.method.trim().toUpperCase()
+          : 'GET';
+      const matchedMock = options?.mockRules?.length
+        ? matchHostFetchMockRule(options.mockRules, reqMethod, targetUrl)
+        : null;
+      if (matchedMock) {
+        const evalRes = evaluateHostFetchMockRule(matchedMock);
+        return finalize(
+          evalRes.ok,
+          evalRes.ok ? (hadSpoofedAuth ? 'warning' : 'ok') : 'error',
+          'host_fetch_result',
+          {
+            success: evalRes.ok,
+            status: evalRes.status,
+            url: targetUrl,
+            method: reqMethod,
+            matched_mock_rule: matchedMock.name,
+            delay_ms: matchedMock.delayMs,
+            stripped_js_authorization: hadSpoofedAuth,
+            injected_native_bearer: true,
+            ...(evalRes.error ? { mock_json_warning: evalRes.error } : {}),
+            data: evalRes.data,
+          },
+          `Mock Rule "${matchedMock.name}" → HTTP ${evalRes.status}`,
+        );
       }
 
       return finalize(

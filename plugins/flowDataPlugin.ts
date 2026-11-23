@@ -10,6 +10,7 @@ import {
   DraftPatchSchema,
   type DraftPatch,
 } from '../src/core/datasetDraftStore';
+import { registerDevWorkspaceMiddleware } from './devWorkspaceMiddleware';
 import { validateDataset } from '../src/data/validateDataset';
 import type {
   AppManifest,
@@ -455,6 +456,12 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
             ok: true,
             writable: true,
             buildTarget,
+            capabilities: {
+              hostFetchProxy: true,
+              gitInspect: true,
+              mediaUpload: true,
+              gitSnapshot: true,
+            },
             vbotWork: {
               configured: Boolean(resolveVbotWorkAuthHeader(resolvedConfig.root)),
               projectName: DEFAULT_VBOT_WORK_PROJECT_NAME,
@@ -463,6 +470,15 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
             },
           }),
         );
+      });
+
+      registerDevWorkspaceMiddleware(server, resolvedConfig.root, () => {
+        const mod = server.moduleGraph.getModuleById(RESOLVED_VIRTUAL_ID);
+        if (mod) {
+          server.moduleGraph.invalidateModule(mod);
+        }
+        const merged = loadMergedDataset(resolvedConfig.root);
+        return collectExistingMediaPaths(resolvedConfig.root, merged);
       });
 
       server.middlewares.use('/__vbot-dev/vbot-work/create-task', (req, res, next) => {

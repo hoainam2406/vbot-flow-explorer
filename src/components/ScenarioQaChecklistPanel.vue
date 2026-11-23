@@ -24,6 +24,10 @@ import {
   type QaRunState,
   type QaTestCase,
 } from '../core/qaChecklistEngine';
+import {
+  ensureDefaultQaRelease,
+  syncScenarioRunToActiveRelease,
+} from '../core/qaReleaseHub';
 import type { ScenarioTimelineModel } from '../core/scenarioFlowEngine';
 import { buildQaBugTaskMarkdown } from '../core/vbotWorkTemplates';
 import type { PlatformViewMode } from '../data/schema';
@@ -37,6 +41,7 @@ const { pushToast } = useToast();
 const runState = ref<QaRunState>({});
 const statusFilter = ref<'all' | QaCaseStatus>('all');
 const copiedId = ref<string | null>(null);
+const activeReleaseName = ref('');
 
 const cases = computed(() =>
   buildQaTestCasesForScenario(props.timeline, props.platformMode),
@@ -49,7 +54,10 @@ const summary = computed(() =>
 watch(
   () => props.timeline.scenarioId,
   (id) => {
-    runState.value = loadQaRunState(id);
+    const { activeRelease } = ensureDefaultQaRelease();
+    activeReleaseName.value = activeRelease.name;
+    const relRun = activeRelease.runsByScenarioId[id];
+    runState.value = relRun && Object.keys(relRun).length > 0 ? relRun : loadQaRunState(id);
   },
   { immediate: true },
 );
@@ -66,6 +74,7 @@ const setStatus = (caseId: string, platform: 'ios' | 'android', status: QaCaseSt
   };
   runState.value = { ...runState.value, [caseId]: next };
   saveQaRunState(props.timeline.scenarioId, runState.value);
+  syncScenarioRunToActiveRelease(props.timeline.scenarioId, runState.value);
 };
 
 const setNote = (caseId: string, note: string) => {
@@ -77,6 +86,7 @@ const setNote = (caseId: string, note: string) => {
   };
   runState.value = { ...runState.value, [caseId]: next };
   saveQaRunState(props.timeline.scenarioId, runState.value);
+  syncScenarioRunToActiveRelease(props.timeline.scenarioId, runState.value);
 };
 
 const filteredCases = computed(() => {
@@ -92,6 +102,7 @@ const filteredCases = computed(() => {
 const resetAll = () => {
   clearQaRunState(props.timeline.scenarioId);
   runState.value = {};
+  syncScenarioRunToActiveRelease(props.timeline.scenarioId, {});
   pushToast('Đã xóa tiến độ QA của kịch bản này', 'info');
 };
 

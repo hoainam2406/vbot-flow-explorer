@@ -998,6 +998,16 @@ const PUSH_EVENTS_CATALOG: Record<string, ContractEventSpec> = {
     ],
     samplePayload: { source: 'server_refresh', total: 24 },
   },
+  toggle_actions_menu: {
+    eventName: 'toggle_actions_menu',
+    source: 'host_push',
+    title: 'Bật/Tắt menu thao tác danh bạ (+)',
+    summary: 'Host đẩy xuống khi người dùng chạm nút + trên thanh điều hướng native của Tab Danh bạ cá nhân.',
+    payloadSchema: [
+      { name: 'visible', type: 'boolean', required: false, description: 'Trạng thái mong muốn (nếu có)' },
+    ],
+    samplePayload: { visible: true },
+  },
   setup_2fa: {
     eventName: 'setup_2fa',
     source: 'host_push',
@@ -1108,6 +1118,7 @@ function resolveAppIncomingEvents(app: MiniAppCatalogEntry): ContractEventSpec[]
     names.add('monitor_call_state_changed');
   } else if (app.id === 'vb-ma-user-contact') {
     names.add('user_contacts_updated');
+    names.add('toggle_actions_menu');
   } else if (app.id === 'vb-ma-user-history-call') {
     names.add('filter_changed');
   } else if (app.id === 'vb-ma-2fa-setting') {

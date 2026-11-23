@@ -1,13 +1,21 @@
 <script setup lang="ts">
 import { computed, inject, onBeforeUnmount, ref, watch } from 'vue';
-import { ChevronLeft, ChevronRight, Pause, Play, Workflow, X } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, FilePenLine, Pause, Play, Plus, Workflow, X } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { buildScenarioTimeline } from '../core/scenarioFlowEngine';
+import type { Scenario } from '../data/schema';
+
+const emit = defineEmits<{
+  createScenario: [];
+  editScenario: [scenario: Scenario];
+}>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
 if (!explorer) {
   throw new Error('FLOW_EXPLORER_KEY must be provided');
 }
+const enableTechMode = __ENABLE_TECH_MODE__;
+const isTechView = computed(() => enableTechMode && explorer.audienceMode.value === 'tech');
 
 const isAutoPlaying = ref(false);
 let playTimer: ReturnType<typeof setInterval> | null = null;
@@ -94,7 +102,7 @@ const onStepMove = (delta: 1 | -1) => {
 
 <template>
   <div
-    v-if="scenarios.length > 0"
+    v-if="scenarios.length > 0 || (enableTechMode && isTechView)"
     class="pointer-events-auto absolute bottom-4 left-4 z-10 max-w-2xl rounded-2xl border border-slate-200/90 bg-white/92 p-3 shadow-lg backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/90"
   >
     <div class="mb-2 flex items-center justify-between gap-3">
@@ -102,15 +110,35 @@ const onStepMove = (delta: 1 | -1) => {
         <Play class="h-3.5 w-3.5 text-blue-600 dark:text-cyan-400" />
         <span>Chạy thử kịch bản ({{ scenarios.length }})</span>
       </div>
-      <button
-        v-if="activeScenario"
-        type="button"
-        class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-        @click="explorer.selectScenario(null)"
-      >
-        <X class="h-3 w-3" />
-        Tắt
-      </button>
+      <div class="flex items-center gap-1.5">
+        <button
+          v-if="enableTechMode && isTechView"
+          type="button"
+          class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300"
+          @click="emit('createScenario')"
+        >
+          <Plus class="h-3 w-3" />
+          Kịch bản
+        </button>
+        <button
+          v-if="enableTechMode && isTechView && activeScenario"
+          type="button"
+          class="inline-flex items-center gap-1 rounded-md border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800 transition hover:bg-amber-100 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-300"
+          @click="emit('editScenario', activeScenario)"
+        >
+          <FilePenLine class="h-3 w-3" />
+          Sửa
+        </button>
+        <button
+          v-if="activeScenario"
+          type="button"
+          class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          @click="explorer.selectScenario(null)"
+        >
+          <X class="h-3 w-3" />
+          Tắt
+        </button>
+      </div>
     </div>
 
     <div class="flex flex-wrap gap-1.5">

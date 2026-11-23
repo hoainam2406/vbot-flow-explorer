@@ -20,7 +20,7 @@ import {
 } from '../composables/useGraphLayout';
 import { useTheme } from '../composables/useTheme';
 import { buildScenarioTimeline } from '../core/scenarioFlowEngine';
-import type { NodeKind } from '../data/schema';
+import type { NodeKind, Scenario } from '../data/schema';
 import RoutedFlowEdge from './edges/RoutedFlowEdge.vue';
 import AppFlowNode from './nodes/AppFlowNode.vue';
 import CanvasFloatingDock from './CanvasFloatingDock.vue';
@@ -31,6 +31,10 @@ import TelemetryHud from './TelemetryHud.vue';
 const emit = defineEmits<{
   openGuide: [];
   openParity: [];
+  editEdge: [edgeId: string];
+  createScenario: [];
+  editScenario: [scenario: Scenario];
+  finishScenarioRecording: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -212,6 +216,11 @@ watch(
 const onPaneReady = () => {
   void runCameraFocus(0);
 };
+
+const onEdgeClick = ({ edge }: { edge: { id: string } }) => {
+  if (!__ENABLE_TECH_MODE__ || !isTechView.value) return;
+  emit('editEdge', edge.id);
+};
 </script>
 
 <template>
@@ -232,6 +241,7 @@ const onPaneReady = () => {
       class="h-full w-full"
       @pane-ready="onPaneReady"
       @pane-click="explorer.selectedNodeId.value = null"
+      @edge-click="onEdgeClick"
     >
       <Background :color="isDark ? '#1e293b' : '#cbd5e1'" :gap="22" :size="1.2" />
       <MiniMap
@@ -254,7 +264,24 @@ const onPaneReady = () => {
       <CanvasGuideOverlay @open-guide="emit('openGuide')" />
     </div>
 
-    <ScenarioBar v-if="!explorer.zenMode.value" />
+    <ScenarioBar
+      v-if="!explorer.zenMode.value"
+      @create-scenario="emit('createScenario')"
+      @edit-scenario="emit('editScenario', $event)"
+    />
+    <div
+      v-if="isTechView && explorer.scenarioRecordingParentId.value"
+      class="pointer-events-auto absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-3 rounded-full border border-emerald-400 bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-xl"
+    >
+      <span>Đang chọn bước cho kịch bản ({{ explorer.scenarioRecordingNodeIds.value.length }} bước) — click node trên sơ đồ</span>
+      <button
+        type="button"
+        class="rounded-full bg-white px-3 py-1 text-[11px] font-extrabold text-emerald-700 hover:bg-emerald-50"
+        @click="emit('finishScenarioRecording')"
+      >
+        Hoàn tất chọn bước
+      </button>
+    </div>
     <CanvasFloatingDock
       :zoom-percent="zoomPercent"
       @zoom-in="void zoomIn({ duration: 180 })"

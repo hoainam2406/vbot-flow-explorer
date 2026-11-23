@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
   AlertTriangle,
   ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUpRight,
   Check,
   ChevronLeft,
@@ -25,11 +26,13 @@ import {
   Terminal,
   Trash2,
   Upload,
+  Webhook,
   X,
   Zap,
 } from 'lucide-vue-next';
 import { useToast } from '../composables/useToast';
 import { copyTextToClipboard, downloadTextFile } from '../core/downloadHelper';
+import { buildMiniAppAiContextPrompt } from '../core/aiContextExport';
 import {
   buildCommandSdkSnippet,
   buildMiniAppContract,
@@ -38,6 +41,12 @@ import {
   FEATURED_STUDIO_APP_IDS,
   type ContractCommandSpec,
 } from '../core/miniAppContractBuilder';
+import {
+  callLocalHostFetchProxy,
+  loadHostFetchMockRules,
+  saveHostFetchMockRules,
+  type HostFetchMockRule,
+} from '../core/miniAppHostFetchMock';
 import {
   evaluateLiveIframeWireLogs,
   exportContractReportMarkdown,
@@ -83,7 +92,10 @@ import {
 } from '../data/miniAppPermissionMatrix';
 import type { PlatformViewMode } from '../data/schema';
 import JsonCodeBlock from './JsonCodeBlock.vue';
+import MiniAppContractExportPanel from './MiniAppContractExportPanel.vue';
+import MiniAppHostFetchMockPanel from './MiniAppHostFetchMockPanel.vue';
 import MiniAppPhonePreview from './MiniAppPhonePreview.vue';
+import MiniAppWireDiffPanel from './MiniAppWireDiffPanel.vue';
 
 const props = defineProps<{
   initialAppId?: string;
@@ -100,7 +112,7 @@ const emit = defineEmits<{
 
 const { pushToast } = useToast();
 
-type StudioViewMode = 'sandbox' | 'contract' | 'testsuite';
+type StudioViewMode = 'sandbox' | 'contract' | 'mockapi' | 'testsuite' | 'wirediff';
 type InspectorTab = 'response' | 'sdk' | 'native';
 
 const studioView = ref<StudioViewMode>('sandbox');
@@ -113,6 +125,10 @@ const replaySession = ref<WireSessionFile | null>(null);
 const replaySummary = ref<WireReplaySummary | null>(null);
 const replayStepIndex = ref(0);
 const importFileRef = ref<HTMLInputElement | null>(null);
+const mockRules = ref<HostFetchMockRule[]>([]);
+const proxyAvailable = ref(false);
+const proxyEnabled = ref(false);
+const allowedOriginsText = ref('https://api-dev.vbot.vn');
 
 function resolveValidAppId(candidate?: string): string {
   if (candidate && MINI_APP_CATALOG.some((a) => a.id === candidate)) {
@@ -137,6 +153,20 @@ const requestJsonText = ref<string>('{}');
 const phonePreviewRef = ref<InstanceType<typeof MiniAppPhonePreview> | null>(null);
 const copiedKey = ref<string | null>(null);
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+onMounted(async () => {
+  if (import.meta.env.DEV) {
+    try {
+      const resp = await fetch('/__vbot-dev/status');
+      if (resp.ok) {
+        const data = (await resp.json()) as { capabilities?: { hostFetchProxy?: boolean } };
+        proxyAvailable.value = Boolean(data.capabilities?.hostFetchProxy);
+      }
+    } catch {
+      proxyAvailable.value = false;
+    }
+  }
+});
 
 onBeforeUnmount(() => {
   if (copyResetTimer) clearTimeout(copyResetTimer);
@@ -216,6 +246,7 @@ watch(
     replaySession.value = null;
     replaySummary.value = null;
     studioOpenedAt.value = Date.now();
+    mockRules.value = loadHostFetchMockRules(nextAppId);
     const nextContract = buildMiniAppContract(nextAppId);
     const preferred =
       nextContract.outgoingCommands.find((c) => c.isHostAction)?.method ??
@@ -257,25 +288,83 @@ const applyHostResult = (res: SandboxCommandResult) => {
   }
 };
 
+const updateMockRules = (rules: HostFetchMockRule[]) => {
+  mockRules.value = saveHostFetchMockRules(selectedAppId.value, rules);
+};
+
+const executeCommandWithMocksAndProxy = async (
+  method: string,
+  payload: Record<string, unknown>,
+) => {
+  const res = executeHostCommand(method, payload, hostConfig.value, hostState.value, {
+    mockRules: mockRules.value,
+  });
+
+  if (
+    method === 'host_fetch' &&
+    !res.responsePayload.matched_mock_rule &&
+    proxyEnabled.value &&
+    proxyAvailable.value &&
+    hostConfig.value.fault === 'none' &&
+    typeof payload.url === 'string'
+  ) {
+    const origins = allowedOriginsText.value
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const proxied = await callLocalHostFetchProxy({
+      url: payload.url,
+      method: typeof payload.method === 'string' ? payload.method : 'GET',
+      headers:
+        payload.headers && typeof payload.headers === 'object'
+          ? (payload.headers as Record<string, string>)
+          : undefined,
+      body: payload.body,
+      allowedOrigins: origins,
+    });
+    if (proxied.ok) {
+      res.ok = proxied.status >= 200 && proxied.status < 400;
+      res.status = res.ok ? 'ok' : 'error';
+      res.responsePayload = {
+        success: res.ok,
+        status: proxied.status,
+        url: payload.url,
+        proxied_via_local_dev: true,
+        data: proxied.data,
+      };
+      const rxFrame = res.wireFrames[res.wireFrames.length - 1];
+      if (rxFrame) {
+        rxFrame.status = res.status;
+        rxFrame.payload = res.responsePayload;
+      }
+    } else {
+      pushToast(proxied.error, 'error');
+    }
+  }
+
+  const delayMs = Number(res.responsePayload.delay_ms ?? 0);
+  if (delayMs > 0) {
+    setTimeout(() => {
+      applyHostResult(res);
+    }, Math.min(delayMs, 10000));
+    return;
+  }
+
+  applyHostResult(res);
+};
+
 const runSelectedCommand = () => {
   if (!parsedRequest.value.valid) {
     pushToast('Payload JSON chưa hợp lệ', 'error');
     return;
   }
-  const res = executeHostCommand(
-    selectedMethod.value,
-    parsedRequest.value.value,
-    hostConfig.value,
-    hostState.value,
-  );
-  applyHostResult(res);
+  void executeCommandWithMocksAndProxy(selectedMethod.value, parsedRequest.value.value);
 };
 
 const runDirectCommand = (method: string, payload: Record<string, unknown>) => {
   selectCommand(method);
   requestJsonText.value = JSON.stringify(payload, null, 2);
-  const res = executeHostCommand(method, payload, hostConfig.value, hostState.value);
-  applyHostResult(res);
+  void executeCommandWithMocksAndProxy(method, payload);
 };
 
 const handleResolveHotline = (hotline: string | null) => {
@@ -666,6 +755,19 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
             type="button"
             class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition"
             :class="
+              studioView === 'mockapi'
+                ? 'bg-white text-amber-700 shadow-2xs dark:bg-amber-500/20 dark:text-amber-300'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+            "
+            @click="studioView = 'mockapi'"
+          >
+            <Webhook class="h-3.5 w-3.5" />
+            Mock API ({{ mockRules.filter((r) => r.enabled).length }})
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition"
+            :class="
               studioView === 'testsuite'
                 ? 'bg-white text-emerald-700 shadow-2xs dark:bg-emerald-500/20 dark:text-emerald-300'
                 : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
@@ -674,6 +776,19 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
           >
             <FlaskConical class="h-3.5 w-3.5" />
             Kiểm thử chuẩn
+          </button>
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-semibold transition"
+            :class="
+              studioView === 'wirediff'
+                ? 'bg-white text-violet-700 shadow-2xs dark:bg-violet-500/20 dark:text-violet-300'
+                : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+            "
+            @click="studioView = 'wirediff'"
+          >
+            <ArrowLeftRight class="h-3.5 w-3.5" />
+            So sánh Wire
           </button>
         </div>
       </div>
@@ -697,6 +812,15 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
           <Check v-if="copiedKey === 'starter-ts'" class="h-3 w-3 text-emerald-500" />
           <Code2 v-else class="h-3 w-3" />
           Copy Starter (.ts)
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-100 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-200"
+          @click="copyValue('ai-prompt', buildMiniAppAiContextPrompt(contract), 'AI Context Prompt')"
+        >
+          <Check v-if="copiedKey === 'ai-prompt'" class="h-3 w-3 text-emerald-500" />
+          <Sparkles v-else class="h-3 w-3" />
+          Copy AI Prompt
         </button>
         <button
           type="button"
@@ -1444,24 +1568,33 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
           <JsonCodeBlock :code="contract.manifestPermissionsJson" />
         </div>
 
-        <div class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/80">
-          <div class="mb-2 flex items-center justify-between">
-            <h4 class="text-xs font-bold text-slate-900 dark:text-slate-100">
-              Starter Code TypeScript (@vbotma/sdk)
-            </h4>
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-              @click="copyValue('starter-bottom', starterCode, 'Starter Code .ts')"
-            >
-              <Copy class="h-2.5 w-2.5" />
-              Copy TypeScript
-            </button>
-          </div>
-          <pre class="max-h-72 overflow-auto rounded-lg border border-slate-800 bg-[#0b1120] p-3 font-mono text-[11px] leading-relaxed text-cyan-100"><code>{{ starterCode }}</code></pre>
-        </div>
+        <MiniAppContractExportPanel
+          :contract="contract"
+          :starter-code="starterCode"
+        />
       </div>
     </div>
+
+    <!-- VIEW 2B: MOCK API RULES & STAGING PROXY -->
+    <MiniAppHostFetchMockPanel
+      v-else-if="studioView === 'mockapi'"
+      :app-id="selectedAppId"
+      :rules="mockRules"
+      :proxy-enabled="proxyEnabled"
+      :allowed-origins-text="allowedOriginsText"
+      :proxy-available="proxyAvailable"
+      @update:rules="updateMockRules"
+      @update:proxy-enabled="proxyEnabled = $event"
+      @update:allowed-origins-text="allowedOriginsText = $event"
+    />
+
+    <!-- VIEW 2C: WIRE LOG DIFF -->
+    <MiniAppWireDiffPanel
+      v-else-if="studioView === 'wirediff'"
+      :contract="contract"
+      :current-config="hostConfig"
+      :current-wire-logs="wireLogs"
+    />
 
     <!-- VIEW 3: AUTOMATED BRIDGE CONTRACT TEST SUITE & LIVE COMPLIANCE -->
     <div v-else class="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">

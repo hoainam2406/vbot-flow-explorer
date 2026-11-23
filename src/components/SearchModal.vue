@@ -20,8 +20,10 @@ import {
   Scale,
   Search,
   Settings,
+  ShieldCheck,
   Smartphone,
   Sun,
+  Upload,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
@@ -43,6 +45,8 @@ const emit = defineEmits<{
   openSettings: [];
   openImpact: [];
   openMiniappBridge: [];
+  openGovernance: [tab?: 'qa' | 'health' | 'diff'];
+  importPatch: [];
   exportPng: [];
   exportSvg: [];
   exportMd: [];
@@ -277,6 +281,54 @@ const allCommands = computed<PaletteCommand[]>(() => {
         run: () => {
           explorer.setAudienceMode('tech');
           emit('openSettings');
+        },
+      },
+      {
+        id: 'cmd-gov-qa',
+        title: 'Mở QA Release Hub',
+        subtitle: 'Theo dõi tiến độ Pass/Fail toàn app theo đợt phát hành & xuất Sign-off',
+        keywords: 'qa release hub checklist signoff test dot phat hanh',
+        badge: 'Tech',
+        icon: ShieldCheck,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'qa');
+        },
+      },
+      {
+        id: 'cmd-gov-health',
+        title: 'Mở Sức khỏe Dữ liệu & Upload Media',
+        subtitle: 'Xem độ phủ media, parity theo module và kéo-thả ảnh WebP',
+        keywords: 'suc khoe du lieu data health media upload webp',
+        badge: 'Tech',
+        icon: ShieldCheck,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'health');
+        },
+      },
+      {
+        id: 'cmd-gov-diff',
+        title: 'So sánh phiên bản luồng (Snapshot Diff)',
+        subtitle: 'Đối chiếu thay đổi luồng giữa 2 snapshot hoặc commit git',
+        keywords: 'snapshot diff changelog phien ban so sanh git',
+        badge: 'Tech',
+        icon: ShieldCheck,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'diff');
+        },
+      },
+      {
+        id: 'cmd-import-patch',
+        title: 'Nhập Draft Patch (.json)',
+        subtitle: 'Nạp file thay đổi nháp từ thành viên khác lên sơ đồ',
+        keywords: 'nhap import patch json draft ban nhap',
+        badge: 'Tech',
+        icon: Upload,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('importPatch');
         },
       },
     );

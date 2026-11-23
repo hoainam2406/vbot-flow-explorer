@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Check, Code2, Trash2, X } from 'lucide-vue-next';
+import { Check, Code2, Plus, Trash2, X } from 'lucide-vue-next';
 import {
   FlowNodeDataSchema,
   type AudienceScope,
+  type BridgeMessage,
   type FlowNodeData,
   type NodeKind,
   type NodeStatus,
+  type ParityFixTarget,
+  type ParityNeedsFix,
+  type ParityVerdict,
   type Platform,
 } from '../../data/schema';
 
@@ -21,7 +25,7 @@ const emit = defineEmits<{
   cancel: [];
 }>();
 
-const tab = ref<'basic' | 'tech' | 'raw'>('basic');
+const tab = ref<'basic' | 'tech' | 'parity' | 'raw'>('basic');
 const confirmDelete = ref(false);
 const validationError = ref<string | null>(null);
 
@@ -49,6 +53,34 @@ const iosCodeRefsText = ref('');
 const androidSummary = ref('');
 const androidCodeRefsText = ref('');
 const relatedIdsText = ref('');
+
+// Parity & Bridge fields
+const hasParityAssessment = ref(false);
+const parityVerdict = ref<ParityVerdict>('logic_diff');
+const paritySameLogic = ref(false);
+const paritySameOutcome = ref(false);
+const parityNeedsFix = ref<ParityNeedsFix>('consider');
+const parityFixTarget = ref<ParityFixTarget>('both');
+const parityExplanation = ref('');
+const parityRecommendation = ref('');
+
+const hasMiniAppBridge = ref(false);
+const bridgeMiniAppId = ref('');
+const bridgeEmbedMode = ref<'inline_tab' | 'modal' | 'sdk_global'>('modal');
+const bridgeTransportIos = ref('');
+const bridgeTransportAndroid = ref('');
+const bridgeMessages = ref<
+  Array<{
+    direction: 'host_init' | 'host_to_miniapp' | 'miniapp_to_host';
+    name: string;
+    hostFnIos: string;
+    hostFnAndroid: string;
+    miniAppFn: string;
+    payload: string;
+    response: string;
+    parityNote: string;
+  }>
+>([]);
 
 // Raw JSON tab
 const rawJsonText = ref('');
@@ -82,6 +114,34 @@ const syncFieldsFromNode = (n: FlowNodeData) => {
   androidSummary.value = n.techDetail?.byPlatform?.android?.summary ?? '';
   androidCodeRefsText.value = (n.techDetail?.byPlatform?.android?.codeRefs ?? []).join('\n');
   relatedIdsText.value = (n.relatedNodeIds ?? []).join(', ');
+
+  const pa = n.techDetail?.parityAssessment;
+  hasParityAssessment.value = Boolean(pa);
+  parityVerdict.value = pa?.verdict ?? 'logic_diff';
+  paritySameLogic.value = pa?.sameLogic ?? false;
+  paritySameOutcome.value = pa?.sameOutcome ?? false;
+  parityNeedsFix.value = pa?.needsFix ?? 'consider';
+  parityFixTarget.value = pa?.fixTarget ?? 'both';
+  parityExplanation.value = pa?.explanation ?? '';
+  parityRecommendation.value = pa?.recommendation ?? '';
+
+  const br = n.techDetail?.miniAppBridge;
+  hasMiniAppBridge.value = Boolean(br);
+  bridgeMiniAppId.value = br?.miniAppId ?? '';
+  bridgeEmbedMode.value = br?.embedMode ?? 'modal';
+  bridgeTransportIos.value = br?.transportByPlatform?.ios ?? br?.transport ?? '';
+  bridgeTransportAndroid.value = br?.transportByPlatform?.android ?? '';
+  bridgeMessages.value = (br?.messages ?? []).map((m) => ({
+    direction: m.direction,
+    name: m.name,
+    hostFnIos: m.hostFnByPlatform?.ios ?? m.hostFn ?? '',
+    hostFnAndroid: m.hostFnByPlatform?.android ?? '',
+    miniAppFn: m.miniAppFn ?? '',
+    payload: m.payload ?? '',
+    response: m.response ?? '',
+    parityNote: m.parityNote ?? '',
+  }));
+
   rawJsonText.value = JSON.stringify(n, null, 2);
   confirmDelete.value = false;
   validationError.value = null;
@@ -170,6 +230,64 @@ const buildNodeFromForm = (): FlowNodeData => {
   if (nextByPlatform) nextTechDetail.byPlatform = nextByPlatform;
   else delete nextTechDetail.byPlatform;
 
+  if (hasParityAssessment.value) {
+    nextTechDetail.parityAssessment = {
+      verdict: parityVerdict.value,
+      sameLogic: paritySameLogic.value,
+      sameOutcome: paritySameOutcome.value,
+      needsFix: parityNeedsFix.value,
+      fixTarget: parityFixTarget.value,
+      explanation: parityExplanation.value.trim(),
+      recommendation: parityRecommendation.value.trim(),
+    };
+  } else {
+    delete nextTechDetail.parityAssessment;
+  }
+
+  if (hasMiniAppBridge.value) {
+    const messages: BridgeMessage[] = bridgeMessages.value
+      .filter((m) => m.name.trim())
+      .map((m) => {
+        const hasPlatFns = m.hostFnIos.trim() || m.hostFnAndroid.trim();
+        return {
+          direction: m.direction,
+          name: m.name.trim(),
+          ...(m.hostFnIos.trim() ? { hostFn: m.hostFnIos.trim() } : {}),
+          ...(hasPlatFns
+            ? {
+                hostFnByPlatform: {
+                  ...(m.hostFnIos.trim() ? { ios: m.hostFnIos.trim() } : {}),
+                  ...(m.hostFnAndroid.trim() ? { android: m.hostFnAndroid.trim() } : {}),
+                },
+              }
+            : {}),
+          ...(m.miniAppFn.trim() ? { miniAppFn: m.miniAppFn.trim() } : {}),
+          ...(m.payload.trim() ? { payload: m.payload.trim() } : {}),
+          ...(m.response.trim() ? { response: m.response.trim() } : {}),
+          ...(m.parityNote.trim() ? { parityNote: m.parityNote.trim() } : {}),
+        };
+      });
+    const hasTransPlat = bridgeTransportIos.value.trim() || bridgeTransportAndroid.value.trim();
+    nextTechDetail.miniAppBridge = {
+      miniAppId: bridgeMiniAppId.value.trim(),
+      embedMode: bridgeEmbedMode.value,
+      ...(bridgeTransportIos.value.trim() ? { transport: bridgeTransportIos.value.trim() } : {}),
+      ...(hasTransPlat
+        ? {
+            transportByPlatform: {
+              ...(bridgeTransportIos.value.trim() ? { ios: bridgeTransportIos.value.trim() } : {}),
+              ...(bridgeTransportAndroid.value.trim()
+                ? { android: bridgeTransportAndroid.value.trim() }
+                : {}),
+            },
+          }
+        : {}),
+      messages,
+    };
+  } else {
+    delete nextTechDetail.miniAppBridge;
+  }
+
   const related = relatedIdsText.value
     .split(',')
     .map((s) => s.trim())
@@ -194,7 +312,7 @@ const buildNodeFromForm = (): FlowNodeData => {
   return result;
 };
 
-const switchTab = (nextTab: 'basic' | 'tech' | 'raw') => {
+const switchTab = (nextTab: 'basic' | 'tech' | 'parity' | 'raw') => {
   validationError.value = null;
   if (tab.value !== 'raw' && nextTab === 'raw') {
     rawJsonText.value = JSON.stringify(buildNodeFromForm(), null, 2);
@@ -209,6 +327,26 @@ const switchTab = (nextTab: 'basic' | 'tech' | 'raw') => {
     }
   }
   tab.value = nextTab;
+};
+
+const addBridgeMessageRow = () => {
+  bridgeMessages.value = [
+    ...bridgeMessages.value,
+    {
+      direction: 'miniapp_to_host',
+      name: '',
+      hostFnIos: '',
+      hostFnAndroid: '',
+      miniAppFn: '',
+      payload: '',
+      response: '',
+      parityNote: '',
+    },
+  ];
+};
+
+const removeBridgeMessageRow = (index: number) => {
+  bridgeMessages.value = bridgeMessages.value.filter((_, i) => i !== index);
 };
 
 const rawValidationError = computed(() => {
@@ -266,6 +404,14 @@ const handleSave = () => {
           @click="switchTab('tech')"
         >
           Kỹ thuật
+        </button>
+        <button
+          type="button"
+          class="rounded-md px-2.5 py-1 transition"
+          :class="tab === 'parity' ? 'bg-indigo-600 text-white' : 'text-slate-600 dark:text-slate-300'"
+          @click="switchTab('parity')"
+        >
+          Parity &amp; Bridge
         </button>
         <button
           type="button"
@@ -488,6 +634,207 @@ const handleSave = () => {
           class="w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-mono text-[11px] text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         />
       </label>
+    </div>
+
+    <div v-else-if="tab === 'parity'" class="space-y-3 text-xs">
+      <!-- Parity Assessment Section -->
+      <div class="space-y-2 rounded-lg border border-slate-200 bg-white p-2.5 dark:border-slate-700 dark:bg-slate-900">
+        <label class="flex items-center justify-between gap-2 font-bold text-slate-800 dark:text-slate-100">
+          <span>Đánh giá chênh lệch iOS ↔ Android (parityAssessment)</span>
+          <input v-model="hasParityAssessment" type="checkbox" class="rounded" />
+        </label>
+
+        <template v-if="hasParityAssessment">
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <label class="space-y-1">
+              <span class="font-semibold text-slate-600 dark:text-slate-300">Verdict</span>
+              <select
+                v-model="parityVerdict"
+                class="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+              >
+                <option value="action_needed">Lỗi / Gap (action_needed)</option>
+                <option value="logic_diff">Khác logic (logic_diff)</option>
+                <option value="os_impl_only">Chỉ khác OS (os_impl_only)</option>
+                <option value="synced">Đã khớp (synced)</option>
+              </select>
+            </label>
+            <label class="space-y-1">
+              <span class="font-semibold text-slate-600 dark:text-slate-300">Cần sửa?</span>
+              <select
+                v-model="parityNeedsFix"
+                class="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+              >
+                <option value="yes">Có (yes)</option>
+                <option value="consider">Cân nhắc (consider)</option>
+                <option value="no">Không (no)</option>
+              </select>
+            </label>
+            <label class="space-y-1">
+              <span class="font-semibold text-slate-600 dark:text-slate-300">Bên sửa</span>
+              <select
+                v-model="parityFixTarget"
+                class="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+              >
+                <option value="ios">iOS</option>
+                <option value="android">Android</option>
+                <option value="both">Cả 2 (both)</option>
+                <option value="tbd">Chờ chốt (tbd)</option>
+                <option value="none">Không (none)</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="flex flex-wrap gap-4">
+            <label class="inline-flex items-center gap-1.5">
+              <input v-model="paritySameLogic" type="checkbox" class="rounded" />
+              <span>Cùng logic</span>
+            </label>
+            <label class="inline-flex items-center gap-1.5">
+              <input v-model="paritySameOutcome" type="checkbox" class="rounded" />
+              <span>Cùng kết quả UX</span>
+            </label>
+          </div>
+
+          <label class="block space-y-1">
+            <span class="font-semibold text-slate-600 dark:text-slate-300">Giải thích *</span>
+            <textarea
+              v-model="parityExplanation"
+              rows="2"
+              class="w-full rounded border border-slate-200 px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+            />
+          </label>
+          <label class="block space-y-1">
+            <span class="font-semibold text-slate-600 dark:text-slate-300">Khuyến nghị xử lý *</span>
+            <textarea
+              v-model="parityRecommendation"
+              rows="2"
+              class="w-full rounded border border-slate-200 px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+            />
+          </label>
+        </template>
+      </div>
+
+      <!-- MiniApp Bridge Section -->
+      <div class="space-y-2 rounded-lg border border-cyan-200 bg-white p-2.5 dark:border-cyan-500/35 dark:bg-slate-900">
+        <label class="flex items-center justify-between gap-2 font-bold text-cyan-800 dark:text-cyan-300">
+          <span>Cầu nối Mini App (miniAppBridge)</span>
+          <input v-model="hasMiniAppBridge" type="checkbox" class="rounded" />
+        </label>
+
+        <template v-if="hasMiniAppBridge">
+          <div class="grid grid-cols-2 gap-2">
+            <label class="space-y-1">
+              <span class="font-semibold text-slate-600 dark:text-slate-300">Mini App ID *</span>
+              <input
+                v-model="bridgeMiniAppId"
+                type="text"
+                placeholder="vb-ma-..."
+                class="w-full rounded border border-slate-200 px-2 py-1 font-mono text-[11px] dark:border-slate-700 dark:bg-slate-950"
+              />
+            </label>
+            <label class="space-y-1">
+              <span class="font-semibold text-slate-600 dark:text-slate-300">Embed Mode</span>
+              <select
+                v-model="bridgeEmbedMode"
+                class="w-full rounded border border-slate-200 bg-white px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+              >
+                <option value="inline_tab">inline_tab</option>
+                <option value="modal">modal</option>
+                <option value="sdk_global">sdk_global</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <input
+              v-model="bridgeTransportIos"
+              type="text"
+              placeholder="Transport iOS"
+              class="w-full rounded border border-slate-200 px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+            />
+            <input
+              v-model="bridgeTransportAndroid"
+              type="text"
+              placeholder="Transport Android"
+              class="w-full rounded border border-slate-200 px-2 py-1 text-[11px] dark:border-slate-700 dark:bg-slate-950"
+            />
+          </div>
+
+          <div class="space-y-2 border-t border-slate-200 pt-2 dark:border-slate-800">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-slate-700 dark:text-slate-300">
+                Bridge Messages ({{ bridgeMessages.length }})
+              </span>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1 rounded border border-cyan-300 bg-cyan-50 px-2 py-0.5 text-[10.5px] font-semibold text-cyan-800 dark:border-cyan-500/40 dark:bg-cyan-500/15 dark:text-cyan-300"
+                @click="addBridgeMessageRow"
+              >
+                <Plus class="h-3 w-3" />
+                Thêm message
+              </button>
+            </div>
+
+            <div
+              v-for="(msg, idx) in bridgeMessages"
+              :key="idx"
+              class="space-y-1.5 rounded border border-slate-200 bg-slate-50/70 p-2 dark:border-slate-700 dark:bg-slate-950/60"
+            >
+              <div class="flex items-center gap-1.5">
+                <select
+                  v-model="msg.direction"
+                  class="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10.5px] dark:border-slate-700 dark:bg-slate-900"
+                >
+                  <option value="host_init">host_init</option>
+                  <option value="host_to_miniapp">host_to_miniapp</option>
+                  <option value="miniapp_to_host">miniapp_to_host</option>
+                </select>
+                <input
+                  v-model="msg.name"
+                  type="text"
+                  placeholder="Tên event / action *"
+                  class="min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-[10.5px] dark:border-slate-700 dark:bg-slate-900"
+                />
+                <button
+                  type="button"
+                  class="rounded p-1 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15"
+                  @click="removeBridgeMessageRow(idx)"
+                >
+                  <Trash2 class="h-3 w-3" />
+                </button>
+              </div>
+              <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                <input
+                  v-model="msg.hostFnIos"
+                  type="text"
+                  placeholder="Host Fn iOS"
+                  class="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-[10px] dark:border-slate-700 dark:bg-slate-900"
+                />
+                <input
+                  v-model="msg.hostFnAndroid"
+                  type="text"
+                  placeholder="Host Fn Android"
+                  class="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-[10px] dark:border-slate-700 dark:bg-slate-900"
+                />
+              </div>
+              <div class="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                <input
+                  v-model="msg.miniAppFn"
+                  type="text"
+                  placeholder="Mini App SDK Fn"
+                  class="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-[10px] dark:border-slate-700 dark:bg-slate-900"
+                />
+                <input
+                  v-model="msg.parityNote"
+                  type="text"
+                  placeholder="Parity note (nếu có)"
+                  class="rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] dark:border-slate-700 dark:bg-slate-900"
+                />
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
     </div>
 
     <div v-else class="space-y-2">

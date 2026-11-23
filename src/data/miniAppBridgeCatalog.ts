@@ -2630,6 +2630,19 @@ console.log('Admin?', isAdmin(), 'Embed param:', startParam);`,
     androidHandler: 'UserContactMiniAppBridgeHelper (lọc trùng computeContactsSignature())',
     usedByApps: ['vb-ma-user-contact'],
   },
+  {
+    id: 'toggle_actions_menu',
+    name: 'toggle_actions_menu',
+    direction: 'host_to_miniapp',
+    category: 'ui',
+    summary:
+      'Host đẩy sự kiện toggle_actions_menu xuống Tab 3 vb-ma-user-contact khi người dùng bấm nút + trên header native để bật/tắt menu thao tác danh bạ.',
+    miniAppCode: `on('toggle_actions_menu' as any, () => setMenuOpen((prev) => !prev));`,
+    responseJson: JSON.stringify({ visible: true }, null, 2),
+    iosHandler: 'UserContactsMiniAppViewController → miniAppVC.emitEvent("toggle_actions_menu")',
+    androidHandler: 'UserContactsFragment → miniAppFragment.emitEvent("toggle_actions_menu")',
+    usedByApps: ['vb-ma-user-contact'],
+  },
   // ── Spontaneous Host Events ─────────────────────────────────────
   {
     id: 'ev-host-push',

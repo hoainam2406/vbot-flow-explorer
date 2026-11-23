@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Search,
   Settings,
+  ShieldCheck,
   Sun,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
@@ -20,6 +21,7 @@ import ExportMenu from './ExportMenu.vue';
 const props = defineProps<{
   miniAppStudioOpen?: boolean;
   parityPageOpen?: boolean;
+  governancePageOpen?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -30,6 +32,8 @@ const emit = defineEmits<{
   openSettings: [];
   openMiniappBridge: [];
   closeMiniappBridge: [];
+  openGovernance: [];
+  closeGovernance: [];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -57,6 +61,9 @@ const onBreadcrumbClick = (nodeId: string) => {
   }
   if (props.parityPageOpen) {
     emit('closeParity');
+  }
+  if (props.governancePageOpen) {
+    emit('closeGovernance');
   }
   if (nodeId === explorer.dataset.rootNode.id) {
     explorer.setFocusRoot(null);
@@ -128,7 +135,7 @@ const onToggleTheme = () => {
       </button>
 
       <nav
-        v-if="!props.miniAppStudioOpen"
+        v-if="!props.miniAppStudioOpen && !props.governancePageOpen"
         aria-label="Breadcrumb"
         class="hidden min-w-0 items-center gap-1 overflow-x-auto text-xs text-slate-500 md:flex dark:text-slate-400"
       >
@@ -185,13 +192,14 @@ const onToggleTheme = () => {
           type="button"
           class="rounded-md px-2.5 py-1 transition"
           :class="
-            !props.miniAppStudioOpen && !props.parityPageOpen
+            !props.miniAppStudioOpen && !props.parityPageOpen && !props.governancePageOpen
               ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white'
               : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
           "
           @click="
             emit('closeMiniappBridge');
             emit('closeParity');
+            emit('closeGovernance');
           "
         >
           Sơ đồ luồng
@@ -210,11 +218,25 @@ const onToggleTheme = () => {
           <ArrowLeftRight class="h-3.5 w-3.5" />
           <span class="hidden sm:inline">Mini App Studio</span>
         </button>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 transition"
+          :class="
+            props.governancePageOpen
+              ? 'bg-indigo-600 text-white shadow-xs dark:bg-indigo-500/25 dark:text-indigo-200 dark:ring-1 dark:ring-indigo-400/40'
+              : 'text-indigo-700 hover:text-indigo-950 dark:text-indigo-300 dark:hover:text-indigo-200'
+          "
+          title="QA Release Hub, Sức khỏe Dữ liệu & Upload Media, So sánh Phiên bản Luồng"
+          @click="emit('openGovernance')"
+        >
+          <ShieldCheck class="h-3.5 w-3.5" />
+          <span class="hidden sm:inline">QA &amp; Quản trị</span>
+        </button>
       </div>
 
       <component
         :is="TechPlatformSwitcher"
-        v-if="TechPlatformSwitcher && explorer.audienceMode.value === 'tech' && !props.miniAppStudioOpen"
+        v-if="TechPlatformSwitcher && explorer.audienceMode.value === 'tech' && !props.miniAppStudioOpen && !props.governancePageOpen"
         :parity-active="props.parityPageOpen"
         @open-parity="emit('openParity')"
       />
@@ -250,7 +272,7 @@ const onToggleTheme = () => {
         </button>
       </div>
 
-      <ExportMenu v-if="!props.miniAppStudioOpen && !props.parityPageOpen" />
+      <ExportMenu v-if="!props.miniAppStudioOpen && !props.parityPageOpen && !props.governancePageOpen" />
 
       <button
         type="button"

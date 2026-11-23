@@ -12,6 +12,7 @@ import {
   GitBranchPlus,
   Link2,
   RotateCcw,
+  Sparkles,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
@@ -240,9 +241,37 @@ const handleOpenAddFlow = () => {
   emit('openAddFlow', node.value);
 };
 
+const copiedAiPrompt = ref(false);
+let aiPromptTimer: ReturnType<typeof setTimeout> | null = null;
+
+const handleCopyAiPrompt = async () => {
+  const current = node.value;
+  if (!__ENABLE_TECH_MODE__ || !current) return;
+  const [{ buildNodeAiContextPrompt }, { loadDevWorkspaceSettings }] = await Promise.all([
+    import('../../core/aiContextExport'),
+    import('../../core/workspaceSettings'),
+  ]);
+  const prompt = buildNodeAiContextPrompt(
+    current,
+    explorer.dataset,
+    explorer.platformMode.value,
+    loadDevWorkspaceSettings(),
+  );
+  const ok = await copyTextToClipboard(prompt);
+  if (ok) {
+    copiedAiPrompt.value = true;
+    pushToast('Đã sao chép AI Context Prompt cho node này', 'success');
+    if (aiPromptTimer) clearTimeout(aiPromptTimer);
+    aiPromptTimer = setTimeout(() => {
+      copiedAiPrompt.value = false;
+    }, 1800);
+  }
+};
+
 onBeforeUnmount(() => {
   if (copyResetTimer) clearTimeout(copyResetTimer);
   if (linkResetTimer) clearTimeout(linkResetTimer);
+  if (aiPromptTimer) clearTimeout(aiPromptTimer);
 });
 </script>
 
@@ -361,6 +390,18 @@ onBeforeUnmount(() => {
         >
           <Download class="h-3.5 w-3.5" />
           {{ isTechView ? 'Tải .md' : 'Tải tài liệu' }}
+        </button>
+
+        <button
+          v-if="enableTechMode && isTechView"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-800 transition hover:bg-indigo-100 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25"
+          title="Sao chép gói ngữ cảnh kỹ thuật để dán vào IDE"
+          @click="handleCopyAiPrompt"
+        >
+          <Check v-if="copiedAiPrompt" class="h-3.5 w-3.5 text-emerald-500" />
+          <Sparkles v-else class="h-3.5 w-3.5" />
+          {{ copiedAiPrompt ? 'Đã copy AI Prompt' : 'Copy AI Prompt' }}
         </button>
 
         <button

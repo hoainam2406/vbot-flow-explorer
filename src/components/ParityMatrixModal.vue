@@ -47,6 +47,7 @@ import {
   type ParityTriageStatus,
   type VbotWorkTaskDraft,
 } from '../core/vbotWorkTemplates';
+import { buildParityItemAiContextPrompt } from '../core/aiContextExport';
 import { loadDevWorkspaceSettings } from '../core/workspaceSettings';
 import type {
   NodeKind,
@@ -855,6 +856,22 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
                   {{ label }}
                 </option>
               </select>
+
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-800 transition hover:bg-indigo-100 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-200"
+                title="Sao chép ngữ cảnh sửa lệch iOS ↔ Android để dán vào AI IDE"
+                @click="
+                  copyTextToClipboard(
+                    buildParityItemAiContextPrompt(selectedItem, explorer.dataset, loadDevWorkspaceSettings()),
+                  ).then((ok) => {
+                    if (ok) pushToast('Đã copy AI Prompt cho mục Parity này', 'success');
+                  })
+                "
+              >
+                <Sparkles class="h-3.5 w-3.5" />
+                Copy AI Prompt
+              </button>
 
               <button
                 type="button"

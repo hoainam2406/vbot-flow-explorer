@@ -22,6 +22,12 @@ if (!explorer) {
 const expanded = ref(false);
 
 const hasImpact = computed(() => Boolean(explorer.impactHighlight.value));
+const hasSnapshotDiff = computed(() => Boolean(explorer.snapshotDiffOverlay.value));
+const snapshotDiffCount = computed(() => {
+  const overlay = explorer.snapshotDiffOverlay.value;
+  if (!overlay) return 0;
+  return explorer.visibleFlow.value.nodes.filter((n) => Boolean(overlay.nodeStatus[n.id])).length;
+});
 const hasLens = computed(() => explorer.hasActiveCanvasLens.value);
 const matchedCount = computed(() => {
   if (explorer.impactHighlight.value) {
@@ -61,6 +67,24 @@ const toggleStatus = (status: NodeStatus) => {
         aria-label="Xóa tô sáng ảnh hưởng"
         class="rounded-full p-0.5 hover:bg-cyan-200/70 dark:hover:bg-cyan-500/30"
         @click="explorer.clearImpactHighlight()"
+      >
+        <X class="h-3.5 w-3.5" />
+      </button>
+    </div>
+
+    <div
+      v-if="hasSnapshotDiff && explorer.snapshotDiffOverlay.value"
+      class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50/95 px-3 py-1 text-xs font-semibold text-emerald-900 shadow-sm backdrop-blur-md dark:border-emerald-500/45 dark:bg-emerald-500/15 dark:text-emerald-200"
+    >
+      <Sparkles class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+      <span>
+        Diff: <strong>{{ explorer.snapshotDiffOverlay.value.label }}</strong> ({{ snapshotDiffCount }} node thay đổi đang hiển thị)
+      </span>
+      <button
+        type="button"
+        aria-label="Tắt lớp phủ Diff"
+        class="rounded-full p-0.5 hover:bg-emerald-200/70 dark:hover:bg-emerald-500/30"
+        @click="explorer.clearSnapshotDiffOverlay()"
       >
         <X class="h-3.5 w-3.5" />
       </button>

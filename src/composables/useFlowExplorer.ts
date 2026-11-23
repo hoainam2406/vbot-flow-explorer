@@ -271,6 +271,12 @@ export function createFlowExplorerState(
   const zenMode = ref(false);
   const fitRequestSeq = ref(0);
   const impactHighlight = ref<ImpactHighlightState | null>(null);
+  const snapshotDiffOverlay = ref<{
+    label: string;
+    nodeStatus: Record<string, 'added' | 'modified'>;
+  } | null>(null);
+  const scenarioRecordingParentId = ref<string | null>(null);
+  const scenarioRecordingNodeIds = ref<string[]>([]);
   const canvasLens = ref<CanvasLensFilter>(createDefaultCanvasLens());
   let cameraSeq = 0;
   const cameraTarget = ref<CameraTarget>({ kind: 'all', seq: 0 });
@@ -745,6 +751,55 @@ export function createFlowExplorerState(
     impactHighlight.value = null;
   };
 
+  const setSnapshotDiffOverlay = (
+    nodeStatus: Record<string, 'added' | 'modified'>,
+    label: string,
+  ) => {
+    const ids = Object.keys(nodeStatus);
+    if (ids.length === 0) {
+      snapshotDiffOverlay.value = null;
+      return;
+    }
+    const nextExpanded = new Set(expandedIds.value);
+    for (const id of ids) {
+      for (const ancId of getAncestorChain(id).slice(0, -1)) {
+        if (datasetRef.value.subtreesByParentId[ancId]) {
+          nextExpanded.add(ancId);
+        }
+      }
+    }
+    expandedIds.value = nextExpanded;
+    snapshotDiffOverlay.value = { label, nodeStatus };
+    setCameraTarget('all');
+  };
+
+  const clearSnapshotDiffOverlay = () => {
+    snapshotDiffOverlay.value = null;
+  };
+
+  const startScenarioRecording = (parentId: string, initialNodeIds: string[] = []) => {
+    scenarioRecordingParentId.value = parentId;
+    scenarioRecordingNodeIds.value = [...initialNodeIds];
+    if (datasetRef.value.subtreesByParentId[parentId]) {
+      const nextExpanded = new Set(expandedIds.value);
+      nextExpanded.add(parentId);
+      expandedIds.value = nextExpanded;
+    }
+  };
+
+  const toggleScenarioRecordedNode = (nodeId: string) => {
+    if (!scenarioRecordingParentId.value) return;
+    if (scenarioRecordingNodeIds.value.includes(nodeId)) {
+      scenarioRecordingNodeIds.value = scenarioRecordingNodeIds.value.filter((id) => id !== nodeId);
+    } else {
+      scenarioRecordingNodeIds.value = [...scenarioRecordingNodeIds.value, nodeId];
+    }
+  };
+
+  const stopScenarioRecording = () => {
+    scenarioRecordingParentId.value = null;
+  };
+
   const resetCanvasLens = () => {
     canvasLens.value = createDefaultCanvasLens();
   };
@@ -837,6 +892,9 @@ export function createFlowExplorerState(
     hoveredNodeId,
     hoveredLineage,
     impactHighlight,
+    snapshotDiffOverlay,
+    scenarioRecordingParentId,
+    scenarioRecordingNodeIds,
     canvasLens,
     hasActiveCanvasLens,
     canvasLensMatchedIds,
@@ -877,6 +935,11 @@ export function createFlowExplorerState(
     requestFitView,
     setImpactHighlight,
     clearImpactHighlight,
+    setSnapshotDiffOverlay,
+    clearSnapshotDiffOverlay,
+    startScenarioRecording,
+    toggleScenarioRecordedNode,
+    stopScenarioRecording,
     resetCanvasLens,
     getChildCount,
     hasSubtree,

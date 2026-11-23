@@ -9,12 +9,14 @@ import {
   Image as ImageIcon,
   RotateCcw,
   Settings,
+  Upload,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useToast } from '../composables/useToast';
 import { auditMediaCoverage } from '../core/auditSyncEngine';
 import { copyTextToClipboard } from '../core/downloadHelper';
+import { processAndUploadMediaFile } from '../core/mediaUploadHelper';
 import {
   buildGitWebFileUrl,
   buildIdeFileUrl,
@@ -42,6 +44,9 @@ const activeTab = ref<'paths' | 'media'>('paths');
 const form = ref<DevWorkspaceSettings>(loadDevWorkspaceSettings());
 const mediaFilter = ref<'all' | 'missing' | 'present'>('all');
 const copiedChecklist = ref(false);
+const mediaUploadInputRef = ref<HTMLInputElement | null>(null);
+const uploadTargetSrc = ref('');
+const localUploadSupported = ref(false);
 let resetTimer: ReturnType<typeof setTimeout> | null = null;
 
 const close = () => emit('update:open', false);
@@ -56,10 +61,21 @@ const onKeyDown = (event: KeyboardEvent) => {
 
 watch(
   () => props.open,
-  (isOpen) => {
+  async (isOpen) => {
     if (isOpen) {
       form.value = loadDevWorkspaceSettings();
       window.addEventListener('keydown', onKeyDown, true);
+      if (import.meta.env.DEV) {
+        try {
+          const resp = await fetch('/__vbot-dev/status');
+          if (resp.ok) {
+            const data = (await resp.json()) as { capabilities?: { mediaUpload?: boolean } };
+            localUploadSupported.value = Boolean(data.capabilities?.mediaUpload);
+          }
+        } catch {
+          localUploadSupported.value = false;
+        }
+      }
     } else {
       window.removeEventListener('keydown', onKeyDown, true);
     }
@@ -144,6 +160,35 @@ const copyMissingChecklist = async () => {
     resetTimer = setTimeout(() => {
       copiedChecklist.value = false;
     }, 1500);
+  }
+};
+
+const triggerMediaUpload = (src: string) => {
+  uploadTargetSrc.value = src;
+  mediaUploadInputRef.value?.click();
+};
+
+const handleMediaFilePicked = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  const target = uploadTargetSrc.value;
+  if (!file || !target) return;
+
+  const res = await processAndUploadMediaFile(file, target, localUploadSupported.value);
+  if (!res.ok) {
+    pushToast(res.error, 'error');
+    return;
+  }
+  if (res.mode === 'saved_local') {
+    explorer.setDatasetOverride({
+      ...explorer.dataset,
+      hasRealMedia: res.existingMediaPaths.length > 0,
+      existingMediaPaths: res.existingMediaPaths,
+    });
+    pushToast(`Đã nén & lưu vào public${res.src}`, 'success');
+  } else {
+    pushToast(`Đã tải ${res.filename} — chép vào public${target}`, 'info');
   }
 };
 </script>
@@ -377,6 +422,13 @@ const copyMissingChecklist = async () => {
             </div>
 
             <div class="flex-1 overflow-y-auto p-5">
+              <input
+                ref="mediaUploadInputRef"
+                type="file"
+                accept="image/*,video/mp4,video/webm"
+                class="hidden"
+                @change="handleMediaFilePicked"
+              />
               <ul class="space-y-2">
                 <li
                   v-for="item in filteredMediaItems"
@@ -404,14 +456,24 @@ const copyMissingChecklist = async () => {
                     </p>
                   </div>
 
-                  <button
-                    type="button"
-                    class="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-cyan-300"
-                    @click="jumpToNode(item.nodeId)"
-                  >
-                    Xem node
-                    <ExternalLink class="h-3 w-3" />
-                  </button>
+                  <div class="flex shrink-0 items-center gap-1.5">
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300"
+                      @click="triggerMediaUpload(item.src)"
+                    >
+                      <Upload class="h-3 w-3" />
+                      {{ item.exists ? 'Thay' : 'Upload' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-cyan-300"
+                      @click="jumpToNode(item.nodeId)"
+                    >
+                      Xem node
+                      <ExternalLink class="h-3 w-3" />
+                    </button>
+                  </div>
                 </li>
               </ul>
             </div>
