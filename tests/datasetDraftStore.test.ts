@@ -4,6 +4,8 @@ import {
   applyDraftPatchesToDataset,
   applyDraftPatchesToRawFiles,
   buildDraftDiffSummary,
+  DRAFT_PATCHES_STORAGE_KEY,
+  getDraftStorageKey,
   parseImportedPatchesJson,
   summarizeDraftPatch,
   type DraftPatch,
@@ -230,5 +232,11 @@ describe('datasetDraftStore', () => {
     ]);
     expect(raw.errors).toEqual([]);
     expect(raw.modulesByFile.a.subtrees['mod-a'].scenarios?.map((s) => s.id)).toEqual(['sc-new']);
+  });
+
+  it('scopes draft patch storage key per branch while preserving default Nam-dev key', () => {
+    expect(getDraftStorageKey()).toBe(DRAFT_PATCHES_STORAGE_KEY);
+    expect(getDraftStorageKey('Nam-dev')).toBe(DRAFT_PATCHES_STORAGE_KEY);
+    expect(getDraftStorageKey('Nam-dev-SBSI')).toBe(`${DRAFT_PATCHES_STORAGE_KEY}:Nam-dev-SBSI`);
   });
 });

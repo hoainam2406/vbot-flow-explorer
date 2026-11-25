@@ -227,6 +227,26 @@ export const AppManifestSchema = z.object({
   inlineSubtrees: z.record(z.string(), SubtreeDefinitionSchema).optional(),
 });
 
+export const BranchManifestSchema = z
+  .object({
+    schemaVersion: z.literal('1.0'),
+    id: z.string().regex(/^[a-zA-Z0-9._-]+$/, 'Branch id must contain only letters, digits, ., _, -'),
+    label: z.string().min(1),
+    description: z.string().optional(),
+    extends: z.string().min(1).optional(),
+    appOverrides: z
+      .object({
+        name: z.string().min(1).optional(),
+        tagline: z.string().min(1).optional(),
+        version: z.string().optional(),
+        techBranch: z.string().min(1).optional(),
+        repoConfig: AppRepoConfigSchema.optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 export type NodeKind = z.infer<typeof NodeKindSchema>;
 export type NodeStatus = z.infer<typeof NodeStatusSchema>;
 export type NodeMeta = z.infer<typeof NodeMetaSchema>;
@@ -247,6 +267,14 @@ export type Scenario = z.infer<typeof ScenarioSchema>;
 export type SubtreeDefinition = z.infer<typeof SubtreeDefinitionSchema>;
 export type FlowModuleFile = z.infer<typeof FlowModuleFileSchema>;
 export type AppManifest = z.infer<typeof AppManifestSchema>;
+export type BranchManifest = z.infer<typeof BranchManifestSchema>;
+
+export interface FlowBranchInfo {
+  id: string;
+  label: string;
+  description?: string;
+  isDefault?: boolean;
+}
 
 export interface SourceFileMap {
   subtrees: Record<string, string>;

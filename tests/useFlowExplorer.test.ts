@@ -579,4 +579,50 @@ describe('createFlowExplorerState', () => {
     expect(state.findNode('b1-new')).toBeUndefined();
     expect(state.visibleFlow.value.nodes.some((n) => n.id === 'b1-new')).toBe(false);
   });
+
+  it('switches base dataset cleanly on branch switch, preserving existing nodes and clearing removed ones', () => {
+    const namDevDataset: MergedFlowDataset = {
+      ...sampleDataset,
+      app: { ...sampleDataset.app, techBranch: 'Nam-dev' },
+    };
+    const state = createFlowExplorerState(namDevDataset, true);
+    state.setAudienceMode('tech');
+    state.jumpToNode('b1-1');
+    expect(state.activeBranchId.value).toBe('Nam-dev');
+
+    const sbsiDataset: MergedFlowDataset = {
+      ...namDevDataset,
+      app: { ...namDevDataset.app, techBranch: 'Nam-dev-SBSI' },
+      subtreesByParentId: {
+        b1: {
+          ...namDevDataset.subtreesByParentId.b1,
+          nodes: [
+            { ...namDevDataset.subtreesByParentId.b1.nodes[0], label: 'B1.1 SBSI' },
+            {
+              id: 'b1-sbsi-new',
+              label: 'SBSI Only Node',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'SBSI' },
+            },
+          ],
+          edges: [],
+        },
+      },
+    };
+
+    state.setBaseDataset(sbsiDataset, 'Nam-dev-SBSI');
+    expect(state.activeBranchId.value).toBe('Nam-dev-SBSI');
+    expect(state.baseDataset.app.techBranch).toBe('Nam-dev-SBSI');
+    expect(state.selectedNode.value?.label).toBe('B1.1 SBSI');
+    expect(state.expandedIds.value.has('b1')).toBe(true);
+    expect(state.findNode('b1-sbsi-new')?.label).toBe('SBSI Only Node');
+
+    // Select SBSI-only node then switch back -> missing selection should reset to null
+    state.selectNode('b1-sbsi-new');
+    expect(state.selectedNodeId.value).toBe('b1-sbsi-new');
+    state.setBaseDataset(namDevDataset, 'Nam-dev');
+    expect(state.activeBranchId.value).toBe('Nam-dev');
+    expect(state.selectedNodeId.value).toBeNull();
+  });
 });

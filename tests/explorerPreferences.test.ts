@@ -9,6 +9,7 @@ import {
   loadSavedExplorerPrefs,
   loadSavedLayoutDirection,
   loadSavedTheme,
+  resolveInitialBranchId,
   resolveInitialExplorerState,
   resolveInitialTheme,
   saveExplorerPrefs,
@@ -167,5 +168,63 @@ describe('explorerPreferences', () => {
     });
     expect(loadSavedTheme(invalidStorage)).toBeNull();
     expect(loadSavedLayoutDirection(invalidStorage)).toBeNull();
+  });
+
+  it('resolves branchId with URL > savedPrefs > default precedence and persists branchId', () => {
+    const storage = createMockStorage();
+    saveExplorerPrefs(
+      { audienceMode: 'tech', platformMode: 'compare', branchId: 'Nam-dev-SBSI' },
+      storage,
+    );
+    expect(loadSavedExplorerPrefs(storage)).toEqual({
+      audienceMode: 'tech',
+      platformMode: 'compare',
+      branchId: 'Nam-dev-SBSI',
+    });
+
+    const available = ['Nam-dev', 'Nam-dev-SBSI'];
+    expect(
+      resolveInitialBranchId({
+        allowTechMode: true,
+        search: '?branch=Nam-dev',
+        hash: '#/?branch=Nam-dev-SBSI',
+        savedPrefs: { branchId: 'Nam-dev' },
+        availableBranchIds: available,
+        defaultBranchId: 'Nam-dev',
+      }),
+    ).toBe('Nam-dev-SBSI');
+
+    expect(
+      resolveInitialBranchId({
+        allowTechMode: true,
+        search: '',
+        hash: '',
+        savedPrefs: { branchId: 'Nam-dev-SBSI' },
+        availableBranchIds: available,
+        defaultBranchId: 'Nam-dev',
+      }),
+    ).toBe('Nam-dev-SBSI');
+
+    expect(
+      resolveInitialBranchId({
+        allowTechMode: true,
+        search: '',
+        hash: '#/?branch=unknown-branch',
+        savedPrefs: { branchId: 'stale-branch' },
+        availableBranchIds: available,
+        defaultBranchId: 'Nam-dev',
+      }),
+    ).toBe('Nam-dev');
+
+    expect(
+      resolveInitialBranchId({
+        allowTechMode: false,
+        search: '?branch=Nam-dev-SBSI',
+        hash: '#/?branch=Nam-dev-SBSI',
+        savedPrefs: { branchId: 'Nam-dev-SBSI' },
+        availableBranchIds: available,
+        defaultBranchId: 'Nam-dev',
+      }),
+    ).toBe('Nam-dev');
   });
 });

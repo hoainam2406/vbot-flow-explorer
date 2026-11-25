@@ -1,16 +1,29 @@
 // scripts/validate-data.ts
-import fs from 'node:fs';
-import path from 'node:path';
-import { validateDataset } from '../src/data/validateDataset';
+import {
+  listAvailableBranches,
+  loadMergedDatasetForBranch,
+} from '../plugins/flowDataPlugin';
 
-const dataDir = path.resolve(process.cwd(), 'data');
-const manifest = JSON.parse(fs.readFileSync(path.join(dataDir, 'app.json'), 'utf8'));
-const modules = (manifest.moduleFiles as string[]).map((name) =>
-  JSON.parse(fs.readFileSync(path.join(dataDir, 'modules', `${name}.json`), 'utf8')),
-);
-const errors = validateDataset(manifest, modules);
-if (errors.length > 0) {
-  console.error('❌ Data validation failed:\n' + errors.map((e) => `  - ${e}`).join('\n'));
+const rootDir = process.cwd();
+const branches = listAvailableBranches(rootDir);
+let hasError = false;
+
+for (const branch of branches) {
+  try {
+    const merged = loadMergedDatasetForBranch(rootDir, branch.id);
+    const branchCount = merged.branches.length;
+    const subtreeCount = Object.keys(merged.subtreesByParentId).length;
+    console.log(
+      `✅ [${branch.id}] Flow dataset hợp lệ (${branchCount} nhánh chính, ${subtreeCount} subtree).`,
+    );
+  } catch (err) {
+    hasError = true;
+    console.error(
+      `❌ [${branch.id}] Data validation failed:\n  - ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+if (hasError) {
   process.exit(1);
 }
-console.log('✅ All flow data JSON files are valid.');

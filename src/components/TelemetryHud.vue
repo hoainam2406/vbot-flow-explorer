@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, ref } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { ArrowLeftRight, ArrowUpDown, GitBranch, Scale } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useToast } from '../composables/useToast';
 import { saveLayoutDirection } from '../core/explorerPreferences';
+import type { MergedFlowDataset } from '../data/schema';
 
 const emit = defineEmits<{
   openParity: [];
@@ -17,6 +18,7 @@ if (!explorer) {
 const { pushToast } = useToast();
 const enableTechMode = __ENABLE_TECH_MODE__;
 const parityTotal = ref<number | null>(null);
+let extractParityReportFn: ((ds: MergedFlowDataset) => { total: number }) | null = null;
 
 const isTechView = computed(() => enableTechMode && explorer.audienceMode.value === 'tech');
 const techBranch = computed(() =>
@@ -34,12 +36,19 @@ const onToggleDirection = () => {
   pushToast(next === 'TB' ? 'Đã chuyển sơ đồ hướng dọc (TB)' : 'Đã chuyển sơ đồ hướng ngang (LR)', 'info');
 };
 
-onMounted(async () => {
-  if (__ENABLE_TECH_MODE__) {
-    const mod = await import('../core/parityAnalyzer');
-    parityTotal.value = mod.extractParityReport(explorer.dataset).total;
-  }
-});
+if (__ENABLE_TECH_MODE__) {
+  watch(
+    () => explorer.datasetRef.value,
+    async (ds) => {
+      if (!extractParityReportFn) {
+        const mod = await import('../core/parityAnalyzer');
+        extractParityReportFn = mod.extractParityReport;
+      }
+      parityTotal.value = extractParityReportFn(ds).total;
+    },
+    { immediate: true },
+  );
+}
 </script>
 
 <template>

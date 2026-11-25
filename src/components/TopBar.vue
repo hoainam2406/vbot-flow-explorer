@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, inject } from 'vue';
+import { computed, defineAsyncComponent, inject, onBeforeUnmount, onMounted, ref } from 'vue';
 import {
   ArrowLeftRight,
+  Check,
+  ChevronDown,
   ChevronRight,
   GitBranch,
   HelpCircle,
+  Loader2,
   Moon,
   RotateCcw,
   Search,
@@ -16,12 +19,16 @@ import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useTheme } from '../composables/useTheme';
 import { useToast } from '../composables/useToast';
 import { getNodeDisplayLabel } from '../core/graphEngine';
+import type { FlowBranchInfo } from '../data/schema';
 import ExportMenu from './ExportMenu.vue';
 
 const props = defineProps<{
   miniAppStudioOpen?: boolean;
   parityPageOpen?: boolean;
   governancePageOpen?: boolean;
+  availableBranches?: FlowBranchInfo[];
+  activeBranchId?: string;
+  branchLoading?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +41,7 @@ const emit = defineEmits<{
   closeMiniappBridge: [];
   openGovernance: [];
   closeGovernance: [];
+  switchBranch: [branchId: string];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -46,6 +54,17 @@ const { pushToast } = useToast();
 const enableTechMode = __ENABLE_TECH_MODE__;
 const isTechView = computed(() => enableTechMode && explorer.audienceMode.value === 'tech');
 
+const branchMenuOpen = ref(false);
+const branchMenuRef = ref<HTMLElement | null>(null);
+const hasMultiBranch = computed(
+  () => enableTechMode && (props.availableBranches?.length ?? 0) > 1,
+);
+const currentBranchId = computed(() =>
+  __ENABLE_TECH_MODE__
+    ? props.activeBranchId || explorer.activeBranchId.value || explorer.dataset.app.techBranch || ''
+    : '',
+);
+
 const techBranchLabel = computed(() =>
   __ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech'
     ? (explorer.dataset.app.techBranch ?? null)
@@ -54,6 +73,42 @@ const techBranchLabel = computed(() =>
 const TechPlatformSwitcher = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./TechPlatformSwitcher.vue'))
   : null;
+
+const toggleBranchMenu = () => {
+  if (!hasMultiBranch.value || props.branchLoading) return;
+  branchMenuOpen.value = !branchMenuOpen.value;
+};
+
+const selectBranch = (branchId: string) => {
+  branchMenuOpen.value = false;
+  if (branchId !== currentBranchId.value) {
+    emit('switchBranch', branchId);
+  }
+};
+
+const onDocumentPointerDown = (event: MouseEvent) => {
+  if (!branchMenuOpen.value) return;
+  const target = event.target as Node | null;
+  if (branchMenuRef.value && target && !branchMenuRef.value.contains(target)) {
+    branchMenuOpen.value = false;
+  }
+};
+
+const onWindowKeyDown = (event: KeyboardEvent) => {
+  if (branchMenuOpen.value && event.key === 'Escape') {
+    branchMenuOpen.value = false;
+  }
+};
+
+onMounted(() => {
+  document.addEventListener('mousedown', onDocumentPointerDown);
+  window.addEventListener('keydown', onWindowKeyDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentPointerDown);
+  window.removeEventListener('keydown', onWindowKeyDown);
+});
 
 const onBreadcrumbClick = (nodeId: string) => {
   if (props.miniAppStudioOpen) {
@@ -124,7 +179,7 @@ const onToggleTheme = () => {
             {{ explorer.dataset.app.version }}
           </span>
           <span
-            v-if="enableTechMode && techBranchLabel"
+            v-if="enableTechMode && !hasMultiBranch && techBranchLabel"
             class="hidden items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-700 ring-1 ring-emerald-200 sm:inline-flex dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30"
             :title="`Dữ liệu kỹ thuật đối soát theo nhánh ${techBranchLabel} của VBot-iOS & VBot-Android`"
           >
@@ -133,6 +188,87 @@ const onToggleTheme = () => {
           </span>
         </div>
       </button>
+
+      <div
+        v-if="enableTechMode && hasMultiBranch"
+        ref="branchMenuRef"
+        class="relative shrink-0"
+      >
+        <button
+          type="button"
+          aria-haspopup="menu"
+          :aria-expanded="branchMenuOpen"
+          :disabled="props.branchLoading"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 px-2 py-1 font-mono text-[11px] font-semibold text-emerald-800 shadow-2xs transition hover:border-emerald-300 hover:bg-emerald-100/80 disabled:opacity-70 dark:border-emerald-500/35 dark:bg-emerald-500/12 dark:text-emerald-300 dark:hover:border-emerald-400/50 dark:hover:bg-emerald-500/20"
+          :title="`Đang xem nhánh ${currentBranchId} (bấm để chọn nhánh đối soát VBot-iOS & VBot-Android)`"
+          @click="toggleBranchMenu"
+        >
+          <Loader2 v-if="props.branchLoading" class="h-3 w-3 animate-spin" />
+          <GitBranch v-else class="h-3 w-3 shrink-0" />
+          <span>{{ currentBranchId }}</span>
+          <ChevronDown
+            class="h-3 w-3 shrink-0 opacity-75 transition-transform"
+            :class="{ 'rotate-180': branchMenuOpen }"
+          />
+        </button>
+
+        <Transition name="vbot-toast">
+          <div
+            v-if="branchMenuOpen"
+            role="menu"
+            aria-label="Chọn nhánh đối soát"
+            class="absolute left-0 top-full z-40 mt-1.5 w-72 overflow-hidden rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-xl backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/95"
+          >
+            <div class="px-2.5 py-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+              Nhánh đối soát (iOS &amp; Android)
+            </div>
+            <button
+              v-for="branch in props.availableBranches"
+              :key="branch.id"
+              type="button"
+              role="menuitemradio"
+              :aria-checked="branch.id === currentBranchId"
+              class="flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition"
+              :class="
+                branch.id === currentBranchId
+                  ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-500/15 dark:text-emerald-200'
+                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800/80'
+              "
+              @click="selectBranch(branch.id)"
+            >
+              <GitBranch
+                class="mt-0.5 h-3.5 w-3.5 shrink-0"
+                :class="
+                  branch.id === currentBranchId
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-slate-400'
+                "
+              />
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono text-xs font-semibold">{{ branch.label }}</span>
+                  <span
+                    v-if="branch.isDefault"
+                    class="rounded bg-slate-200/80 px-1 py-0.2 text-[9px] font-semibold text-slate-600 uppercase dark:bg-slate-700 dark:text-slate-300"
+                  >
+                    Mặc định
+                  </span>
+                </div>
+                <p
+                  v-if="branch.description"
+                  class="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400"
+                >
+                  {{ branch.description }}
+                </p>
+              </div>
+              <Check
+                v-if="branch.id === currentBranchId"
+                class="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
+              />
+            </button>
+          </div>
+        </Transition>
+      </div>
 
       <nav
         v-if="!props.miniAppStudioOpen && !props.governancePageOpen"

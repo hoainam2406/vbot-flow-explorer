@@ -1,8 +1,12 @@
 // tests/parityAnalyzer.test.ts
 import { describe, expect, it } from 'vitest';
-import { loadMergedDataset } from '../plugins/flowDataPlugin';
+import {
+  loadMergedDataset,
+  loadMergedDatasetForBranch,
+} from '../plugins/flowDataPlugin';
 import { findNodeById } from '../src/core/graphEngine';
 import {
+  compareParityAgainstBase,
   exportParityReportToMarkdown,
   extractParityReport,
 } from '../src/core/parityAnalyzer';
@@ -238,5 +242,144 @@ describe('parityAnalyzer', () => {
     expect(md).toContain('call-in-android-fsi');
     expect(md).toContain('mauc-loop-guard');
     expect(md).toContain('Chỉ khác OS / Ngôn ngữ');
+  });
+
+  it('compares branch parity against base dataset without false-positives on branch-name text', () => {
+    const baseDs: MergedFlowDataset = {
+      ...syntheticDataset,
+      app: { ...syntheticDataset.app, techBranch: 'Nam-dev' },
+      rootNode: {
+        ...syntheticDataset.rootNode,
+        techDetail: {
+          platformDiffNote: 'Khác kiến trúc trên nhánh Nam-dev',
+          parityAssessment: {
+            verdict: 'os_impl_only',
+            sameLogic: true,
+            sameOutcome: true,
+            needsFix: 'no',
+            fixTarget: 'none',
+            explanation: 'Cùng logic trên Nam-dev.',
+            recommendation: 'Không cần sửa.',
+          },
+        },
+      },
+    };
+    const branchDs: MergedFlowDataset = {
+      ...baseDs,
+      app: { ...baseDs.app, techBranch: 'Nam-dev-SBSI' },
+      rootNode: {
+        ...baseDs.rootNode,
+        techDetail: {
+          platformDiffNote: 'Khác kiến trúc trên nhánh Nam-dev-SBSI',
+          parityAssessment: {
+            verdict: 'os_impl_only',
+            sameLogic: true,
+            sameOutcome: true,
+            needsFix: 'no',
+            fixTarget: 'none',
+            explanation: 'Cùng logic trên Nam-dev-SBSI.',
+            recommendation: 'Không cần sửa.',
+          },
+        },
+      },
+      subtreesByParentId: {
+        ...baseDs.subtreesByParentId,
+        'branch-diff': {
+          ...baseDs.subtreesByParentId['branch-diff'],
+          nodes: [
+            ...baseDs.subtreesByParentId['branch-diff'].nodes.map((n) =>
+              n.id === 'ios-step'
+                ? {
+                    ...n,
+                    techDetail: {
+                      platformDiffNote: 'Đã đổi hành vi trên nhánh mới',
+                      parityAssessment: {
+                        verdict: 'action_needed' as const,
+                        sameLogic: false,
+                        sameOutcome: false,
+                        needsFix: 'yes' as const,
+                        fixTarget: 'both' as const,
+                        explanation: 'Cần đồng bộ.',
+                        recommendation: 'Sửa cả 2.',
+                      },
+                    },
+                  }
+                : n,
+            ),
+            {
+              id: 'sbsi-new-step',
+              label: 'Bước mới trên SBSI',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'Mới' },
+              techDetail: {
+                platformDiffNote: 'Khác nhẹ hiển thị',
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    const delta = compareParityAgainstBase(
+      extractParityReport(branchDs),
+      extractParityReport(baseDs),
+      { baseBranchLabel: 'Nam-dev', currentBranchLabel: 'Nam-dev-SBSI' },
+    );
+
+    expect(delta.addedCount).toBe(1);
+    expect(delta.updatedCount).toBe(1);
+    expect(delta.changedTotal).toBe(2);
+    expect(delta.byNodeId.root.status).toBe('inherited');
+    expect(delta.byNodeId['sbsi-new-step'].status).toBe('added');
+    expect(delta.byNodeId['ios-step']).toEqual({
+      status: 'updated',
+      previousVerdict: 'logic_diff',
+      previousFixTarget: 'android',
+    });
+  });
+
+  it('highlights the exact 4 new and updated parity items on Nam-dev-SBSI vs Nam-dev', () => {
+    const baseDataset = loadMergedDatasetForBranch(process.cwd(), 'Nam-dev');
+    const sbsiDataset = loadMergedDatasetForBranch(process.cwd(), 'Nam-dev-SBSI');
+    const baseReport = extractParityReport(baseDataset);
+    const sbsiReport = extractParityReport(sbsiDataset);
+
+    expect(sbsiReport.items.filter((i) => i.assessment.isInferred)).toEqual([]);
+    const missingFixTargets = sbsiReport.items
+      .filter((i) => !findNodeById(sbsiDataset, i.nodeId)?.techDetail?.parityAssessment?.fixTarget)
+      .map((i) => i.nodeId);
+    expect(missingFixTargets).toEqual([]);
+
+    const delta = compareParityAgainstBase(sbsiReport, baseReport, {
+      baseBranchLabel: 'Nam-dev',
+      currentBranchLabel: 'Nam-dev-SBSI',
+    });
+
+    expect(delta.addedCount).toBe(4);
+    expect(delta.byNodeId['as-open-sheet']?.status).toBe('added');
+    expect(delta.byNodeId['as-set-status']?.status).toBe('added');
+    expect(delta.byNodeId['as-manage-reason-templates']?.status).toBe('added');
+    expect(delta.byNodeId['as-auto-resume-reconnect']?.status).toBe('added');
+
+    const sbsiById = new Map(sbsiReport.items.map((i) => [i.nodeId, i]));
+    expect(sbsiById.get('as-open-sheet')?.assessment.verdict).toBe('synced');
+    expect(sbsiById.get('as-open-sheet')?.assessment.fixTarget).toBe('none');
+    expect(sbsiById.get('as-set-status')?.assessment.verdict).toBe('synced');
+    expect(sbsiById.get('as-set-status')?.assessment.fixTarget).toBe('none');
+    expect(sbsiById.get('as-manage-reason-templates')?.assessment.verdict).toBe('synced');
+    expect(sbsiById.get('as-manage-reason-templates')?.assessment.fixTarget).toBe('none');
+
+    expect(delta.byNodeId['call-ctrl-survey']).toEqual({
+      status: 'updated',
+      previousVerdict: 'synced',
+      previousFixTarget: 'none',
+    });
+    expect(delta.byNodeId['agent-status-capsule']).toEqual({
+      status: 'updated',
+      previousVerdict: 'logic_diff',
+      previousFixTarget: 'tbd',
+    });
+    expect(delta.byNodeId['call-incall-miniapps']?.status).toBe('inherited');
   });
 });

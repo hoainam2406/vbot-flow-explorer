@@ -10,10 +10,18 @@ import {
   collectTechOnlyMediaPaths,
   createVbotWorkTaskOnServer,
   DevPatchError,
+  flowDataPlugin,
   hasRealMediaFiles,
+  listAvailableBranches,
+  loadMergedDatasetForBranch,
   resolveVbotWorkAuthHeader,
 } from '../plugins/flowDataPlugin';
-import type { AppManifest, FlowModuleFile, MergedFlowDataset } from '../src/data/schema';
+import type {
+  AppManifest,
+  BranchManifest,
+  FlowModuleFile,
+  MergedFlowDataset,
+} from '../src/data/schema';
 
 describe('collectTechOnlyMediaPaths', () => {
   it('excludes media paths also referenced by audience=all items', () => {
@@ -373,6 +381,170 @@ describe('collectTechOnlyMediaPaths', () => {
     } finally {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
       fs.rmSync(tmpHome, { recursive: true, force: true });
+    }
+  });
+
+  it('discovers branches, inherits/overrides modules, and performs copy-on-write patch saving', () => {
+    const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vbot-branch-test-'));
+    try {
+      const dataDir = path.join(tmpRoot, 'data');
+      const modulesDir = path.join(dataDir, 'modules');
+      const branchDir = path.join(dataDir, 'branches', 'Nam-dev-SBSI');
+      const branchModulesDir = path.join(branchDir, 'modules');
+      fs.mkdirSync(modulesDir, { recursive: true });
+      fs.mkdirSync(branchModulesDir, { recursive: true });
+
+      const manifest: AppManifest = {
+        schemaVersion: '1.0',
+        app: { name: 'VBot', tagline: 'Test', techBranch: 'Nam-dev' },
+        rootNode: {
+          id: 'root',
+          label: 'Root',
+          kind: 'module',
+          audience: 'all',
+          summary: { overview: 'R' },
+        },
+        branches: [
+          {
+            id: 'mod-a',
+            label: 'Module A',
+            kind: 'module',
+            audience: 'all',
+            summary: { overview: 'A' },
+          },
+          {
+            id: 'mod-b',
+            label: 'Module B',
+            kind: 'module',
+            audience: 'all',
+            summary: { overview: 'B' },
+          },
+        ],
+        branchEdges: [],
+        moduleFiles: ['a', 'b'],
+      };
+      const modA: FlowModuleFile = {
+        schemaVersion: '1.0',
+        moduleId: 'mod-a',
+        subtrees: {
+          'mod-a': {
+            title: 'A Base',
+            layoutHint: 'flow',
+            entryNodeIds: ['a1'],
+            nodes: [{ id: 'a1', label: 'A1 Base', kind: 'action', audience: 'all', summary: { overview: 'A1' } }],
+            edges: [],
+          },
+        },
+      };
+      const modB: FlowModuleFile = {
+        schemaVersion: '1.0',
+        moduleId: 'mod-b',
+        subtrees: {
+          'mod-b': {
+            title: 'B Inherited',
+            layoutHint: 'flow',
+            entryNodeIds: ['b1'],
+            nodes: [{ id: 'b1', label: 'B1 Base', kind: 'action', audience: 'all', summary: { overview: 'B1' } }],
+            edges: [],
+          },
+        },
+      };
+      const branchManifest: BranchManifest = {
+        schemaVersion: '1.0',
+        id: 'Nam-dev-SBSI',
+        label: 'Nam-dev-SBSI',
+        description: 'SBSI overrides',
+        extends: 'Nam-dev',
+        appOverrides: { techBranch: 'Nam-dev-SBSI' },
+      };
+      const modASbsi: FlowModuleFile = {
+        schemaVersion: '1.0',
+        moduleId: 'mod-a',
+        subtrees: {
+          'mod-a': {
+            title: 'A SBSI',
+            layoutHint: 'flow',
+            entryNodeIds: ['a1'],
+            nodes: [{ id: 'a1', label: 'A1 SBSI', kind: 'action', audience: 'all', summary: { overview: 'A1 SBSI' } }],
+            edges: [],
+          },
+        },
+      };
+
+      fs.writeFileSync(path.join(dataDir, 'app.json'), JSON.stringify(manifest, null, 2));
+      fs.writeFileSync(path.join(modulesDir, 'a.json'), JSON.stringify(modA, null, 2));
+      fs.writeFileSync(path.join(modulesDir, 'b.json'), JSON.stringify(modB, null, 2));
+      fs.writeFileSync(path.join(branchDir, 'branch.json'), JSON.stringify(branchManifest, null, 2));
+      fs.writeFileSync(path.join(branchModulesDir, 'a.json'), JSON.stringify(modASbsi, null, 2));
+
+      const branches = listAvailableBranches(tmpRoot);
+      expect(branches.map((b) => b.id)).toEqual(['Nam-dev', 'Nam-dev-SBSI']);
+
+      const defaultDs = loadMergedDatasetForBranch(tmpRoot, 'Nam-dev');
+      expect(defaultDs.app.techBranch).toBe('Nam-dev');
+      expect(defaultDs.subtreesByParentId['mod-a'].nodes[0].label).toBe('A1 Base');
+
+      const sbsiDs = loadMergedDatasetForBranch(tmpRoot, 'Nam-dev-SBSI');
+      expect(sbsiDs.app.techBranch).toBe('Nam-dev-SBSI');
+      expect(sbsiDs.subtreesByParentId['mod-a'].nodes[0].label).toBe('A1 SBSI');
+      expect(sbsiDs.subtreesByParentId['mod-b'].nodes[0].label).toBe('B1 Base');
+
+      expect(() => loadMergedDatasetForBranch(tmpRoot, '../etc')).toThrowError(DevPatchError);
+
+      // Copy-on-write: patching inherited mod-b while on Nam-dev-SBSI only writes into branches/Nam-dev-SBSI/modules/b.json
+      const cowRes = applyDevPatchesToDisk(
+        tmpRoot,
+        [
+          {
+            id: 'cow-1',
+            timestamp: 1000,
+            kind: 'update_node',
+            nodeId: 'b1',
+            node: {
+              id: 'b1',
+              label: 'B1 Patched SBSI',
+              kind: 'action',
+              audience: 'all',
+              summary: { overview: 'B1 SBSI' },
+            },
+          },
+        ],
+        'Nam-dev-SBSI',
+      );
+      expect(cowRes.changedFiles).toEqual(['branches/Nam-dev-SBSI/modules/b.json']);
+      expect(loadMergedDatasetForBranch(tmpRoot, 'Nam-dev').subtreesByParentId['mod-b'].nodes[0].label).toBe(
+        'B1 Base',
+      );
+      expect(loadMergedDatasetForBranch(tmpRoot, 'Nam-dev-SBSI').subtreesByParentId['mod-b'].nodes[0].label).toBe(
+        'B1 Patched SBSI',
+      );
+
+      // Verify public vs internal virtual:flow-branches output
+      const publicPlugin = flowDataPlugin('public');
+      (publicPlugin.configResolved as (c: { root: string }) => void)({ root: tmpRoot });
+      const pubResolved = (publicPlugin.resolveId as (id: string) => string | undefined)(
+        'virtual:flow-branches',
+      );
+      const pubCode = (publicPlugin.load as (id: string) => string | undefined)(pubResolved!);
+      expect(pubCode).toContain('export const branches = []');
+      expect(pubCode).not.toContain('Nam-dev');
+      expect(pubCode).not.toContain('Nam-dev-SBSI');
+      expect(
+        (publicPlugin.resolveId as (id: string) => string | undefined)(
+          'virtual:flow-dataset-branch/Nam-dev-SBSI',
+        ),
+      ).toBeUndefined();
+
+      const internalPlugin = flowDataPlugin('internal');
+      (internalPlugin.configResolved as (c: { root: string }) => void)({ root: tmpRoot });
+      const intResolved = (internalPlugin.resolveId as (id: string) => string | undefined)(
+        'virtual:flow-branches',
+      );
+      const intCode = (internalPlugin.load as (id: string) => string | undefined)(intResolved!);
+      expect(intCode).toContain('Nam-dev-SBSI');
+      expect(intCode).toContain('virtual:flow-dataset-branch/Nam-dev-SBSI');
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
 });

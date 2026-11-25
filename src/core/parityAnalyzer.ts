@@ -62,6 +62,23 @@ export interface ParitySummary {
   items: ParityItem[];
 }
 
+export type ParityBranchOrigin = 'added' | 'updated' | 'inherited';
+
+export interface ParityBranchDeltaItem {
+  status: ParityBranchOrigin;
+  previousVerdict?: ParityVerdict;
+  previousFixTarget?: ParityFixTarget;
+}
+
+export interface ParityBranchDeltaSummary {
+  baseBranchLabel: string;
+  currentBranchLabel: string;
+  addedCount: number;
+  updatedCount: number;
+  changedTotal: number;
+  byNodeId: Record<string, ParityBranchDeltaItem>;
+}
+
 export const PARITY_VERDICT_LABELS: Record<ParityVerdict, string> = {
   action_needed: 'Nên sửa (Lỗi / Parity Gap)',
   logic_diff: 'Khác logic / Kết quả',
@@ -407,6 +424,81 @@ export function extractParityReport(dataset: MergedFlowDataset): ParitySummary {
     byFixTarget,
     byBranch,
     items,
+  };
+}
+
+function normalizeBranchScopedText(
+  text: string | undefined,
+  currentBranch: string,
+  baseBranch: string,
+): string {
+  if (!text) return '';
+  let normalized = text;
+  if (currentBranch && baseBranch && currentBranch !== baseBranch) {
+    normalized = normalized.split(currentBranch).join(baseBranch);
+  }
+  return normalized.trim();
+}
+
+export function compareParityAgainstBase(
+  currentReport: ParitySummary,
+  baseReport: ParitySummary,
+  options?: {
+    baseBranchLabel?: string;
+    currentBranchLabel?: string;
+  },
+): ParityBranchDeltaSummary {
+  const baseBranchLabel = options?.baseBranchLabel?.trim() || 'Nam-dev';
+  const currentBranchLabel = options?.currentBranchLabel?.trim() || '';
+  const baseById = new Map(baseReport.items.map((item) => [item.nodeId, item]));
+  const norm = (text: string | undefined) =>
+    normalizeBranchScopedText(text, currentBranchLabel, baseBranchLabel);
+  const bridgeKey = (notes: BridgeParityNote[]) =>
+    notes.map((n) => `${n.messageName}:${norm(n.parityNote)}`).join('|');
+
+  let addedCount = 0;
+  let updatedCount = 0;
+  const byNodeId: Record<string, ParityBranchDeltaItem> = {};
+
+  for (const item of currentReport.items) {
+    const prev = baseById.get(item.nodeId);
+    if (!prev) {
+      addedCount += 1;
+      byNodeId[item.nodeId] = { status: 'added' };
+      continue;
+    }
+
+    const changed =
+      prev.assessment.verdict !== item.assessment.verdict ||
+      prev.assessment.needsFix !== item.assessment.needsFix ||
+      prev.assessment.fixTarget !== item.assessment.fixTarget ||
+      prev.assessment.sameLogic !== item.assessment.sameLogic ||
+      prev.assessment.sameOutcome !== item.assessment.sameOutcome ||
+      prev.categories.join(',') !== item.categories.join(',') ||
+      norm(prev.platformDiffNote) !== norm(item.platformDiffNote) ||
+      norm(prev.assessment.explanation) !== norm(item.assessment.explanation) ||
+      norm(prev.assessment.recommendation) !== norm(item.assessment.recommendation) ||
+      bridgeKey(prev.bridgeParityNotes) !== bridgeKey(item.bridgeParityNotes);
+
+    if (changed) {
+      updatedCount += 1;
+      byNodeId[item.nodeId] = {
+        status: 'updated',
+        previousVerdict: prev.assessment.verdict,
+        previousFixTarget: prev.assessment.fixTarget,
+      };
+    } else {
+      byNodeId[item.nodeId] = { status: 'inherited' };
+    }
+  }
+
+  return {
+    baseBranchLabel,
+    currentBranchLabel,
+    addedCount,
+    updatedCount,
+    changedTotal: addedCount + updatedCount,
+    byNodeId,
   };
 }
 

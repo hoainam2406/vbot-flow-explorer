@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, inject, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, inject, onBeforeUnmount, ref, watch } from 'vue';
 import {
   ArrowRight,
   BookOpen,
@@ -33,7 +33,9 @@ const TechGuidePanel = __ENABLE_TECH_MODE__
   : null;
 
 const enableTechMode = __ENABLE_TECH_MODE__;
-const techBranch = __ENABLE_TECH_MODE__ ? explorer.dataset.app.techBranch : undefined;
+const techBranch = computed(() =>
+  __ENABLE_TECH_MODE__ ? explorer.dataset.app.techBranch : undefined,
+);
 const activeTab = ref<GuideTab>('overview');
 const glossaryCount = ref(13);
 

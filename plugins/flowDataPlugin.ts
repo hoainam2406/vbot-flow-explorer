@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { Plugin, ResolvedConfig } from 'vite';
+import type { Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import { z } from 'zod';
 import { mergeDataset, sanitizeForPublic } from '../src/core/graphEngine';
 import {
@@ -12,16 +12,24 @@ import {
 } from '../src/core/datasetDraftStore';
 import { registerDevWorkspaceMiddleware } from './devWorkspaceMiddleware';
 import { validateDataset } from '../src/data/validateDataset';
-import type {
-  AppManifest,
-  FlowModuleFile,
-  FlowNodeData,
-  MergedFlowDataset,
-  SourceFileMap,
+import {
+  BranchManifestSchema,
+  type AppManifest,
+  type BranchManifest,
+  type FlowBranchInfo,
+  type FlowModuleFile,
+  type FlowNodeData,
+  type MergedFlowDataset,
+  type SourceFileMap,
 } from '../src/data/schema';
 
 const VIRTUAL_ID = 'virtual:flow-dataset';
 const RESOLVED_VIRTUAL_ID = '\0' + VIRTUAL_ID;
+const VIRTUAL_BRANCHES_ID = 'virtual:flow-branches';
+const RESOLVED_VIRTUAL_BRANCHES_ID = '\0' + VIRTUAL_BRANCHES_ID;
+const VIRTUAL_BRANCH_PREFIX = 'virtual:flow-dataset-branch/';
+const RESOLVED_VIRTUAL_BRANCH_PREFIX = '\0' + VIRTUAL_BRANCH_PREFIX;
+const SAFE_BRANCH_ID_RE = /^[a-zA-Z0-9._-]+$/;
 
 export function collectTechOnlyMediaPaths(dataset: MergedFlowDataset): string[] {
   const publicSrcs = new Set<string>();
@@ -117,25 +125,153 @@ export function buildSourceFileMap(
   };
 }
 
-export function loadMergedDataset(rootDir: string): MergedFlowDataset {
-  const dataDir = path.join(rootDir, 'data');
-  const manifest = JSON.parse(
-    fs.readFileSync(path.join(dataDir, 'app.json'), 'utf8'),
-  ) as AppManifest;
-  const modules = manifest.moduleFiles.map((name) =>
-    JSON.parse(
-      fs.readFileSync(path.join(dataDir, 'modules', `${name}.json`), 'utf8'),
-    ) as FlowModuleFile,
-  );
+function readBaseManifest(dataDir: string): AppManifest {
+  return JSON.parse(fs.readFileSync(path.join(dataDir, 'app.json'), 'utf8')) as AppManifest;
+}
 
-  const errors = validateDataset(manifest, modules);
+function resolveDefaultBranchId(manifest: AppManifest): string {
+  return manifest.app.techBranch?.trim() || 'Nam-dev';
+}
+
+function resolveBranchDir(dataDir: string, branchId: string): string {
+  const cleanId = branchId.trim();
+  if (!SAFE_BRANCH_ID_RE.test(cleanId)) {
+    throw new DevPatchError(`Tên nhánh không hợp lệ: "${branchId}"`, 400);
+  }
+  const branchesRoot = path.resolve(dataDir, 'branches');
+  const branchDir = path.resolve(branchesRoot, cleanId);
+  if (!branchDir.startsWith(branchesRoot + path.sep)) {
+    throw new DevPatchError(`Đường dẫn nhánh vượt phạm vi cho phép: "${branchId}"`, 400);
+  }
+  return branchDir;
+}
+
+function readBranchManifest(branchDir: string, expectedId: string): BranchManifest {
+  const branchJsonPath = path.join(branchDir, 'branch.json');
+  if (!fs.existsSync(branchJsonPath)) {
+    throw new DevPatchError(`Không tìm thấy cấu hình nhánh "${expectedId}/branch.json".`, 404);
+  }
+  const raw = JSON.parse(fs.readFileSync(branchJsonPath, 'utf8')) as unknown;
+  const parsed = BranchManifestSchema.parse(raw);
+  if (parsed.id !== expectedId) {
+    throw new Error(
+      `Branch id mismatch: directory "${expectedId}" contains branch.json with id "${parsed.id}"`,
+    );
+  }
+  return parsed;
+}
+
+export function listAvailableBranches(rootDir: string): FlowBranchInfo[] {
+  const dataDir = path.join(rootDir, 'data');
+  const baseManifest = readBaseManifest(dataDir);
+  const defaultId = resolveDefaultBranchId(baseManifest);
+  const result: FlowBranchInfo[] = [
+    {
+      id: defaultId,
+      label: defaultId,
+      description: 'Nhánh chuẩn mặc định (iOS & Android)',
+      isDefault: true,
+    },
+  ];
+
+  const branchesDir = path.join(dataDir, 'branches');
+  if (!fs.existsSync(branchesDir)) {
+    return result;
+  }
+
+  const entries = fs
+    .readdirSync(branchesDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && SAFE_BRANCH_ID_RE.test(entry.name))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of entries) {
+    const branchDir = path.join(branchesDir, entry.name);
+    const branchJsonPath = path.join(branchDir, 'branch.json');
+    if (!fs.existsSync(branchJsonPath)) continue;
+    const branchManifest = readBranchManifest(branchDir, entry.name);
+    if (branchManifest.id === defaultId) continue;
+    result.push({
+      id: branchManifest.id,
+      label: branchManifest.label,
+      ...(branchManifest.description ? { description: branchManifest.description } : {}),
+      isDefault: false,
+    });
+  }
+
+  return result;
+}
+
+export function loadMergedDatasetForBranch(
+  rootDir: string,
+  branchId?: string,
+): MergedFlowDataset {
+  const dataDir = path.join(rootDir, 'data');
+  const baseManifest = readBaseManifest(dataDir);
+  const defaultId = resolveDefaultBranchId(baseManifest);
+  const cleanBranchId = branchId?.trim();
+
+  if (!cleanBranchId || cleanBranchId === defaultId) {
+    const modules = baseManifest.moduleFiles.map((name) => {
+      if (!SAFE_MODULE_NAME_RE.test(name)) {
+        throw new Error(`Invalid module filename "${name}"`);
+      }
+      return JSON.parse(
+        fs.readFileSync(path.join(dataDir, 'modules', `${name}.json`), 'utf8'),
+      ) as FlowModuleFile;
+    });
+
+    const errors = validateDataset(baseManifest, modules);
+    if (errors.length > 0) {
+      throw new Error(`Flow dataset validation error:\n${errors.join('\n')}`);
+    }
+    return {
+      ...mergeDataset(baseManifest, modules),
+      sourceFileMap: buildSourceFileMap(baseManifest, modules),
+    };
+  }
+
+  const branchDir = resolveBranchDir(dataDir, cleanBranchId);
+  if (!fs.existsSync(branchDir)) {
+    throw new DevPatchError(`Không tìm thấy thư mục nhánh "${cleanBranchId}".`, 404);
+  }
+  const branchManifest = readBranchManifest(branchDir, cleanBranchId);
+
+  const branchAppPath = path.join(branchDir, 'app.json');
+  const rawManifest = fs.existsSync(branchAppPath)
+    ? (JSON.parse(fs.readFileSync(branchAppPath, 'utf8')) as AppManifest)
+    : baseManifest;
+
+  const effectiveManifest: AppManifest = {
+    ...rawManifest,
+    app: {
+      ...rawManifest.app,
+      ...(branchManifest.appOverrides ?? {}),
+      techBranch: branchManifest.appOverrides?.techBranch ?? branchManifest.id,
+    },
+  };
+
+  const modules = effectiveManifest.moduleFiles.map((name) => {
+    if (!SAFE_MODULE_NAME_RE.test(name)) {
+      throw new Error(`Invalid module filename "${name}"`);
+    }
+    const branchModPath = path.join(branchDir, 'modules', `${name}.json`);
+    const baseModPath = path.join(dataDir, 'modules', `${name}.json`);
+    const targetModPath = fs.existsSync(branchModPath) ? branchModPath : baseModPath;
+    return JSON.parse(fs.readFileSync(targetModPath, 'utf8')) as FlowModuleFile;
+  });
+
+  const errors = validateDataset(effectiveManifest, modules);
   if (errors.length > 0) {
-    throw new Error(`Flow dataset validation error:\n${errors.join('\n')}`);
+    throw new Error(`Flow dataset validation error (${cleanBranchId}):\n${errors.join('\n')}`);
   }
   return {
-    ...mergeDataset(manifest, modules),
-    sourceFileMap: buildSourceFileMap(manifest, modules),
+    ...mergeDataset(effectiveManifest, modules),
+    sourceFileMap: buildSourceFileMap(effectiveManifest, modules),
   };
+}
+
+export function loadMergedDataset(rootDir: string): MergedFlowDataset {
+  return loadMergedDatasetForBranch(rootDir);
 }
 
 export class DevPatchError extends Error {
@@ -348,6 +484,7 @@ export async function createVbotWorkTaskOnServer(
 }
 
 function writeFileAtomic(targetPath: string, content: string): void {
+  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
   const tmpPath = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
   try {
     fs.writeFileSync(tmpPath, content, 'utf8');
@@ -363,6 +500,7 @@ function writeFileAtomic(targetPath: string, content: string): void {
 export function applyDevPatchesToDisk(
   rootDir: string,
   rawPatches: unknown,
+  branchId?: string,
 ): { ok: true; changedFiles: string[]; appliedCount: number } {
   if (!Array.isArray(rawPatches) || rawPatches.length === 0) {
     throw new DevPatchError('Danh sách patch phải là mảng không rỗng.', 400);
@@ -387,7 +525,37 @@ export function applyDevPatchesToDisk(
     throw new DevPatchError('Không tìm thấy data/app.json.', 404);
   }
 
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as AppManifest;
+  const baseManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as AppManifest;
+  const defaultBranchId = resolveDefaultBranchId(baseManifest);
+  const cleanBranchId = branchId?.trim();
+  const isBranchOverride = Boolean(cleanBranchId && cleanBranchId !== defaultBranchId);
+
+  let targetManifestPath = manifestPath;
+  let targetModulesDir = modulesDir;
+  let manifest: AppManifest = baseManifest;
+
+  if (isBranchOverride && cleanBranchId) {
+    const branchDir = resolveBranchDir(dataDir, cleanBranchId);
+    if (!fs.existsSync(branchDir)) {
+      throw new DevPatchError(`Không tìm thấy thư mục nhánh "${cleanBranchId}".`, 404);
+    }
+    const branchManifest = readBranchManifest(branchDir, cleanBranchId);
+    const branchAppPath = path.resolve(branchDir, 'app.json');
+    const rawBranchManifest = fs.existsSync(branchAppPath)
+      ? (JSON.parse(fs.readFileSync(branchAppPath, 'utf8')) as AppManifest)
+      : baseManifest;
+    manifest = {
+      ...rawBranchManifest,
+      app: {
+        ...rawBranchManifest.app,
+        ...(branchManifest.appOverrides ?? {}),
+        techBranch: branchManifest.appOverrides?.techBranch ?? branchManifest.id,
+      },
+    };
+    targetManifestPath = branchAppPath;
+    targetModulesDir = path.resolve(branchDir, 'modules');
+  }
+
   const whitelistedModules = new Set(manifest.moduleFiles);
   const modulesByFile: Record<string, FlowModuleFile> = {};
 
@@ -395,11 +563,21 @@ export function applyDevPatchesToDisk(
     if (!SAFE_MODULE_NAME_RE.test(modName)) {
       throw new DevPatchError(`Tên module không hợp lệ: "${modName}"`, 400);
     }
-    const modPath = path.resolve(modulesDir, `${modName}.json`);
-    if (!modPath.startsWith(modulesDir + path.sep)) {
+    const baseModPath = path.resolve(modulesDir, `${modName}.json`);
+    if (!baseModPath.startsWith(modulesDir + path.sep)) {
       throw new DevPatchError(`Đường dẫn module vượt phạm vi cho phép: "${modName}"`, 400);
     }
-    modulesByFile[modName] = JSON.parse(fs.readFileSync(modPath, 'utf8')) as FlowModuleFile;
+    let sourceModPath = baseModPath;
+    if (isBranchOverride) {
+      const branchModPath = path.resolve(targetModulesDir, `${modName}.json`);
+      if (!branchModPath.startsWith(targetModulesDir + path.sep)) {
+        throw new DevPatchError(`Đường dẫn module nhánh vượt phạm vi cho phép: "${modName}"`, 400);
+      }
+      if (fs.existsSync(branchModPath)) {
+        sourceModPath = branchModPath;
+      }
+    }
+    modulesByFile[modName] = JSON.parse(fs.readFileSync(sourceModPath, 'utf8')) as FlowModuleFile;
   }
 
   const applied = applyDraftPatchesToRawFiles(manifest, modulesByFile, patches);
@@ -407,9 +585,13 @@ export function applyDevPatchesToDisk(
     throw new DevPatchError(applied.errors[0], 400, applied.errors);
   }
 
+  const reportedChangedFiles: string[] = [];
   for (const relFile of applied.changedFiles) {
     if (relFile === 'app.json') {
-      writeFileAtomic(manifestPath, JSON.stringify(applied.manifest, null, 2) + '\n');
+      writeFileAtomic(targetManifestPath, JSON.stringify(applied.manifest, null, 2) + '\n');
+      reportedChangedFiles.push(
+        isBranchOverride ? `branches/${cleanBranchId}/app.json` : 'app.json',
+      );
       continue;
     }
     const match = /^modules\/([a-z0-9-]+)\.json$/i.exec(relFile);
@@ -417,8 +599,8 @@ export function applyDevPatchesToDisk(
       throw new DevPatchError(`File đích không nằm trong danh sách cho phép: "${relFile}"`, 400);
     }
     const modName = match[1];
-    const targetPath = path.resolve(modulesDir, `${modName}.json`);
-    if (!targetPath.startsWith(modulesDir + path.sep)) {
+    const targetPath = path.resolve(targetModulesDir, `${modName}.json`);
+    if (!targetPath.startsWith(targetModulesDir + path.sep)) {
       throw new DevPatchError(`Đường dẫn ghi file không hợp lệ: "${relFile}"`, 400);
     }
     const modContent = applied.modulesByFile[modName];
@@ -426,11 +608,16 @@ export function applyDevPatchesToDisk(
       throw new DevPatchError(`Thiếu dữ liệu module "${modName}" để ghi.`, 400);
     }
     writeFileAtomic(targetPath, JSON.stringify(modContent, null, 2) + '\n');
+    reportedChangedFiles.push(
+      isBranchOverride
+        ? `branches/${cleanBranchId}/modules/${modName}.json`
+        : `modules/${modName}.json`,
+    );
   }
 
   return {
     ok: true,
-    changedFiles: applied.changedFiles,
+    changedFiles: reportedChangedFiles,
     appliedCount: patches.length,
   };
 }
@@ -438,6 +625,20 @@ export function applyDevPatchesToDisk(
 export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
   let resolvedConfig: ResolvedConfig;
   let techOnlyMedia: string[] = [];
+
+  const invalidateFlowModules = (server: ViteDevServer) => {
+    for (const id of [RESOLVED_VIRTUAL_ID, RESOLVED_VIRTUAL_BRANCHES_ID]) {
+      const mod = server.moduleGraph.getModuleById(id);
+      if (mod) {
+        server.moduleGraph.invalidateModule(mod);
+      }
+    }
+    for (const [id, mod] of server.moduleGraph.idToModuleMap.entries()) {
+      if (id.startsWith(RESOLVED_VIRTUAL_BRANCH_PREFIX)) {
+        server.moduleGraph.invalidateModule(mod);
+      }
+    }
+  };
 
   return {
     name: 'vbot-flow-data',
@@ -473,10 +674,7 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
       });
 
       registerDevWorkspaceMiddleware(server, resolvedConfig.root, () => {
-        const mod = server.moduleGraph.getModuleById(RESOLVED_VIRTUAL_ID);
-        if (mod) {
-          server.moduleGraph.invalidateModule(mod);
-        }
+        invalidateFlowModules(server);
         const merged = loadMergedDataset(resolvedConfig.root);
         return collectExistingMediaPaths(resolvedConfig.root, merged);
       });
@@ -562,12 +760,14 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
             const rawPatches = Array.isArray(parsedBody)
               ? parsedBody
               : (parsedBody as { patches?: unknown } | null)?.patches;
-            const result = applyDevPatchesToDisk(resolvedConfig.root, rawPatches);
+            const rawBranchId =
+              !Array.isArray(parsedBody) && parsedBody && typeof parsedBody === 'object'
+                ? (parsedBody as { branchId?: unknown }).branchId
+                : undefined;
+            const branchId = typeof rawBranchId === 'string' ? rawBranchId : undefined;
+            const result = applyDevPatchesToDisk(resolvedConfig.root, rawPatches, branchId);
 
-            const mod = server.moduleGraph.getModuleById(RESOLVED_VIRTUAL_ID);
-            if (mod) {
-              server.moduleGraph.invalidateModule(mod);
-            }
+            invalidateFlowModules(server);
 
             res.statusCode = 200;
             res.setHeader('Content-Type', 'application/json');
@@ -595,8 +795,61 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
     },
     resolveId(id) {
       if (id === VIRTUAL_ID) return RESOLVED_VIRTUAL_ID;
+      if (id === VIRTUAL_BRANCHES_ID) return RESOLVED_VIRTUAL_BRANCHES_ID;
+      if (id.startsWith(VIRTUAL_BRANCH_PREFIX) && buildTarget === 'internal') {
+        const branchId = id.slice(VIRTUAL_BRANCH_PREFIX.length);
+        if (SAFE_BRANCH_ID_RE.test(branchId)) {
+          return '\0' + id;
+        }
+      }
     },
     load(id) {
+      if (id === RESOLVED_VIRTUAL_BRANCHES_ID) {
+        if (buildTarget === 'public') {
+          return [
+            "export const defaultBranchId = '';",
+            'export const branches = [];',
+            'export async function loadBranchDataset() {',
+            "  throw new Error('Branch switching is disabled in public build');",
+            '}',
+          ].join('\n');
+        }
+        const branches = listAvailableBranches(resolvedConfig.root);
+        const defaultBranchId = branches[0]?.id ?? 'Nam-dev';
+        const cases = branches
+          .map((b) => {
+            const importTarget =
+              b.id === defaultBranchId ? VIRTUAL_ID : `${VIRTUAL_BRANCH_PREFIX}${b.id}`;
+            return `    case ${JSON.stringify(b.id)}:\n      return (await import(${JSON.stringify(importTarget)})).default;`;
+          })
+          .join('\n');
+        return [
+          `export const defaultBranchId = ${JSON.stringify(defaultBranchId)};`,
+          `export const branches = ${JSON.stringify(branches)};`,
+          'export async function loadBranchDataset(branchId) {',
+          '  switch (branchId) {',
+          cases,
+          '    default:',
+          '      throw new Error(`Unknown branch: ${branchId}`);',
+          '  }',
+          '}',
+        ].join('\n');
+      }
+
+      if (id.startsWith(RESOLVED_VIRTUAL_BRANCH_PREFIX)) {
+        if (buildTarget !== 'internal') return;
+        const branchId = id.slice(RESOLVED_VIRTUAL_BRANCH_PREFIX.length);
+        const merged = loadMergedDatasetForBranch(resolvedConfig.root, branchId);
+        const existingMediaPaths = collectExistingMediaPaths(resolvedConfig.root, merged);
+        const payload: MergedFlowDataset = {
+          ...merged,
+          hasRealMedia: existingMediaPaths.length > 0,
+          existingMediaPaths,
+          sourceFileMap: merged.sourceFileMap,
+        };
+        return `export default ${JSON.stringify(payload)};`;
+      }
+
       if (id !== RESOLVED_VIRTUAL_ID) return;
       const merged = loadMergedDataset(resolvedConfig.root);
       techOnlyMedia = collectTechOnlyMediaPaths(merged);
@@ -619,10 +872,7 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
     handleHotUpdate({ file, server }) {
       const dataPrefix = path.join(resolvedConfig.root, 'data') + path.sep;
       if (file.startsWith(dataPrefix) && file.endsWith('.json')) {
-        const mod = server.moduleGraph.getModuleById(RESOLVED_VIRTUAL_ID);
-        if (mod) {
-          server.moduleGraph.invalidateModule(mod);
-        }
+        invalidateFlowModules(server);
         server.ws.send({ type: 'full-reload' });
         return [];
       }

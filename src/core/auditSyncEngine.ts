@@ -65,6 +65,7 @@ export const PUBLIC_LEAK_FORBIDDEN_TOKENS: readonly string[] = [
   'CallKit',
   'PJSIP',
   'Nam-dev',
+  'Nam-dev-SBSI',
   'bgapi',
   'techLabel',
   'techBranch',

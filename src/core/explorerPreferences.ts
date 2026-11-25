@@ -8,6 +8,7 @@ export const ONBOARDING_DISMISSED_KEY = 'vbot-flow-onboarding-dismissed-v1';
 export interface SavedExplorerPrefs {
   audienceMode?: ViewMode;
   platformMode?: PlatformViewMode;
+  branchId?: string;
 }
 
 export interface InitialExplorerStateInput {
@@ -15,6 +16,15 @@ export interface InitialExplorerStateInput {
   search: string;
   hash: string;
   savedPrefs?: SavedExplorerPrefs | null;
+}
+
+export interface InitialBranchInput {
+  allowTechMode: boolean;
+  search: string;
+  hash: string;
+  savedPrefs?: SavedExplorerPrefs | null;
+  availableBranchIds: readonly string[];
+  defaultBranchId: string;
 }
 
 export interface ResolvedInitialExplorerState {
@@ -50,6 +60,9 @@ export function loadSavedExplorerPrefs(
       parsed.platformMode === 'compare'
     ) {
       prefs.platformMode = parsed.platformMode;
+    }
+    if (typeof parsed.branchId === 'string' && parsed.branchId.trim()) {
+      prefs.branchId = parsed.branchId.trim();
     }
     return prefs;
   } catch {
@@ -138,6 +151,29 @@ export function resolveInitialExplorerState(
     focusNodeId,
     selectedNodeId,
   };
+}
+
+export function resolveInitialBranchId(input: InitialBranchInput): string {
+  if (!input.allowTechMode) {
+    return input.defaultBranchId;
+  }
+  const searchParams = new URLSearchParams(input.search);
+  const rawHash = input.hash.replace(/^#/, '');
+  const hashQuery = rawHash.includes('?') ? rawHash.split('?')[1] : rawHash.replace(/^\/+/, '');
+  const hashParams = new URLSearchParams(hashQuery);
+
+  const fromUrl = (hashParams.get('branch') ?? searchParams.get('branch'))?.trim();
+  const validSet = new Set(input.availableBranchIds);
+  if (fromUrl && validSet.has(fromUrl)) {
+    return fromUrl;
+  }
+
+  const fromSaved = input.savedPrefs?.branchId?.trim();
+  if (fromSaved && validSet.has(fromSaved)) {
+    return fromSaved;
+  }
+
+  return input.defaultBranchId;
 }
 
 export type ThemeMode = 'dark' | 'light';

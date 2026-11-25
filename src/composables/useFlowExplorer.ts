@@ -252,8 +252,11 @@ export function createFlowExplorerState(
 ) {
   const MAX_NAV_HISTORY = 25;
   const MAX_RECENT_NODES = 8;
-  const baseDataset = initialDataset;
+  const baseDatasetRef = shallowRef<MergedFlowDataset>(initialDataset);
   const datasetRef = shallowRef<MergedFlowDataset>(initialDataset);
+  const activeBranchId = ref<string>(
+    ALLOW_TECH_RUNTIME && allowTechMode ? (initialDataset.app.techBranch ?? '') : '',
+  );
   const audienceMode = ref<ViewMode>('overview');
   const platformMode = ref<PlatformViewMode>('compare');
   const layoutDirection = ref<LayoutDirection>('LR');
@@ -860,7 +863,7 @@ export function createFlowExplorerState(
   });
 
   const setDatasetOverride = (next: MergedFlowDataset | null) => {
-    const resolved = next ?? baseDataset;
+    const resolved = next ?? baseDatasetRef.value;
     datasetRef.value = resolved;
     if (selectedNodeId.value && !findNodeById(resolved, selectedNodeId.value)) {
       selectedNodeId.value = null;
@@ -874,13 +877,79 @@ export function createFlowExplorerState(
     }
   };
 
+  const setBaseDataset = (next: MergedFlowDataset, branchId?: string) => {
+    baseDatasetRef.value = next;
+    datasetRef.value = next;
+    activeBranchId.value =
+      ALLOW_TECH_RUNTIME && allowTechMode
+        ? (branchId ?? next.app.techBranch ?? activeBranchId.value)
+        : '';
+    clearScenarioState();
+    impactHighlight.value = null;
+    snapshotDiffOverlay.value = null;
+    scenarioRecordingParentId.value = null;
+    scenarioRecordingNodeIds.value = [];
+
+    const nextExpanded = new Set<string>();
+    for (const id of expandedIds.value) {
+      if (next.subtreesByParentId[id]) {
+        nextExpanded.add(id);
+      }
+    }
+
+    if (selectedNodeId.value) {
+      const sel = findNodeById(next, selectedNodeId.value);
+      if (
+        !sel ||
+        !isVisibleForMode(sel.audience, audienceMode.value) ||
+        !isVisibleForPlatform(sel.platforms, audienceMode.value, platformMode.value)
+      ) {
+        selectedNodeId.value = null;
+      } else {
+        const nextParents = buildParentIndex(next);
+        let cursor: string | undefined = nextParents[selectedNodeId.value];
+        const guard = new Set<string>([selectedNodeId.value]);
+        while (cursor && !guard.has(cursor)) {
+          guard.add(cursor);
+          if (next.subtreesByParentId[cursor]) {
+            nextExpanded.add(cursor);
+          }
+          cursor = nextParents[cursor];
+        }
+      }
+    }
+    expandedIds.value = nextExpanded;
+
+    if (focusRootId.value) {
+      const foc = findNodeById(next, focusRootId.value);
+      if (
+        !foc ||
+        !next.subtreesByParentId[focusRootId.value] ||
+        !isVisibleForMode(foc.audience, audienceMode.value) ||
+        !isVisibleForPlatform(foc.platforms, audienceMode.value, platformMode.value)
+      ) {
+        focusRootId.value = null;
+      }
+    }
+
+    setCameraTarget(
+      selectedNodeId.value ? 'node' : 'all',
+      selectedNodeId.value ?? undefined,
+    );
+  };
+
   return {
     get dataset() {
       return datasetRef.value;
     },
     datasetRef,
-    baseDataset,
+    get baseDataset() {
+      return baseDatasetRef.value;
+    },
+    baseDatasetRef,
+    activeBranchId,
     setDatasetOverride,
+    setBaseDataset,
     allowTechMode,
     audienceMode,
     platformMode,

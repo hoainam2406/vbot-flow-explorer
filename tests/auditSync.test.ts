@@ -1,6 +1,10 @@
 // tests/auditSync.test.ts
 import { describe, expect, it } from 'vitest';
-import { loadMergedDataset } from '../plugins/flowDataPlugin';
+import {
+  listAvailableBranches,
+  loadMergedDataset,
+  loadMergedDatasetForBranch,
+} from '../plugins/flowDataPlugin';
 import {
   auditCodeRefs,
   auditMediaCoverage,
@@ -10,6 +14,7 @@ import {
   PUBLIC_LEAK_FORBIDDEN_TOKENS,
   scanTextForPublicLeaks,
 } from '../src/core/auditSyncEngine';
+import { findNodeById } from '../src/core/graphEngine';
 import { ALL_SANDBOX_COMMANDS } from '../src/core/miniAppContractBuilder';
 import { CORE_BRIDGE_SPECS, MINI_APP_CATALOG } from '../src/data/miniAppBridgeCatalog';
 import { MINI_APP_PERMISSION_PROFILES } from '../src/data/miniAppPermissionMatrix';
@@ -79,6 +84,7 @@ describe('auditSyncEngine', () => {
   it('detects forbidden internal tokens for public bundle guard', () => {
     expect(PUBLIC_LEAK_FORBIDDEN_TOKENS).toContain('repoConfig');
     expect(PUBLIC_LEAK_FORBIDDEN_TOKENS).toContain('workTaskUrl');
+    expect(PUBLIC_LEAK_FORBIDDEN_TOKENS).toContain('Nam-dev-SBSI');
     expect(scanTextForPublicLeaks('clean overview bundle text')).toEqual([]);
     expect(scanTextForPublicLeaks('contains TwoFactorSessionManager and codeRefs')).toEqual([
       'codeRefs',
@@ -86,5 +92,27 @@ describe('auditSyncEngine', () => {
     ].sort((a, b) =>
       PUBLIC_LEAK_FORBIDDEN_TOKENS.indexOf(a) - PUBLIC_LEAK_FORBIDDEN_TOKENS.indexOf(b),
     ));
+  });
+
+  it('loads and validates Nam-dev-SBSI branch with Call Survey #3 and Project User State updates', () => {
+    const branches = listAvailableBranches(process.cwd());
+    expect(branches.map((b) => b.id)).toEqual(['Nam-dev', 'Nam-dev-SBSI']);
+
+    const sbsiDataset = loadMergedDatasetForBranch(process.cwd(), 'Nam-dev-SBSI');
+    expect(sbsiDataset.app.techBranch).toBe('Nam-dev-SBSI');
+
+    const sbsiMiniAppReport = auditMiniAppConsistency(
+      sbsiDataset,
+      MINI_APP_CATALOG,
+      MINI_APP_PERMISSION_PROFILES,
+      ALL_SANDBOX_COMMANDS,
+      CORE_BRIDGE_SPECS,
+    );
+    expect(sbsiMiniAppReport.errors).toEqual([]);
+
+    const surveyNode = findNodeById(sbsiDataset, 'call-ctrl-survey');
+    expect(surveyNode?.audience).toBe('all');
+    expect(findNodeById(sbsiDataset, 'as-manage-reason-templates')).toBeDefined();
+    expect(findNodeById(sbsiDataset, 'as-auto-resume-reconnect')).toBeDefined();
   });
 });

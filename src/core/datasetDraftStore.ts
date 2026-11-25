@@ -17,6 +17,14 @@ import { validateDataset } from '../data/validateDataset';
 
 export const DRAFT_PATCHES_STORAGE_KEY = 'vbot-flow:draft-patches:v1';
 
+export function getDraftStorageKey(branchId?: string): string {
+  const clean = branchId?.trim();
+  if (!clean || clean === 'Nam-dev') {
+    return DRAFT_PATCHES_STORAGE_KEY;
+  }
+  return `${DRAFT_PATCHES_STORAGE_KEY}:${clean}`;
+}
+
 export const DraftPatchSchema = z.discriminatedUnion('kind', [
   z.object({
     id: z.string().min(1),
@@ -85,10 +93,10 @@ function safeClone<T>(val: T): T {
   return JSON.parse(JSON.stringify(val)) as T;
 }
 
-export function loadDraftPatches(): DraftPatch[] {
+export function loadDraftPatches(branchId?: string): DraftPatch[] {
   if (typeof window === 'undefined' || !window.localStorage) return [];
   try {
-    const raw = window.localStorage.getItem(DRAFT_PATCHES_STORAGE_KEY);
+    const raw = window.localStorage.getItem(getDraftStorageKey(branchId));
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -103,18 +111,19 @@ export function loadDraftPatches(): DraftPatch[] {
   }
 }
 
-export function saveDraftPatches(patches: readonly DraftPatch[]): void {
+export function saveDraftPatches(patches: readonly DraftPatch[], branchId?: string): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
+  const key = getDraftStorageKey(branchId);
   if (patches.length === 0) {
-    window.localStorage.removeItem(DRAFT_PATCHES_STORAGE_KEY);
+    window.localStorage.removeItem(key);
     return;
   }
-  window.localStorage.setItem(DRAFT_PATCHES_STORAGE_KEY, JSON.stringify(patches));
+  window.localStorage.setItem(key, JSON.stringify(patches));
 }
 
-export function clearDraftPatches(): void {
+export function clearDraftPatches(branchId?: string): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
-  window.localStorage.removeItem(DRAFT_PATCHES_STORAGE_KEY);
+  window.localStorage.removeItem(getDraftStorageKey(branchId));
 }
 
 function collectCascadeNodeIds(

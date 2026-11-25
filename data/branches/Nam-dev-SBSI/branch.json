@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1.0",
+  "id": "Nam-dev-SBSI",
+  "label": "Nam-dev-SBSI",
+  "description": "Trạng thái nhân sự theo Dự án & Mẫu lý do (VbM-832) + Khảo sát cuộc gọi DTMF #3",
+  "extends": "Nam-dev",
+  "appOverrides": {
+    "techBranch": "Nam-dev-SBSI"
+  }
+}

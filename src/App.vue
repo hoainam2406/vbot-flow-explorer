@@ -2,6 +2,11 @@
 import { defineAsyncComponent, onMounted, provide, ref, watch } from 'vue';
 import { Minimize2 } from 'lucide-vue-next';
 import dataset from 'virtual:flow-dataset';
+import {
+  branches as availableBranches,
+  defaultBranchId,
+  loadBranchDataset,
+} from 'virtual:flow-branches';
 import FlowCanvas from './components/FlowCanvas.vue';
 import GuideGlossaryModal from './components/GuideGlossaryModal.vue';
 import ScenarioFlowDialog from './components/ScenarioFlowDialog.vue';
@@ -21,6 +26,7 @@ import { exportFlowToMermaid } from './core/mermaidExport';
 import {
   loadSavedExplorerPrefs,
   loadSavedLayoutDirection,
+  resolveInitialBranchId,
   resolveInitialExplorerState,
   saveExplorerPrefs,
   saveLayoutDirection,
@@ -86,6 +92,8 @@ const editingScenario = ref<Scenario | null>(null);
 const editingScenarioParentId = ref<string | null>(null);
 const scenarioRecordedIds = ref<string[] | null>(null);
 const importPatchInputRef = ref<HTMLInputElement | null>(null);
+const branchLoading = ref(false);
+let branchSwitchSeq = 0;
 const hydrated = ref(false);
 
 const openMiniAppBridge = (context?: MiniAppBridgeLaunchContext) => {
@@ -255,8 +263,9 @@ const syncDraftOverlay = async (patches: DraftPatch[], persist = true) => {
   const { applyDraftPatchesToDataset, clearDraftPatches, saveDraftPatches } = await import(
     './core/datasetDraftStore'
   );
+  const currentBranch = explorer.activeBranchId.value;
   if (patches.length === 0) {
-    if (persist) clearDraftPatches();
+    if (persist) clearDraftPatches(currentBranch);
     draftPatches.value = [];
     explorer.setDatasetOverride(null);
     return;
@@ -267,8 +276,47 @@ const syncDraftOverlay = async (patches: DraftPatch[], persist = true) => {
     return;
   }
   draftPatches.value = patches;
-  if (persist) saveDraftPatches(patches);
+  if (persist) saveDraftPatches(patches, currentBranch);
   explorer.setDatasetOverride(result.dataset);
+};
+
+const handleSwitchBranch = async (
+  nextBranchId: string,
+  options?: { silent?: boolean; force?: boolean },
+) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  if (!availableBranches.some((b) => b.id === nextBranchId)) {
+    pushToast(`Không tìm thấy nhánh "${nextBranchId}"`, 'error');
+    return;
+  }
+  if (!options?.force && nextBranchId === explorer.activeBranchId.value) return;
+
+  const reqSeq = ++branchSwitchSeq;
+  branchLoading.value = true;
+  try {
+    const loaded = await loadBranchDataset(nextBranchId);
+    if (reqSeq !== branchSwitchSeq) return;
+    explorer.setBaseDataset(loaded, nextBranchId);
+
+    const { loadDraftPatches } = await import('./core/datasetDraftStore');
+    const savedDrafts = loadDraftPatches(nextBranchId);
+    await syncDraftOverlay(savedDrafts, false);
+
+    if (!options?.silent) {
+      pushToast(`Đã chuyển sang nhánh ${nextBranchId}`, 'success');
+    }
+  } catch (err) {
+    if (reqSeq === branchSwitchSeq) {
+      pushToast(
+        err instanceof Error ? err.message : `Không thể tải dữ liệu nhánh ${nextBranchId}`,
+        'error',
+      );
+    }
+  } finally {
+    if (reqSeq === branchSwitchSeq) {
+      branchLoading.value = false;
+    }
+  }
 };
 
 const handleApplyDraftPatch = async (patch: DraftPatch) => {
@@ -318,7 +366,10 @@ const handleSaveLocalDraft = async () => {
     const resp = await fetch('/__vbot-dev/apply-patches', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patches: draftPatches.value }),
+      body: JSON.stringify({
+        patches: draftPatches.value,
+        branchId: explorer.activeBranchId.value,
+      }),
     });
     const data = (await resp.json()) as {
       ok?: boolean;
@@ -536,6 +587,9 @@ const syncToUrl = () => {
     params.set('node', explorer.selectedNodeId.value);
   }
   if (__ENABLE_TECH_MODE__) {
+    if (availableBranches.length > 1 && explorer.activeBranchId.value) {
+      params.set('branch', explorer.activeBranchId.value);
+    }
     params.set('mode', explorer.audienceMode.value);
     if (explorer.audienceMode.value === 'tech') {
       params.set('platform', explorer.platformMode.value);
@@ -591,10 +645,23 @@ const exitZenMode = () => {
 
 onMounted(async () => {
   if (__ENABLE_TECH_MODE__) {
-    const { loadDraftPatches } = await import('./core/datasetDraftStore');
-    const saved = loadDraftPatches();
-    if (saved.length > 0) {
-      await syncDraftOverlay(saved, false);
+    const savedPrefs = loadSavedExplorerPrefs();
+    const initialBranchId = resolveInitialBranchId({
+      allowTechMode: __ENABLE_TECH_MODE__,
+      search: window.location.search,
+      hash: window.location.hash,
+      savedPrefs,
+      availableBranchIds: availableBranches.map((b) => b.id),
+      defaultBranchId,
+    });
+    if (initialBranchId && initialBranchId !== defaultBranchId) {
+      await handleSwitchBranch(initialBranchId, { silent: true, force: true });
+    } else {
+      const { loadDraftPatches } = await import('./core/datasetDraftStore');
+      const saved = loadDraftPatches(explorer.activeBranchId.value);
+      if (saved.length > 0) {
+        await syncDraftOverlay(saved, false);
+      }
     }
     if (import.meta.env.DEV) {
       try {
@@ -614,6 +681,7 @@ onMounted(async () => {
 
 watch(
   [
+    () => explorer.activeBranchId.value,
     () => explorer.focusRootId.value,
     () => explorer.selectedNodeId.value,
     () => explorer.audienceMode.value,
@@ -630,6 +698,7 @@ watch(
       saveExplorerPrefs({
         audienceMode: explorer.audienceMode.value,
         platformMode: explorer.platformMode.value,
+        branchId: explorer.activeBranchId.value,
       });
     }
   },
@@ -662,6 +731,10 @@ watch(
       :mini-app-studio-open="miniAppModalOpen"
       :parity-page-open="parityOpen"
       :governance-page-open="governanceOpen"
+      :available-branches="availableBranches"
+      :active-branch-id="explorer.activeBranchId.value"
+      :branch-loading="branchLoading"
+      @switch-branch="handleSwitchBranch($event)"
       @open-search="searchOpen = true"
       @open-parity="openParity()"
       @close-parity="parityOpen = false"
@@ -748,6 +821,8 @@ watch(
         :is="ParityMatrixModal"
         v-if="ParityMatrixModal && parityOpen"
         v-model:open="parityOpen"
+        :base-branch-dataset="dataset"
+        :base-branch-id="defaultBranchId"
         class="min-h-0 min-w-0 flex-1"
       />
       <component

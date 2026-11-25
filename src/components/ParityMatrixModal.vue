@@ -9,6 +9,7 @@ import {
   Copy,
   Download,
   ExternalLink,
+  GitBranch,
   Info,
   Scale,
   Search,
@@ -25,11 +26,14 @@ import {
   slugifyFilename,
 } from '../core/downloadHelper';
 import {
+  compareParityAgainstBase,
   exportParityReportToMarkdown,
   extractParityReport,
   PARITY_FIX_TARGET_LABELS,
   PARITY_NEEDS_FIX_LABELS,
   PARITY_VERDICT_LABELS,
+  type ParityBranchDeltaSummary,
+  type ParityBranchOrigin,
   type ParityCategory,
   type ParityItem,
 } from '../core/parityAnalyzer';
@@ -50,6 +54,7 @@ import {
 import { buildParityItemAiContextPrompt } from '../core/aiContextExport';
 import { loadDevWorkspaceSettings } from '../core/workspaceSettings';
 import type {
+  MergedFlowDataset,
   NodeKind,
   ParityFixTarget,
   ParityNeedsFix,
@@ -58,6 +63,8 @@ import type {
 
 const props = defineProps<{
   open: boolean;
+  baseBranchDataset?: MergedFlowDataset;
+  baseBranchId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -70,9 +77,11 @@ if (!explorer) {
 }
 
 type VerdictFilter = 'all' | 'needs_attention' | ParityVerdict;
+type BranchDeltaFilter = 'all' | 'branch_only' | 'added' | 'updated';
 
 const { pushToast } = useToast();
 const selectedVerdict = ref<VerdictFilter>('all');
+const branchDeltaFilter = ref<BranchDeltaFilter>('all');
 const selectedFixTarget = ref<'all' | ParityFixTarget>('all');
 const selectedCategory = ref<'all' | ParityCategory>('all');
 const selectedBranchId = ref<string>('all');
@@ -100,6 +109,37 @@ const onChangeTriage = (nodeId: string, status: ParityTriageStatus) => {
 };
 
 const report = computed(() => extractParityReport(explorer.dataset));
+
+const activeBranchLabel = computed(
+  () => explorer.activeBranchId.value || explorer.dataset.app.techBranch || '',
+);
+const baseBranchLabel = computed(
+  () => props.baseBranchId || props.baseBranchDataset?.app.techBranch || 'Nam-dev',
+);
+
+const branchDelta = computed<ParityBranchDeltaSummary | null>(() => {
+  if (!props.baseBranchDataset) return null;
+  if (!activeBranchLabel.value || activeBranchLabel.value === baseBranchLabel.value) {
+    return null;
+  }
+  const baseReport = extractParityReport(props.baseBranchDataset);
+  return compareParityAgainstBase(report.value, baseReport, {
+    baseBranchLabel: baseBranchLabel.value,
+    currentBranchLabel: activeBranchLabel.value,
+  });
+});
+
+watch(activeBranchLabel, () => {
+  branchDeltaFilter.value = 'all';
+});
+
+const getItemBranchDelta = (nodeId: string) => branchDelta.value?.byNodeId[nodeId] ?? null;
+
+const BRANCH_ORIGIN_RANK: Record<ParityBranchOrigin, number> = {
+  added: 0,
+  updated: 1,
+  inherited: 2,
+};
 
 const CATEGORY_META: Record<ParityCategory, { label: string; cls: string }> = {
   ios_only: {
@@ -301,7 +341,21 @@ const categoryTabs = computed<
 
 const filteredItems = computed(() => {
   const q = query.value.trim().toLowerCase();
-  return report.value.items.filter((item) => {
+  const deltaMap = branchDelta.value?.byNodeId ?? null;
+  const list = report.value.items.filter((item) => {
+    if (deltaMap && branchDeltaFilter.value !== 'all') {
+      const origin = deltaMap[item.nodeId]?.status ?? 'inherited';
+      if (branchDeltaFilter.value === 'branch_only' && origin === 'inherited') {
+        return false;
+      }
+      if (branchDeltaFilter.value === 'added' && origin !== 'added') {
+        return false;
+      }
+      if (branchDeltaFilter.value === 'updated' && origin !== 'updated') {
+        return false;
+      }
+    }
+
     if (selectedVerdict.value === 'needs_attention') {
       if (
         item.assessment.verdict !== 'action_needed' &&
@@ -349,6 +403,13 @@ const filteredItems = computed(() => {
       ...item.bridgeParityNotes.map((n) => `${n.messageName} ${n.parityNote}`),
     ];
     return haystacks.some((text) => text.toLowerCase().includes(q));
+  });
+
+  if (!deltaMap) return list;
+  return [...list].sort((a, b) => {
+    const rankA = BRANCH_ORIGIN_RANK[deltaMap[a.nodeId]?.status ?? 'inherited'];
+    const rankB = BRANCH_ORIGIN_RANK[deltaMap[b.nodeId]?.status ?? 'inherited'];
+    return rankA - rankB;
   });
 });
 
@@ -538,6 +599,13 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
             <span class="rounded-full bg-amber-100 px-2 py-0.5 font-mono text-xs font-bold text-amber-900 dark:bg-amber-500/20 dark:text-amber-300">
               {{ report.total }} mục
             </span>
+            <span
+              v-if="branchDelta && branchDelta.changedTotal > 0"
+              class="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-mono text-[11px] font-bold text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300"
+            >
+              <GitBranch class="h-3 w-3" />
+              {{ activeBranchLabel }} · +{{ branchDelta.addedCount }} mới · {{ branchDelta.updatedCount }} cập nhật so với {{ branchDelta.baseBranchLabel }}
+            </span>
           </div>
           <p class="text-xs text-slate-500 dark:text-slate-400">
             Phân biệt rõ điểm lệch cần sửa / khác kết quả với điểm chỉ khác đặc thù hệ điều hành (Swift vs Kotlin — không cần sửa).
@@ -625,6 +693,52 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
           <Wrench class="h-3 w-3" />
           Chỉ xem mục cần sửa / lệch kết quả ({{ needsAttentionCount }})
         </button>
+
+        <template v-if="branchDelta && branchDelta.changedTotal > 0">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition"
+            :class="
+              branchDeltaFilter === 'branch_only'
+                ? 'border-emerald-600 bg-emerald-600 text-white'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:border-emerald-300 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-200'
+            "
+            @click="
+              branchDeltaFilter = branchDeltaFilter === 'branch_only' ? 'all' : 'branch_only'
+            "
+          >
+            <GitBranch class="h-3 w-3" />
+            Riêng {{ activeBranchLabel }} ({{ branchDelta.changedTotal }})
+          </button>
+
+          <button
+            v-if="branchDelta.addedCount > 0"
+            type="button"
+            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition"
+            :class="
+              branchDeltaFilter === 'added'
+                ? 'border-teal-600 bg-teal-600 text-white'
+                : 'border-teal-200 bg-teal-50 text-teal-800 hover:border-teal-300 dark:border-teal-500/35 dark:bg-teal-500/15 dark:text-teal-200'
+            "
+            @click="branchDeltaFilter = branchDeltaFilter === 'added' ? 'all' : 'added'"
+          >
+            Mới thêm (+{{ branchDelta.addedCount }})
+          </button>
+
+          <button
+            v-if="branchDelta.updatedCount > 0"
+            type="button"
+            class="inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition"
+            :class="
+              branchDeltaFilter === 'updated'
+                ? 'border-violet-600 bg-violet-600 text-white'
+                : 'border-violet-200 bg-violet-50 text-violet-800 hover:border-violet-300 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-200'
+            "
+            @click="branchDeltaFilter = branchDeltaFilter === 'updated' ? 'all' : 'updated'"
+          >
+            Cập nhật ({{ branchDelta.updatedCount }})
+          </button>
+        </template>
 
         <span class="mx-1 hidden h-4 w-px bg-slate-200 sm:inline-block dark:bg-slate-700" />
 
@@ -768,6 +882,21 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
                   </span>
 
                   <span
+                    v-if="getItemBranchDelta(item.nodeId)?.status === 'added'"
+                    class="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-200"
+                  >
+                    <GitBranch class="h-2.5 w-2.5" />
+                    Mới · {{ activeBranchLabel }}
+                  </span>
+                  <span
+                    v-else-if="getItemBranchDelta(item.nodeId)?.status === 'updated'"
+                    class="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-800 dark:border-violet-500/40 dark:bg-violet-500/20 dark:text-violet-200"
+                  >
+                    <GitBranch class="h-2.5 w-2.5" />
+                    Đổi so với {{ branchDelta?.baseBranchLabel }}
+                  </span>
+
+                  <span
                     v-if="getItemTriage(item.nodeId) !== 'open'"
                     class="ml-auto rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                   >
@@ -822,6 +951,20 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
                 >
                   {{ CATEGORY_META[cat].label }}
                 </span>
+                <span
+                  v-if="getItemBranchDelta(selectedItem.nodeId)?.status === 'added'"
+                  class="inline-flex items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-200"
+                >
+                  <GitBranch class="h-3 w-3" />
+                  Mới trên {{ activeBranchLabel }}
+                </span>
+                <span
+                  v-else-if="getItemBranchDelta(selectedItem.nodeId)?.status === 'updated'"
+                  class="inline-flex items-center gap-1 rounded border border-violet-300 bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-800 dark:border-violet-500/40 dark:bg-violet-500/20 dark:text-violet-200"
+                >
+                  <GitBranch class="h-3 w-3" />
+                  Cập nhật so với {{ branchDelta?.baseBranchLabel }}
+                </span>
                 <span class="font-mono text-[11px] text-slate-400 dark:text-slate-500">
                   #{{ selectedItem.nodeId }}
                 </span>
@@ -834,6 +977,45 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
               <p class="text-xs text-slate-500 dark:text-slate-400">
                 {{ selectedItem.breadcrumb.join(' › ') }}
               </p>
+
+              <div
+                v-if="
+                  getItemBranchDelta(selectedItem.nodeId)?.status === 'updated' &&
+                  ((getItemBranchDelta(selectedItem.nodeId)?.previousVerdict &&
+                    getItemBranchDelta(selectedItem.nodeId)?.previousVerdict !==
+                      selectedItem.assessment.verdict) ||
+                    (getItemBranchDelta(selectedItem.nodeId)?.previousFixTarget &&
+                      getItemBranchDelta(selectedItem.nodeId)?.previousFixTarget !==
+                        selectedItem.assessment.fixTarget))
+                "
+                class="inline-flex flex-wrap items-center gap-2 rounded-lg border border-violet-200 bg-violet-50/80 px-2.5 py-1 text-[11px] font-medium text-violet-900 dark:border-violet-500/35 dark:bg-violet-500/12 dark:text-violet-200"
+              >
+                <span class="font-bold">Thay đổi từ {{ branchDelta?.baseBranchLabel }}:</span>
+                <span
+                  v-if="
+                    getItemBranchDelta(selectedItem.nodeId)?.previousVerdict &&
+                    getItemBranchDelta(selectedItem.nodeId)?.previousVerdict !==
+                      selectedItem.assessment.verdict
+                  "
+                >
+                  Đánh giá:
+                  {{ VERDICT_STYLES[getItemBranchDelta(selectedItem.nodeId)!.previousVerdict!].shortLabel }}
+                  →
+                  <strong>{{ VERDICT_STYLES[selectedItem.assessment.verdict].shortLabel }}</strong>
+                </span>
+                <span
+                  v-if="
+                    getItemBranchDelta(selectedItem.nodeId)?.previousFixTarget &&
+                    getItemBranchDelta(selectedItem.nodeId)?.previousFixTarget !==
+                      selectedItem.assessment.fixTarget
+                  "
+                >
+                  Bên sửa:
+                  {{ FIX_TARGET_STYLES[getItemBranchDelta(selectedItem.nodeId)!.previousFixTarget!].shortLabel }}
+                  →
+                  <strong>{{ FIX_TARGET_STYLES[selectedItem.assessment.fixTarget].shortLabel }}</strong>
+                </span>
+              </div>
             </div>
 
             <div class="flex shrink-0 flex-wrap items-center gap-2">
