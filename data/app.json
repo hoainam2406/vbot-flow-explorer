@@ -155,6 +155,7 @@
         ]
       },
       "parityAssessment": {
+        "code": "APP-01",
         "verdict": "logic_diff",
         "sameLogic": false,
         "sameOutcome": false,
@@ -210,6 +211,7 @@
           }
         },
         "parityAssessment": {
+          "code": "CALL-01",
           "verdict": "os_impl_only",
           "sameLogic": true,
           "sameOutcome": true,
@@ -264,6 +266,7 @@
           }
         },
         "parityAssessment": {
+          "code": "AUTH-01",
           "verdict": "os_impl_only",
           "sameLogic": true,
           "sameOutcome": true,
@@ -318,6 +321,7 @@
           }
         },
         "parityAssessment": {
+          "code": "CT-01",
           "verdict": "os_impl_only",
           "sameLogic": true,
           "sameOutcome": true,
@@ -338,7 +342,7 @@
         "tech": "Màn hình FeaturesViewControllerV2 / FeatureFragment tải danh sách Mini App từ VbMaSDK qua 4 lớp lọc (hiddenApps, inCallOnlyMiniApps, 7 adminOnlyApps, 15 memberAppPermissions), hiển thị thanh trạng thái (VbUserStateHolder / VbDeviceInboundHolder) và điều phối cầu nối Bridge cho AutodialManager / MiniAppMonitoringCoordinator."
       },
       "techDetail": {
-        "platformDiffNote": "Android lưu Gợi ý & Yêu thích (kéo-thả sắp xếp) trong Realm FeatureView; Giám sát trên Android dùng native PiP và hiện chưa emit lại monitor_call_state_changed về JS.",
+        "platformDiffNote": "Android lưu Gợi ý & Yêu thích (kéo-thả sắp xếp) trong Realm FeatureView; Giám sát trên Android dùng native PiP và đã emit monitor_call_state_changed về JS giống iOS.",
         "codeRefs": [
           "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
           "VBot/Service/MiniAppService.swift",
@@ -354,7 +358,7 @@
             ]
           },
           "android": {
-            "summary": "FeatureFragment (llConsoleQuickBar + Realm FeatureView Gợi ý/Yêu thích) + VbUserStateHolder (StateFlow/SharedFlow + UPDATE_STATE) + VbDeviceInboundHolder + MiniAppHelper.onMonitorCall (synchronized monitorLock).",
+            "summary": "FeatureFragment (llConsoleQuickBar + Realm FeatureView Gợi ý/Yêu thích) + VbUserStateHolder (StateFlow/SharedFlow + UPDATE_STATE) + VbDeviceInboundHolder + MiniAppHelper.onMonitorCall (synchronized monitorLock + sendMonitorCallStateChanged).",
             "codeRefs": [
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
@@ -363,13 +367,14 @@
           }
         },
         "parityAssessment": {
+          "code": "HUB-01",
           "verdict": "logic_diff",
           "sameLogic": false,
           "sameOutcome": false,
           "needsFix": "consider",
-          "explanation": "Trên Mini App Hub, Android hỗ trợ lưu & kéo-thả sắp xếp Gợi ý/Yêu thích trong Realm FeatureView và khác iOS ở chỗ Giám sát Android thiếu emit monitor_call_state_changed.",
-          "recommendation": "Cân nhắc đối chiếu tính năng sắp xếp Gợi ý/Yêu thích trên iOS và hoàn thiện event Giám sát cho Android.",
-          "fixTarget": "both"
+          "explanation": "Trên Mini App Hub, Android hỗ trợ lưu & kéo-thả sắp xếp Gợi ý/Yêu thích trong Realm FeatureView trong khi iOS chưa có cơ chế lưu/kéo-thả tương tự (luồng Giám sát monitor_call_state_changed đã đồng bộ trên cả 2 HĐH).",
+          "recommendation": "Cân nhắc đối chiếu tính năng lưu & kéo-thả sắp xếp Gợi ý/Yêu thích trên iOS nếu muốn đồng bộ trải nghiệm cá nhân hóa Hub.",
+          "fixTarget": "ios"
         }
       }
     },
@@ -383,7 +388,7 @@
         "tech": "Tab Gần đây nhúng Mini App vb-ma-user-history-call kèm bộ lọc native Tất cả/Gọi nhỡ (Mini App tự phát ghi âm trên cả 2 HĐH) và chuyển đổi dự án/hotline mặc định qua qListProjectViewController & qSelectDefaultHotlineViewController."
       },
       "techDetail": {
-        "platformDiffNote": "Trên Android, CallHistoryFragment hiện KHÔNG truyền theme_params và KHÔNG emit theme_changed (việc phát ghi âm do Mini App tự xử lý trên cả 2 HĐH; PlayerManager.swift iOS có 0 caller). SearchRecentlyFragment lọc Realm local và mở full-screen khi chạm item.",
+        "platformDiffNote": "Cả 2 HĐH đều nhúng Mini App vb-ma-user-history-call tự phát ghi âm (PlayerManager.swift iOS có 0 caller) và đồng bộ Sáng/Tối đầy đủ (Android do vb-ma-android-sdk tự inject vbma_theme & phát theme_changed); khác biệt chủ yếu ở tầng UI/lưu trữ native như SearchRecentlyFragment lọc Realm local rồi mở full-screen khi chạm item và các màn chọn dự án/hotline.",
         "codeRefs": [
           "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift",
           "VBot/Controller/NewController/Hotline/SelectHotline/qSelectDefaultHotlineViewController.swift",
@@ -408,13 +413,14 @@
           }
         },
         "parityAssessment": {
-          "verdict": "action_needed",
-          "sameLogic": false,
-          "sameOutcome": false,
-          "needsFix": "yes",
-          "explanation": "Module Lịch sử cuộc gọi trên Android còn thiếu truyền theme_params và không phát theme_changed cho Mini App vb-ma-user-history-call, dẫn tới lệch theme Sáng/Tối so với phần còn lại của app Android.",
-          "recommendation": "Nên cập nhật CallHistoryFragment.kt truyền theme_params lúc init và emit theme_changed khi người dùng đổi NightMode.",
-          "fixTarget": "android"
+          "code": "HIST-01",
+          "verdict": "os_impl_only",
+          "sameLogic": true,
+          "sameOutcome": true,
+          "needsFix": "no",
+          "explanation": "Module Lịch sử cuộc gọi đã đồng bộ nghiệp vụ trên cả 2 HĐH (tự phát ghi âm trong Mini App, bộ lọc filter_changed, refresh_data và chuyển theme Sáng/Tối tự động qua vb-ma-android-sdk); chỉ khác triển khai native UI và cách tìm kiếm cục bộ qua Realm trên Android.",
+          "recommendation": "Không cần sửa — hành vi Lịch sử cuộc gọi, phát ghi âm và giao diện Sáng/Tối đều đã hoạt động đúng trên cả 2 nền tảng.",
+          "fixTarget": "none"
         }
       }
     },
@@ -456,6 +462,7 @@
           }
         },
         "parityAssessment": {
+          "code": "ACC-01",
           "verdict": "logic_diff",
           "sameLogic": false,
           "sameOutcome": false,
@@ -526,7 +533,7 @@
             "tech": "UserHistoryCallViewController nhúng Mini App vb-ma-user-history-call, kết hợp UISegmentedControl native (Tất cả / Gọi nhỡ) và cơ chế refresh trễ khi cuộc gọi vừa kết thúc (Mini App tự phát ghi âm trên cả 2 HĐH; PlayerManager.swift iOS là dead code 0 caller)."
           },
           "techDetail": {
-            "platformDiffNote": "Android CallHistoryFragment KHÔNG truyền theme_params khi tạo MiniAppFragment và KHÔNG emit theme_changed (việc phát ghi âm do Mini App tự lo trên cả 2 HĐH; iOS PlayerManager.swift có 0 caller). SearchRecentlyFragment lọc Realm local rồi khi chạm item mới mở vb-ma-user-history-call full-screen kèm { groupId, transId }.",
+            "platformDiffNote": "Cả 2 HĐH đều để Mini App tự phát ghi âm (iOS PlayerManager.swift có 0 caller) và đồng bộ giao diện Sáng/Tối đầy đủ (Android dùng cơ chế tự inject vbma_theme & emit theme_changed của vb-ma-android-sdk trong MiniAppFragment/VbMABridge). Khác biệt nhỏ chỉ nằm ở SearchRecentlyFragment (Android lọc Realm local rồi mở full-screen kèm { groupId, transId }).",
             "codeRefs": [
               "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"
             ],
@@ -538,7 +545,7 @@
                 ]
               },
               "android": {
-                "summary": "CallHistoryFragment nhúng MiniAppFragment, dùng tvSelect1/tvSelect2 emit filter_changed, NewCallActivity.destroy() đánh dấu pendingCallEndedRefresh (và SearchRecentlyFragment lọc Realm, bấm item mở full-screen); phát ghi âm trong Mini App, chưa có theme_changed.",
+                "summary": "CallHistoryFragment nhúng MiniAppFragment (vb-ma-android-sdk tự đồng bộ vbma_theme & theme_changed), dùng tvSelect1/tvSelect2 emit filter_changed, NewCallActivity.destroy() đánh dấu pendingCallEndedRefresh (và SearchRecentlyFragment lọc Realm, bấm item mở full-screen); phát ghi âm trong Mini App.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/main/SearchRecentlyFragment.kt",
@@ -565,7 +572,7 @@
                   },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }",
-                  "parityNote": "Android không truyền theme_params vào extraData khi tạo MiniAppFragment và không emit theme_changed."
+                  "parityNote": "iOS truyền MiniAppThemeParams(isDark: false) trong extraData; Android để vb-ma-android-sdk (MiniAppRenderer + VbMABridge) tự inject #vbma_theme và tự emit theme_changed theo uiMode."
                 },
                 {
                   "direction": "host_to_miniapp",
@@ -619,13 +626,14 @@
               ]
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "Việc tự phát ghi âm do Mini App lo đã giống nhau trên 2 OS, nhưng bước nhúng CallHistoryFragment trên Android bị thiếu theme_params và theme_changed gây lệch giao diện Dark Mode khi mở lịch sử.",
-              "recommendation": "Nên bổ sung theme_params + theme_changed cho CallHistoryFragment trên Android để đồng bộ chuẩn Host Bridge.",
-              "fixTarget": "android"
+              "code": "HIST-02",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả 2 HĐH đều đồng bộ luồng nhúng Mini App Lịch sử cuộc gọi, tự phát ghi âm, filter_changed, refresh_data và chuyển theme Sáng/Tối (vb-ma-android-sdk tự inject #vbma_theme và phát theme_changed cho CallHistoryFragment).",
+              "recommendation": "Không cần sửa — luồng Lịch sử cuộc gọi và đồng bộ giao diện Sáng/Tối đã hoạt động nhất quán trên cả iOS và Android.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [

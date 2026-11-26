@@ -62,6 +62,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-02",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -104,6 +105,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-11",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -196,6 +198,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-16",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -236,6 +239,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-23",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -279,6 +283,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-28",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -356,6 +361,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-03",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -396,6 +402,7 @@
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift"
             ],
             "parityAssessment": {
+              "code": "CALL-04",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -449,6 +456,7 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/permission/PermissionActivity.kt"
             ],
             "parityAssessment": {
+              "code": "CALL-05",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -499,6 +507,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-06",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -550,6 +559,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-07",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -578,6 +588,7 @@
               "VBot/Service/VPMAppServiceEndpoints/VPMAppService+CallIn.swift"
             ],
             "parityAssessment": {
+              "code": "CALL-08",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -609,6 +620,7 @@
               "VBot/Service/Database/UserContactDatabaseHelper.swift"
             ],
             "parityAssessment": {
+              "code": "CALL-09",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -659,6 +671,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-10",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -913,6 +926,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CALL-12",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -959,6 +973,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-13",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1007,6 +1022,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-14",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -1048,6 +1064,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-15",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1135,6 +1152,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-17",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1169,6 +1187,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-18",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1218,6 +1237,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-19",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1274,6 +1294,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-20",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1311,6 +1332,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-21",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -1343,6 +1365,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-22",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -1498,6 +1521,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-24",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1538,6 +1562,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-25",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1607,6 +1632,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CALL-26",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -1647,6 +1673,7 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/notification/SipCallResultNotificationHelper.kt"
             ],
             "parityAssessment": {
+              "code": "CALL-27",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,

@@ -387,26 +387,20 @@ export function runSimulationContractSuite(
         cfg,
         createInitialHostState(cfg),
       );
-      const hasIosEvent = monRes.emittedPushEvents.some(
+      const hasStateEvent = monRes.emittedPushEvents.some(
         (e) => e.eventName === 'monitor_call_state_changed',
       );
-      const status: ContractTestStatus = !monRes.ok
-        ? 'fail'
-        : platform === 'android'
-          ? 'warning'
-          : 'pass';
+      const status: ContractTestStatus =
+        monRes.ok && hasStateEvent ? 'pass' : 'fail';
       results.push({
         id: `${platform}-monitor-call`,
-        title: 'Giám sát cuộc gọi monitor_call & khác biệt event iOS/Android',
+        title: 'Giám sát cuộc gọi monitor_call & phát event monitor_call_state_changed (iOS & Android)',
         category: 'host_action',
         platform,
         method: 'monitor_call',
         status,
-        expectedSummary:
-          platform === 'ios'
-            ? 'iOS phát monitor_call_state_changed về JS'
-            : 'Android chỉ mở Native PiP (không phát state event về JS)',
-        actualSummary: `ok=${String(monRes.ok)}, emittedStateEvent=${String(hasIosEvent)}`,
+        expectedSummary: 'Cả iOS và Android đều phát monitor_call_state_changed về JS',
+        actualSummary: `ok=${String(monRes.ok)}, emittedStateEvent=${String(hasStateEvent)}`,
         parityNote: monRes.parityAlertNote,
       });
     }

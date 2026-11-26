@@ -196,10 +196,10 @@ export const PERMISSION_MODULES: PermissionModuleSpec[] = [
     iosEnum: 'VPMRoleVC.member ("THANH_VIEN")',
     androidEnum: 'EnumPermission.THANH_VIEN',
     androidModuleAliases: ['MEMBER', 'MEMBER_MGMT'],
-    iosModuleAliases: ['MEMBER', 'MEMBERS'],
+    iosModuleAliases: ['MEMBER', 'MEMBERS', 'MEMBER_MGMT'],
     wildcardSupported: false,
     parityNote:
-      'iOS VPMRoleAction hiện chưa khai báo case Enum riêng cho "GIA_HAN" (chỉ khớp nếu "GIA_HAN" có trong rawPerms); Android có đủ EnumPermissionMember.THEM_TIEN và GIA_HAN.',
+      'Cả iOS (VPMRoleAction.addMoney / .extend + MiniAppPermissionHelper/MiniAppService) và Android (EnumPermissionMember.THEM_TIEN / GIA_HAN) đều hỗ trợ đầy đủ 6 sub-permission của THANH_VIEN và các alias tiếng Anh (TOPUP/ADD_MONEY/DEPOSIT, RENEW/EXTEND).',
     actions: [
       {
         code: 'XEM',
@@ -235,7 +235,7 @@ export const PERMISSION_MODULES: PermissionModuleSpec[] = [
         code: 'GIA_HAN',
         labelVi: 'Gia hạn tài khoản thành viên',
         androidAliases: ['RENEW', 'EXTEND'],
-        iosSupportNote: 'Chỉ khớp rawPerms.contains("GIA_HAN") (VPMRoleAction chưa có case enum riêng)',
+        iosSupportNote: 'Khớp VPMRoleAction.extend ("GIA_HAN") và alias RENEW/EXTEND qua MiniAppPermissionHelper',
       },
     ],
   },
@@ -617,7 +617,7 @@ export const MINI_APP_PERMISSION_PROFILES: Record<string, MiniAppPermissionProfi
       { module: 'THANH_VIEN', actions: ['CHINH_SUA', 'GIA_HAN', 'TAO', 'THEM_TIEN', 'XEM', 'XOA'] },
     ],
     inAppNotes:
-      'Prod /api/apps trả category="Cài đặt nhóm"; iOS VPMRoleAction chưa có enum GIA_HAN (chỉ khớp raw string nếu server trả); Android hỗ trợ đủ 6 sub-permission EnumPermissionMember.',
+      'Prod /api/apps trả category="Cài đặt nhóm"; cả iOS (VPMRoleAction gồm cả .extend = "GIA_HAN") và Android (EnumPermissionMember) đều hỗ trợ đầy đủ 6 sub-permission của THANH_VIEN.',
   },
   'vb-ma-group-member': {
     appId: 'vb-ma-group-member',

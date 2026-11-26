@@ -208,6 +208,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-02",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -245,6 +246,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-06",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -277,6 +279,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-09",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -377,6 +380,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-11",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -416,6 +420,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-13",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -456,6 +461,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-22",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -571,6 +577,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-03",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -691,6 +698,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-04",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -728,6 +736,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-05",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -823,6 +832,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-07",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -857,6 +867,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-08",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1098,6 +1109,7 @@
               }
             },
             "parityAssessment": {
+              "code": "CT-10",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -1235,6 +1247,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-12",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1372,6 +1385,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-14",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1434,6 +1448,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-15",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1501,6 +1516,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-16",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1565,6 +1581,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-17",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1680,6 +1697,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-18",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": true,
@@ -1823,6 +1841,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-19",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1886,6 +1905,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-20",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1998,6 +2018,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-21",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -2189,6 +2210,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-23",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -2251,6 +2273,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-24",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -2359,6 +2382,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "CT-25",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,

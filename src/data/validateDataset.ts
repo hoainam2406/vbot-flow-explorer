@@ -5,7 +5,7 @@ import {
   type AppManifest,
   type FlowModuleFile,
   type SubtreeDefinition,
-} from './schema';
+} from "./schema";
 
 export function validateDataset(
   rawManifest: unknown,
@@ -37,7 +37,7 @@ export function validateDataset(
     allNodeIds.add(id);
   };
 
-  registerNode(manifest.rootNode.id, 'rootNode');
+  registerNode(manifest.rootNode.id, "rootNode");
   manifest.branches.forEach((b) => registerNode(b.id, `branches/${b.id}`));
 
   const subtrees: Record<string, SubtreeDefinition> = {
@@ -72,12 +72,16 @@ export function validateDataset(
 
     for (const entryId of subtree.entryNodeIds) {
       if (!localIds.has(entryId)) {
-        errors.push(`Subtree "${parentId}" entryNodeId "${entryId}" missing in local nodes`);
+        errors.push(
+          `Subtree "${parentId}" entryNodeId "${entryId}" missing in local nodes`,
+        );
       }
     }
     for (const edge of subtree.edges) {
       if (!localIds.has(edge.source) || !localIds.has(edge.target)) {
-        errors.push(`Subtree "${parentId}" edge "${edge.id}" references missing node`);
+        errors.push(
+          `Subtree "${parentId}" edge "${edge.id}" references missing node`,
+        );
       }
     }
     for (const sc of subtree.scenarios ?? []) {
@@ -88,7 +92,9 @@ export function validateDataset(
       });
       sc.edgeIds.forEach((eid) => {
         if (!localEdgeIds.has(eid)) {
-          errors.push(`Scenario "${sc.id}" references missing edge "${eid}" in "${parentId}"`);
+          errors.push(
+            `Scenario "${sc.id}" references missing edge "${eid}" in "${parentId}"`,
+          );
         }
       });
     }
@@ -105,6 +111,29 @@ export function validateDataset(
   };
   checkRelated([manifest.rootNode, ...manifest.branches]);
   Object.values(subtrees).forEach((s) => checkRelated(s.nodes));
+
+  const seenParityCodes = new Map<string, string>();
+  const checkParityCodes = (
+    nodes: {
+      id: string;
+      techDetail?: { parityAssessment?: { code?: string } };
+    }[],
+  ) => {
+    for (const n of nodes) {
+      const code = n.techDetail?.parityAssessment?.code;
+      if (!code) continue;
+      const existingId = seenParityCodes.get(code);
+      if (existingId) {
+        errors.push(
+          `Duplicate parity code "${code}" on node "${n.id}" (already used by "${existingId}")`,
+        );
+      } else {
+        seenParityCodes.set(code, n.id);
+      }
+    }
+  };
+  checkParityCodes([manifest.rootNode, ...manifest.branches]);
+  Object.values(subtrees).forEach((s) => checkParityCodes(s.nodes));
 
   return errors;
 }

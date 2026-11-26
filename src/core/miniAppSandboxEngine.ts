@@ -277,9 +277,6 @@ export function createInitialHostState(config: SandboxHostConfig): SandboxHostSt
 }
 
 export function buildLaunchParamsObject(config: SandboxHostConfig): Record<string, unknown> {
-  const omitThemeOnAndroidHistory =
-    config.platform === 'android' && config.appId === 'vb-ma-user-history-call';
-
   const result: Record<string, unknown> = {
     vbma_data: {
       user_id: config.userId,
@@ -290,17 +287,14 @@ export function buildLaunchParamsObject(config: SandboxHostConfig): Record<strin
       language: 'vi',
     },
     vbma_api_base_url: config.apiBaseUrl,
-  };
-
-  if (!omitThemeOnAndroidHistory) {
-    result.vbma_theme = {
+    vbma_theme: {
       theme: config.theme,
       theme_params:
         config.theme === 'dark'
           ? { bg_color: '#0f172a', text_color: '#f8fafc', hint_color: '#94a3b8', button_color: '#06b6d4' }
           : { bg_color: '#ffffff', text_color: '#0f172a', hint_color: '#64748b', button_color: '#0284c7' },
-    };
-  }
+    },
+  };
 
   if (Object.keys(config.extraData).length > 0) {
     result.vbma_extra_data = config.extraData;
@@ -785,20 +779,12 @@ export function executeHostCommand(
     }
 
     case 'request_theme': {
-      const omitAndroidHistory =
-        config.platform === 'android' && config.appId === 'vb-ma-user-history-call';
-      if (omitAndroidHistory) {
-        parityAlertNote =
-          'Lưu ý Parity: Android CallHistoryFragment chưa truyền theme_params ở màn Lịch sử cuộc gọi.';
-      }
       return finalize(true, 'ok', 'theme_response', {
         theme: nextState.theme,
         theme_params:
-          omitAndroidHistory
-            ? null
-            : nextState.theme === 'dark'
-              ? { bg_color: '#0f172a', text_color: '#f8fafc', button_color: '#06b6d4' }
-              : { bg_color: '#ffffff', text_color: '#0f172a', button_color: '#0284c7' },
+          nextState.theme === 'dark'
+            ? { bg_color: '#0f172a', text_color: '#f8fafc', button_color: '#06b6d4' }
+            : { bg_color: '#ffffff', text_color: '#0f172a', button_color: '#0284c7' },
       });
     }
 
@@ -1270,20 +1256,15 @@ export function executeHostCommand(
         modeLabel: `${mode} · ${modeName}`,
       };
 
-      if (config.platform === 'ios') {
-        emittedPushEvents.push({
-          eventName: 'monitor_call_state_changed',
-          payload: {
-            call_id: callId,
-            mode,
-            mode_name: modeName,
-            state: 'monitoring',
-          },
-        });
-      } else {
-        parityAlertNote =
-          'Lưu ý Parity: Android hiện KHÔNG phát event monitor_call_state_changed xuống JS — chỉ hiển thị PiP Overlay Native.';
-      }
+      emittedPushEvents.push({
+        eventName: 'monitor_call_state_changed',
+        payload: {
+          call_id: callId,
+          mode,
+          mode_name: modeName,
+          state: 'monitoring',
+        },
+      });
 
       return finalize(true, 'ok', 'host_action_result', {
         request_id: requestId,
@@ -1518,7 +1499,7 @@ export function resolveHotlinePicker(
 export function buildHostPushEvent(
   eventName: string,
   customPayload: Record<string, unknown>,
-  config: SandboxHostConfig,
+  _config: SandboxHostConfig,
   state: SandboxHostState,
 ): {
   nextState: SandboxHostState;
@@ -1528,7 +1509,6 @@ export function buildHostPushEvent(
   parityAlertNote?: string;
 } {
   const nextState = cloneState(state);
-  let parityAlertNote: string | undefined;
   let payload: Record<string, unknown> = { ...customPayload };
 
   if (eventName === 'theme_changed') {
@@ -1546,18 +1526,11 @@ export function buildHostPushEvent(
           ? { bg_color: '#0f172a', text_color: '#f8fafc', button_color: '#06b6d4' }
           : { bg_color: '#ffffff', text_color: '#0f172a', button_color: '#0284c7' },
     };
-    if (config.platform === 'android' && config.appId === 'vb-ma-user-history-call') {
-      parityAlertNote = 'Lưu ý: Android CallHistoryFragment hiện không đẩy theme_changed tự động.';
-    }
   } else if (eventName === 'autodial_finished') {
     nextState.autodial.status = 'stopped';
     if (nextState.activeCall?.callId.startsWith('call_ad_')) {
       nextState.activeCall = null;
     }
-  } else if (eventName === 'monitor_call_state_changed' && config.platform === 'android') {
-    parityAlertNote = 'Cảnh báo Parity: Event monitor_call_state_changed chỉ có trên Host iOS.';
-  } else if (eventName === 'setup_2fa' && config.platform === 'android') {
-    parityAlertNote = 'Android chưa có ActiveTracker theo appId nên sẽ phát tới WebView đang active.';
   }
 
   nextState.lastPushEvent = {
@@ -1570,7 +1543,6 @@ export function buildHostPushEvent(
     nextState,
     eventName,
     payload,
-    parityAlertNote,
     wireFrames: [
       {
         id: nextWireId('push'),
@@ -1578,9 +1550,9 @@ export function buildHostPushEvent(
         direction: 'host_to_miniapp',
         channel: `VbMA.receive("${eventName}", payload)`,
         methodOrEvent: eventName,
-        status: parityAlertNote ? 'warning' : 'ok',
+        status: 'ok',
         payload,
-        note: parityAlertNote ?? 'Host chủ động đẩy sự kiện xuống WebView',
+        note: 'Host chủ động đẩy sự kiện xuống WebView',
       },
     ],
   };

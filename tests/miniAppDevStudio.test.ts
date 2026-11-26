@@ -83,7 +83,7 @@ describe('miniAppContractBuilder', () => {
 });
 
 describe('miniAppSandboxEngine', () => {
-  it('builds launch params and faithfully omits vbma_theme on Android History Call', () => {
+  it('builds launch params including vbma_theme on both iOS and Android History Call', () => {
     const iosHistoryCfg = {
       ...createDefaultHostConfig('vb-ma-user-history-call'),
       platform: 'ios' as const,
@@ -96,7 +96,7 @@ describe('miniAppSandboxEngine', () => {
     };
     const androidParams = buildLaunchParamsObject(androidHistoryCfg);
     expect(androidParams.vbma_data).toBeDefined();
-    expect(androidParams.vbma_theme).toBeUndefined();
+    expect(androidParams.vbma_theme).toBeDefined();
 
     const hash = buildLaunchHashString(iosHistoryCfg);
     expect(hash.startsWith('#')).toBe(true);
@@ -317,8 +317,8 @@ describe('miniAppSandboxEngine', () => {
       createInitialHostState(monIosCfg),
     );
     expect(monAndroid.ok).toBe(true);
-    expect(monAndroid.emittedPushEvents).toHaveLength(0);
-    expect(monAndroid.parityAlertNote).toBeDefined();
+    expect(monAndroid.emittedPushEvents.some((e) => e.eventName === 'monitor_call_state_changed')).toBe(true);
+    expect(monAndroid.parityAlertNote).toBeUndefined();
 
     // 6. Contacts iOS limited
     const contactIosCfg = {

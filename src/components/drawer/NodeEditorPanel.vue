@@ -56,6 +56,7 @@ const relatedIdsText = ref('');
 
 // Parity & Bridge fields
 const hasParityAssessment = ref(false);
+const parityCode = ref('');
 const parityVerdict = ref<ParityVerdict>('logic_diff');
 const paritySameLogic = ref(false);
 const paritySameOutcome = ref(false);
@@ -117,6 +118,7 @@ const syncFieldsFromNode = (n: FlowNodeData) => {
 
   const pa = n.techDetail?.parityAssessment;
   hasParityAssessment.value = Boolean(pa);
+  parityCode.value = pa?.code ?? '';
   parityVerdict.value = pa?.verdict ?? 'logic_diff';
   paritySameLogic.value = pa?.sameLogic ?? false;
   paritySameOutcome.value = pa?.sameOutcome ?? false;
@@ -231,7 +233,9 @@ const buildNodeFromForm = (): FlowNodeData => {
   else delete nextTechDetail.byPlatform;
 
   if (hasParityAssessment.value) {
+    const cleanCode = parityCode.value.trim().toUpperCase();
     nextTechDetail.parityAssessment = {
+      ...(cleanCode ? { code: cleanCode } : {}),
       verdict: parityVerdict.value,
       sameLogic: paritySameLogic.value,
       sameOutcome: paritySameOutcome.value,
@@ -645,6 +649,15 @@ const handleSave = () => {
         </label>
 
         <template v-if="hasParityAssessment">
+          <label class="block space-y-1">
+            <span class="font-semibold text-slate-600 dark:text-slate-300">Mã chênh lệch (code)</span>
+            <input
+              v-model="parityCode"
+              type="text"
+              placeholder="VD: CALL-01"
+              class="w-full rounded border border-slate-200 bg-white px-2 py-1 font-mono text-[11px] uppercase dark:border-slate-700 dark:bg-slate-950"
+            />
+          </label>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label class="space-y-1">
               <span class="font-semibold text-slate-600 dark:text-slate-300">Verdict</span>

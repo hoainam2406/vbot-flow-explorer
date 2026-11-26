@@ -5,6 +5,8 @@ import {
   ArrowLeft,
   Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ClipboardList,
   Copy,
   Download,
@@ -59,6 +61,7 @@ import type {
   ParityFixTarget,
   ParityNeedsFix,
   ParityVerdict,
+  Platform,
 } from '../data/schema';
 
 const props = defineProps<{
@@ -95,6 +98,13 @@ const selectedNodeId = ref<string | null>(null);
 const copiedMd = ref(false);
 const searchInputRef = ref<HTMLInputElement | null>(null);
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+const devSettings = ref(loadDevWorkspaceSettings());
+const copiedPromptPlatform = ref<Platform | null>(null);
+let promptCopyTimer: ReturnType<typeof setTimeout> | null = null;
+const promptPreviewOpen = ref(false);
+const activePromptTab = ref<Platform>('ios');
+const copiedCode = ref<string | null>(null);
+let codeCopyTimer: ReturnType<typeof setTimeout> | null = null;
 
 const vbotWorkUrl = computed(() =>
   resolveVbotWorkUrl(loadDevWorkspaceSettings(), explorer.dataset.app.repoConfig, 'general'),
@@ -392,6 +402,7 @@ const filteredItems = computed(() => {
     if (!q) return true;
 
     const haystacks = [
+      item.code,
       item.nodeLabel,
       item.nodeId,
       item.branchLabel,
@@ -435,6 +446,94 @@ const selectedItem = computed<ParityItem | null>(() => {
   );
 });
 
+const resolveDefaultPromptPlatform = (item: ParityItem): Platform => {
+  if (item.assessment.fixTarget === 'android') return 'android';
+  if (item.assessment.fixTarget !== 'ios' && item.categories.includes('ios_only')) {
+    return 'android';
+  }
+  return 'ios';
+};
+
+watch(
+  selectedItem,
+  (item) => {
+    copiedPromptPlatform.value = null;
+    if (item) {
+      activePromptTab.value = resolveDefaultPromptPlatform(item);
+    }
+  },
+  { immediate: true },
+);
+
+const isPromptRecommended = (platform: Platform, item: ParityItem): boolean =>
+  item.assessment.fixTarget === platform || item.assessment.fixTarget === 'both';
+
+const iosPromptText = computed(() => {
+  if (!selectedItem.value) return '';
+  return buildParityItemAiContextPrompt(
+    selectedItem.value,
+    explorer.dataset,
+    'ios',
+    devSettings.value,
+  );
+});
+
+const androidPromptText = computed(() => {
+  if (!selectedItem.value) return '';
+  return buildParityItemAiContextPrompt(
+    selectedItem.value,
+    explorer.dataset,
+    'android',
+    devSettings.value,
+  );
+});
+
+const activePromptText = computed(() =>
+  activePromptTab.value === 'ios' ? iosPromptText.value : androidPromptText.value,
+);
+
+const handleCopyPlatformPrompt = async (item: ParityItem, platform: Platform) => {
+  const freshSettings = loadDevWorkspaceSettings();
+  devSettings.value = freshSettings;
+  const prompt = buildParityItemAiContextPrompt(item, explorer.dataset, platform, freshSettings);
+  const ok = await copyTextToClipboard(prompt);
+  if (!ok) {
+    pushToast('Không thể sao chép AI Prompt vào clipboard', 'error');
+    return;
+  }
+  copiedPromptPlatform.value = platform;
+  activePromptTab.value = platform;
+  pushToast(
+    platform === 'ios'
+      ? 'Đã copy AI Prompt sửa lỗi cho iOS (Swift)'
+      : 'Đã copy AI Prompt sửa lỗi cho Android (Kotlin/Java)',
+    'success',
+  );
+  if (promptCopyTimer) clearTimeout(promptCopyTimer);
+  promptCopyTimer = setTimeout(() => {
+    copiedPromptPlatform.value = null;
+  }, 1800);
+};
+
+const selectPromptTab = (platform: Platform) => {
+  activePromptTab.value = platform;
+  promptPreviewOpen.value = true;
+};
+
+const handleCopyParityCode = async (code: string) => {
+  const ok = await copyTextToClipboard(code);
+  if (!ok) {
+    pushToast('Không thể sao chép mã chênh lệch', 'error');
+    return;
+  }
+  copiedCode.value = code;
+  pushToast(`Đã copy mã chênh lệch ${code}`, 'success');
+  if (codeCopyTimer) clearTimeout(codeCopyTimer);
+  codeCopyTimer = setTimeout(() => {
+    copiedCode.value = null;
+  }, 1800);
+};
+
 const toggleVerdictCard = (verdict: ParityVerdict) => {
   selectedVerdict.value = selectedVerdict.value === verdict ? 'all' : verdict;
 };
@@ -459,6 +558,7 @@ watch(
   () => props.open,
   async (isOpen) => {
     if (isOpen) {
+      devSettings.value = loadDevWorkspaceSettings();
       window.addEventListener('keydown', onWindowKeyDown);
       await nextTick();
       searchInputRef.value?.focus();
@@ -472,6 +572,12 @@ onBeforeUnmount(() => {
   window.removeEventListener('keydown', onWindowKeyDown);
   if (copyResetTimer) {
     clearTimeout(copyResetTimer);
+  }
+  if (promptCopyTimer) {
+    clearTimeout(promptCopyTimer);
+  }
+  if (codeCopyTimer) {
+    clearTimeout(codeCopyTimer);
   }
 });
 
@@ -491,7 +597,8 @@ const buildFullParityMarkdown = (): string => {
     '## Trạng thái theo dõi xử lý (Local Triage)',
     '',
     ...tracked.map(
-      (i) => `- **${i.nodeLabel}** (\`${i.nodeId}\`): ${PARITY_TRIAGE_LABELS[getItemTriage(i.nodeId)]}`,
+      (i) =>
+        `- **[${i.code}] ${i.nodeLabel}** (\`${i.nodeId}\`): ${PARITY_TRIAGE_LABELS[getItemTriage(i.nodeId)]}`,
     ),
     '',
   ];
@@ -775,7 +882,7 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
             ref="searchInputRef"
             v-model="query"
             type="text"
-            placeholder="Lọc theo tên bước, sự kiện bridge, giải thích hoặc khuyến nghị..."
+            placeholder="Lọc theo mã (vd CALL-05), tên bước, sự kiện bridge, giải thích hoặc khuyến nghị..."
             class="w-full rounded-lg border border-slate-200 bg-white py-1.5 pr-3 pl-8 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:border-cyan-500"
           />
         </div>
@@ -855,6 +962,9 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
                 @click="selectedNodeId = item.nodeId"
               >
                 <div class="mb-1 flex flex-wrap items-center gap-1.5">
+                  <span class="rounded border border-slate-300 bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-slate-800 dark:border-slate-600 dark:bg-slate-800 dark:text-cyan-300">
+                    {{ item.code }}
+                  </span>
                   <span
                     class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-bold"
                     :class="VERDICT_STYLES[item.assessment.verdict].badgeCls"
@@ -965,6 +1075,16 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
                   <GitBranch class="h-3 w-3" />
                   Cập nhật so với {{ branchDelta?.baseBranchLabel }}
                 </span>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-extrabold text-slate-900 transition hover:border-indigo-400 hover:bg-indigo-50 dark:border-cyan-500/40 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:bg-cyan-500/25"
+                  :title="`Click để copy mã ${selectedItem.code}`"
+                  @click="handleCopyParityCode(selectedItem.code)"
+                >
+                  <span>{{ selectedItem.code }}</span>
+                  <Check v-if="copiedCode === selectedItem.code" class="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  <Copy v-else class="h-3 w-3 opacity-70" />
+                </button>
                 <span class="font-mono text-[11px] text-slate-400 dark:text-slate-500">
                   #{{ selectedItem.nodeId }}
                 </span>
@@ -1041,18 +1161,34 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
 
               <button
                 type="button"
-                class="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-800 transition hover:bg-indigo-100 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-200"
-                title="Sao chép ngữ cảnh sửa lệch iOS ↔ Android để dán vào AI IDE"
-                @click="
-                  copyTextToClipboard(
-                    buildParityItemAiContextPrompt(selectedItem, explorer.dataset, loadDevWorkspaceSettings()),
-                  ).then((ok) => {
-                    if (ok) pushToast('Đã copy AI Prompt cho mục Parity này', 'success');
-                  })
+                class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition"
+                :class="
+                  isPromptRecommended('ios', selectedItem)
+                    ? 'border-indigo-400 bg-indigo-600 text-white shadow-2xs hover:bg-indigo-500 dark:border-indigo-400/60 dark:bg-indigo-500 dark:text-white dark:hover:bg-indigo-400'
+                    : 'border-indigo-200 bg-indigo-50 text-indigo-800 hover:bg-indigo-100 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-200 dark:hover:bg-indigo-500/25'
                 "
+                title="Sao chép AI Prompt sửa/đối soát riêng cho iOS (VBot-iOS · Swift)"
+                @click="handleCopyPlatformPrompt(selectedItem, 'ios')"
               >
-                <Sparkles class="h-3.5 w-3.5" />
-                Copy AI Prompt
+                <Check v-if="copiedPromptPlatform === 'ios'" class="h-3.5 w-3.5" />
+                <Sparkles v-else class="h-3.5 w-3.5" />
+                {{ copiedPromptPlatform === 'ios' ? 'Đã copy iOS' : 'Prompt iOS' }}
+              </button>
+
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition"
+                :class="
+                  isPromptRecommended('android', selectedItem)
+                    ? 'border-emerald-500 bg-emerald-600 text-white shadow-2xs hover:bg-emerald-500 dark:border-emerald-400/60 dark:bg-emerald-500 dark:text-slate-950 dark:hover:bg-emerald-400'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-200 dark:hover:bg-emerald-500/25'
+                "
+                title="Sao chép AI Prompt sửa/đối soát riêng cho Android (VBot-Android · Kotlin/Java)"
+                @click="handleCopyPlatformPrompt(selectedItem, 'android')"
+              >
+                <Check v-if="copiedPromptPlatform === 'android'" class="h-3.5 w-3.5" />
+                <Sparkles v-else class="h-3.5 w-3.5" />
+                {{ copiedPromptPlatform === 'android' ? 'Đã copy Android' : 'Prompt Android' }}
               </button>
 
               <button
@@ -1241,6 +1377,90 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
                 </p>
               </div>
             </div>
+          </section>
+
+          <!-- Collapsible 2-tab Platform AI Prompt Preview -->
+          <section class="space-y-2.5 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-[#0d1424]">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 text-xs font-bold tracking-wide text-slate-700 uppercase dark:text-slate-200">
+                <Sparkles class="h-3.5 w-3.5 text-indigo-600 dark:text-cyan-400" />
+                <span>AI Prompt sửa lỗi theo nền tảng</span>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-1.5">
+                <div class="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-900">
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold transition"
+                    :class="
+                      activePromptTab === 'ios'
+                        ? 'bg-white text-indigo-700 shadow-2xs dark:bg-slate-800 dark:text-indigo-200'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    "
+                    @click="selectPromptTab('ios')"
+                  >
+                    <span>iOS (Swift)</span>
+                    <span
+                      v-if="isPromptRecommended('ios', selectedItem)"
+                      class="rounded bg-indigo-100 px-1 py-0.2 text-[9.5px] font-bold text-indigo-700 dark:bg-indigo-500/25 dark:text-indigo-200"
+                    >
+                      Ưu tiên
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold transition"
+                    :class="
+                      activePromptTab === 'android'
+                        ? 'bg-white text-emerald-700 shadow-2xs dark:bg-slate-800 dark:text-emerald-200'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+                    "
+                    @click="selectPromptTab('android')"
+                  >
+                    <span>Android (Kotlin / Java)</span>
+                    <span
+                      v-if="isPromptRecommended('android', selectedItem)"
+                      class="rounded bg-emerald-100 px-1 py-0.2 text-[9.5px] font-bold text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-200"
+                    >
+                      Ưu tiên
+                    </span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  @click="handleCopyPlatformPrompt(selectedItem, activePromptTab)"
+                >
+                  <Check v-if="copiedPromptPlatform === activePromptTab" class="h-3 w-3 text-emerald-500" />
+                  <Copy v-else class="h-3 w-3" />
+                  {{
+                    copiedPromptPlatform === activePromptTab
+                      ? activePromptTab === 'ios'
+                        ? 'Đã copy iOS'
+                        : 'Đã copy Android'
+                      : activePromptTab === 'ios'
+                        ? 'Copy Prompt iOS'
+                        : 'Copy Prompt Android'
+                  }}
+                </button>
+
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300 dark:hover:bg-slate-800"
+                  @click="promptPreviewOpen = !promptPreviewOpen"
+                >
+                  <ChevronUp v-if="promptPreviewOpen" class="h-3.5 w-3.5" />
+                  <ChevronDown v-else class="h-3.5 w-3.5" />
+                  {{ promptPreviewOpen ? 'Thu gọn' : 'Xem trước' }}
+                </button>
+              </div>
+            </div>
+
+            <pre
+              v-if="promptPreviewOpen"
+              class="max-h-96 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3.5 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:border-slate-800 dark:bg-slate-950/80 dark:text-slate-200"
+            >{{ activePromptText }}</pre>
           </section>
         </div>
       </main>

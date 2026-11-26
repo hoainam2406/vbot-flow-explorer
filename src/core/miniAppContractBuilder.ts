@@ -571,8 +571,8 @@ export const ALL_SANDBOX_COMMANDS: ContractCommandSpec[] = [
       message: 'mode phải thuộc {1, 2, 4, 5} và call_id không được rỗng',
     },
     iosHandler: 'MonitorCallBridgeHandler → emit monitor_call_state_changed',
-    androidHandler: 'MiniAppHelper.handleMonitorCall() → Native PiP Overlay (chưa emit state event)',
-    parityNote: 'iOS đẩy thêm event monitor_call_state_changed về JS; Android chỉ cập nhật Native PiP UI.',
+    androidHandler: 'MiniAppHelper.onMonitorCall() → Native PiP + sendMonitorCallStateChanged (emit monitor_call_state_changed)',
+    parityNote: 'Cả iOS và Android đều phát monitor_call_state_changed (ACTIVE / DISCONNECTED) về JS; Android hiển thị thêm Native PiP UI.',
   },
   {
     method: 'user_contact_get_local',
@@ -892,7 +892,7 @@ export const ALL_SANDBOX_COMMANDS: ContractCommandSpec[] = [
     },
     iosHandler: 'VbMaThemeProvider.currentThemeParams()',
     androidHandler: 'MiniAppThemeHelper.getThemeParams()',
-    parityNote: 'Android CallHistoryFragment (vb-ma-user-history-call) chưa truyền theme_params lúc launch.',
+    parityNote: 'Android vb-ma-android-sdk (MiniAppRenderer.getThemeParams + VbMABridge.handleRequestTheme) tự động trả về bảng màu theo uiMode; iOS khóa Light mode toàn cục.',
   },
   {
     method: 'request_viewport',
@@ -928,7 +928,7 @@ const PUSH_EVENTS_CATALOG: Record<string, ContractEventSpec> = {
       theme: 'dark',
       theme_params: { bg_color: '#0f172a', text_color: '#f8fafc', button_color: '#06b6d4' },
     },
-    parityNote: 'Android CallHistoryFragment (vb-ma-user-history-call) hiện chưa emit theme_changed.',
+    parityNote: 'Android vb-ma-android-sdk tự phát theme_changed khi ready và khi onConfigurationChanged; iOS khóa Light mode toàn cục.',
   },
   refresh_data: {
     eventName: 'refresh_data',
@@ -977,15 +977,15 @@ const PUSH_EVENTS_CATALOG: Record<string, ContractEventSpec> = {
   monitor_call_state_changed: {
     eventName: 'monitor_call_state_changed',
     source: 'host_push',
-    title: 'Trạng thái giám sát cuộc gọi thay đổi (chỉ iOS)',
-    summary: 'Host iOS báo khi chuyển mode giám sát hoặc cuộc gọi bị giám sát kết thúc.',
+    title: 'Trạng thái giám sát cuộc gọi thay đổi',
+    summary: 'Host iOS & Android báo khi cuộc gọi giám sát chuyển trạng thái ACTIVE hoặc DISCONNECTED (kèm reason).',
     payloadSchema: [
       { name: 'call_id', type: 'string', required: true, description: 'ID cuộc gọi' },
       { name: 'mode', type: 'number', required: true, description: '1=Listen, 2=Capture, 4=CaptureBot, 5=Whisper' },
       { name: 'state', type: 'string', required: true, description: 'monitoring | ended' },
     ],
     samplePayload: { call_id: 'call_live_77', mode: 1, state: 'monitoring' },
-    parityNote: 'Chỉ Host iOS phát event này; Android chỉ cập nhật PiP overlay native.',
+    parityNote: 'Cả Host iOS (MiniAppService) và Android (MiniAppHelper) đều phát event này; Android đồng thời cập nhật PiP overlay native.',
   },
   user_contacts_updated: {
     eventName: 'user_contacts_updated',
@@ -1018,7 +1018,7 @@ const PUSH_EVENTS_CATALOG: Record<string, ContractEventSpec> = {
       { name: 'timestamp', type: 'number', required: true, description: 'Thời điểm nhận socket' },
     ],
     samplePayload: { is_enable: true, timestamp: 1763605000000 },
-    parityNote: 'iOS lọc đúng app bằng MiniAppActiveTracker; Android chưa lọc theo appId.',
+    parityNote: 'Cả iOS và Android đều lọc đúng appId qua MiniAppActiveTracker + emitEventIfMiniAppOpen trước khi đẩy setup_2fa.',
   },
   mini_app_closed: {
     eventName: 'mini_app_closed',
@@ -1143,14 +1143,10 @@ function buildLaunchParamsForApp(app: MiniAppCatalogEntry): LaunchParamFieldSpec
     {
       key: '#vbma_theme',
       sourceField: 'theme & theme_params',
-      required: app.id !== 'vb-ma-user-history-call',
+      required: true,
       type: "'dark' | 'light' + ThemeParams",
       description: 'Cấu hình màu nền, màu chữ, màu nút chủ đạo của Host lúc mở Mini App.',
       exampleValue: 'dark',
-      parityNote:
-        app.id === 'vb-ma-user-history-call'
-          ? 'Android CallHistoryFragment hiện KHÔNG đính kèm theme_params khi mở tab Lịch sử.'
-          : undefined,
     },
     {
       key: '#vbma_api_base_url',

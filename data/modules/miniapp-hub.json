@@ -43,6 +43,7 @@
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/feature/FeatureFragment.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppActiveTracker.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppPermissionHelper.kt"
                 ]
               }
@@ -62,12 +63,12 @@
                   "hostFn": "FeaturesViewControllerV2 → MiniAppService.fetchFilteredGlobalMiniApps(...) / MiniAppService.openMiniApp(id:locale:startParam:extraData:)",
                   "hostFnByPlatform": {
                     "ios": "FeaturesViewControllerV2 → MiniAppService.openMiniApp(id:locale:startParam:extraData:) + MiniAppActiveTracker",
-                    "android": "FeatureFragment → MiniAppHelper.openMiniApp(context, appId, locale, startParam, extraData) → VbMaSDK.openMiniApp(...)"
+                    "android": "FeatureFragment → MiniAppHelper.openMiniApp(context, appId, locale, startParam, extraData) → VbMaSDK.openMiniApp(...) + MiniAppActiveTracker (ActivityLifecycleCallbacks)"
                   },
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ theme_params, themeParams, isAdmin }",
                   "note": "Lọc ẩn hiddenApps, adminOnlyApps và memberAppPermissions trước khi hiển thị.",
-                  "parityNote": "iOS dùng MiniAppActiveTracker gắn instanceKey theo từng appId; Android chỉ giữ 1 activeMiniAppActivityRef và VbMaSDK.activeBridge toàn cục."
+                  "parityNote": "Cả iOS và Android đều theo dõi stack appId qua MiniAppActiveTracker (tầng SDK Android VbMaSDK.activeBridge vẫn là ref đơn lẻ so với VbMaViewController.activeInstance trên iOS)."
                 },
                 {
                   "direction": "miniapp_to_host",
@@ -96,13 +97,14 @@
               ]
             },
             "parityAssessment": {
-              "verdict": "logic_diff",
+              "code": "HUB-02",
+              "verdict": "synced",
               "sameLogic": true,
-              "sameOutcome": false,
-              "needsFix": "consider",
-              "explanation": "Cùng tải danh mục động từ /api/apps/global với 7 adminOnlyApps & 15 memberAppPermissions giống hệt nhau, nhưng cách quản lý bridge mở đa Mini App khác nhau (MiniAppActiveTracker trên iOS vs activeBridge toàn cục trên Android).",
-              "recommendation": "Cân nhắc kiểm tra quyền áp dụng cho 7 Mini App mới trên Prod (nếu cần chặn Member) và nâng cấp per-appId tracker cho Android.",
-              "fixTarget": "android"
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS và Android cùng tải danh mục động từ /api/apps/global với 7 adminOnlyApps & 15 memberAppPermissions giống hệt nhau, đồng thời cùng theo dõi active Mini App theo appId ở tầng Host qua MiniAppActiveTracker.",
+              "recommendation": "Không cần sửa parity — chỉ lưu ý rà soát phân quyền cho 7 Mini App mới trên Prod nếu cần chặn Member.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [
@@ -156,6 +158,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-19",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -200,6 +203,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-20",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -445,6 +449,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-03",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -542,6 +547,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-04",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -591,7 +597,7 @@
             "tech": "UserHistoryCallViewController (iOS) và CallHistoryFragment (Android) điều phối filter_changed & refresh_data. Hiện trên cả Tab 2 (inline_tab) lẫn mục Cuộc gọi Tab 0 (mọi Member đều thấy trên iOS commit 0fcf3390 & Android). Prod v0.2.45 (/api/apps/global) · Caps: CUOC_GOI[LICH_SU, NGHE_LAI], HIEN_CUOC[*], HOTLINE[XEM], KHACH_HANG[HIEN_SO_DIEN_THOAI, LICH_SU, NGHE_LAI, XEM], THANH_VIEN[XEM]."
           },
           "techDetail": {
-            "platformDiffNote": "Android CallHistoryFragment chưa truyền theme_params và chưa emit theme_changed (việc phát ghi âm do Mini App tự xử lý trên cả 2 HĐH).",
+            "platformDiffNote": "Cả iOS và Android đã đồng bộ quyền hiển thị, filter_changed, refresh_data, tự phát ghi âm trong Mini App và đồng bộ giao diện Sáng/Tối: iOS truyền MiniAppThemeParams(isDark: false) do app khóa Light mode toàn cục, còn Android để vb-ma-android-sdk (MiniAppFragment / MiniAppRenderer.getSystemTheme + VbMABridge.handleRequestTheme) tự inject vbma_theme và tự phát theme_changed khi ready hoặc đổi chế độ Sáng/Tối.",
             "codeRefs": [
               "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"
             ],
@@ -609,13 +615,14 @@
               }
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "Android có chế độ Dark Mode nhưng CallHistoryFragment lại không truyền theme_params khi khởi tạo MiniAppFragment và không emit theme_changed khi đổi giao diện, làm Mini App Lịch sử cuộc gọi có thể sai màu nền trên Android.",
-              "recommendation": "Nên bổ sung MiniAppThemeParams vào extraData của CallHistoryFragment và đăng ký đồng bộ theme_changed giống ContactForwardFragment/UserContactsFragment.",
-              "fixTarget": "android"
+              "code": "HUB-05",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Đã xác minh trên thực tế và mã nguồn vb-ma-android-sdk: MiniAppFragment + MiniAppRenderer tự đọc uiMode để inject #vbma_theme và VbMABridge.handleRequestTheme tự phát theme_changed khi ready hoặc đổi Sáng/Tối; màu theme và accent trong Mini App Lịch sử cuộc gọi hoạt động bình thường trên cả 2 HĐH.",
+              "recommendation": "Không cần sửa — giao diện Sáng/Tối, màu sắc và cầu nối Bridge của Mini App Lịch sử cuộc gọi đã hoạt động đồng bộ trên cả iOS và Android.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [
@@ -789,6 +796,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "HUB-08",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1071,6 +1079,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-10",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1137,6 +1146,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-11",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1175,6 +1185,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-12",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1196,30 +1207,37 @@
             "tech": "Core SDK Mini App; Tầng 1 lọc THANH_VIEN (VPMRoleVC.member). Prod v0.1.13 (/api/apps/global) · Caps: CUOC_GOI[DANG_DIEN_RA, LICH_SU, NGHE_LAI], THANH_VIEN[CHINH_SUA, GIA_HAN, TAO, THEM_TIEN, XEM, XOA]."
           },
           "techDetail": {
-            "platformDiffNote": "iOS VPMRoleAction chưa định nghĩa case GIA_HAN (chỉ khớp rawValue nếu server trả); Android hỗ trợ đầy đủ 6 sub-permission EnumPermissionMember.",
+            "platformDiffNote": "Cả iOS (VPMRoleAction.extend = \"GIA_HAN\" + MiniAppPermissionHelper/MiniAppService) và Android (EnumPermissionMember.GIA_HAN + MiniAppPermissionHelper) đều hỗ trợ đầy đủ 6 sub-permission của THANH_VIEN cùng các alias tiếng Anh (RENEW/EXTEND).",
             "codeRefs": [
-              "VBot/Service/MiniAppService.swift"
+              "VBot/Service/MiniAppService.swift",
+              "VBot/Service/VPMRoleService.swift",
+              "VBot/Utils/Helper/MiniAppPermissionHelper.swift"
             ],
             "byPlatform": {
               "ios": {
                 "codeRefs": [
-                  "VBot/Service/MiniAppService.swift"
+                  "VBot/Service/MiniAppService.swift",
+                  "VBot/Service/VPMRoleService.swift",
+                  "VBot/Utils/Helper/MiniAppPermissionHelper.swift"
                 ]
               },
               "android": {
                 "codeRefs": [
-                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppPermissionHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/enums/per/EnumPermissionMember.kt"
                 ]
               }
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "Android EnumPermissionMember khai báo đủ 6 quyền chi tiết gồm cả GIA_HAN, còn iOS VPMRoleAction chưa định nghĩa case GIA_HAN trong enum (chỉ khớp nếu rawValue string truyền thô), dễ sót khi kiểm tra phân quyền.",
-              "recommendation": "Nên bổ sung case GIA_HAN vào enum VPMRoleAction trên VBot-iOS để đảm bảo an toàn type và khớp 100% tập quyền với Android.",
-              "fixTarget": "ios"
+              "code": "HUB-13",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS (VPMRoleAction đã bổ sung case extend = \"GIA_HAN\", MiniAppPermissionHelper và MiniAppService map đủ 6 quyền cùng alias RENEW/EXTEND và module MEMBER/MEMBERS/MEMBER_MGMT) và Android (EnumPermissionMember) đều hỗ trợ đầy đủ 6 sub-permission của THANH_VIEN với hành vi kiểm tra phân quyền đồng nhất.",
+              "recommendation": "Không cần sửa parity — đã đồng bộ 100% tập quyền THANH_VIEN giữa iOS và Android.",
+              "fixTarget": "none"
             }
           }
         },
@@ -1307,6 +1325,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-14",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1500,7 +1519,7 @@
             "tech": "MiniAppMonitoringCoordinator dùng NSRecursiveLock quản lý slot giữ chỗ nguyên tử (tryAcquireMonitoringSlot), kiểm tra CXCallObserver tránh đụng độ cuộc gọi hệ thống đang hoạt động và dọn cờ stale khi cuộc gọi kết thúc. Prod v0.2.7 (/api/apps/global) · Caps: CUOC_GOI[DANG_DIEN_RA], HIEN_CUOC[*], HOTLINE[XEM], THANH_VIEN[XEM]."
           },
           "techDetail": {
-            "platformDiffNote": "Cả 2 HĐH đều khóa slot nguyên tử, quay SIP 1#/2#/4#/5#<transId> và ĐỀU miễn quyền Micro khi action == 'listen' (iOS VbMonitoringCallHelper.requiresMicrophonePermission('listen') == false; Android miễn RECORD_AUDIO); nhưng Android CHƯA gọi VbMABridge.sendMonitorCallStateChanged về JS khi trạng thái SIP đổi và dùng PiP của NewCallActivity.",
+            "platformDiffNote": "Cả 2 HĐH đều khóa slot nguyên tử, quay SIP 1#/2#/4#/5#<transId>, ĐỀU miễn quyền Micro khi action == 'listen' (iOS VbMonitoringCallHelper.requiresMicrophonePermission('listen') == false; Android miễn RECORD_AUDIO) và ĐỀU phát event monitor_call_state_changed (ACTIVE / DISCONNECTED kèm reason) về JS; điểm khác chỉ ở UI native (Android dùng PiP của NewCallActivity + VbMaCallStateManager).",
             "edgeCases": [
               "Chặn giữ 2 cuộc gọi giám sát cùng lúc hoặc đè lên cuộc gọi hệ thống hiện hành",
               "Tự cleanup trạng thái stale nếu slot bị kẹt khi không còn cuộc gọi thực tế"
@@ -1520,7 +1539,7 @@
                 ]
               },
               "android": {
-                "summary": "MiniAppHelper.onMonitorCall dùng synchronized(monitorLock) + isMonitoringPendingSetup, kiểm tra quyền RECORD_AUDIO (trừ listen), mở NewCallActivity (PiP native), lưu VbMaCallStateManager; chỉ cập nhật native mà chưa emit monitor_call_state_changed.",
+                "summary": "MiniAppHelper.onMonitorCall dùng synchronized(monitorLock) + monitoringRequestId + hasEmittedMonitoringActive, kiểm tra quyền RECORD_AUDIO (trừ listen), mở NewCallActivity (PiP native), lưu VbMaCallStateManager, và gọi onMonitoringCallStateChanged / cleanupMonitoring → sendMonitorCallStateChanged → VbMaSDK.emitEvent(\"monitor_call_state_changed\").",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
@@ -1534,7 +1553,7 @@
               "transport": "VbMaDelegate.onMonitorCall ↔ MiniAppService.sendMonitorCallStateChanged",
               "transportByPlatform": {
                 "ios": "VbMaDelegate.onMonitorCall ↔ MiniAppService.sendMonitorCallStateChanged",
-                "android": "VbMaSDKDelegate.onMonitorCall (MiniAppHelper) → VbMABridge.monitor_call_result"
+                "android": "VbMaSDKDelegate.onMonitorCall (MiniAppHelper) ↔ MiniAppHelper.sendMonitorCallStateChanged (VbMaSDK.emitEvent)"
               },
               "messages": [
                 {
@@ -1555,23 +1574,25 @@
                   "name": "monitor_call_state_changed",
                   "hostFn": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:) → emitMiniAppEvent(\"monitor_call_state_changed\", data:)",
                   "hostFnByPlatform": {
-                    "ios": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(...) → emitMiniAppEvent(\"monitor_call_state_changed\")"
+                    "ios": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(...) → emitMiniAppEvent(\"monitor_call_state_changed\")",
+                    "android": "NewCallActivity / MiniAppHelper.startMonitoringSipCall → MiniAppHelper.onMonitoringCallStateChanged / cleanupMonitoring → sendMonitorCallStateChanged(...) → VbMaSDK.emitEvent(\"monitor_call_state_changed\")"
                   },
                   "miniAppFn": "on(\"monitor_call_state_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ request_id, state, reason? }",
-                  "note": "NewCallViewController & VPMAppService đẩy cập nhật trạng thái kết nối/ngắt về Mini App.",
-                  "parityNote": "VbMABridge.sendMonitorCallStateChanged đã khai báo trong vb-ma-android-sdk nhưng CHƯA ĐƯỢC GỌI ở bất kỳ đâu trong VBot-Android (chỉ cập nhật VbMaCallStateManager phía native)."
+                  "note": "Cả iOS (NewCallViewController / VPMAppService) và Android (NewCallActivity / MiniAppHelper) đều đẩy sự kiện ACTIVE và DISCONNECTED (kèm reason: HANGUP, ended, call_failed, PERMISSION_DENIED, stale_cleanup) về Mini App.",
+                  "parityNote": "Đã đồng bộ trên cả iOS và Android: cùng phát event { request_id, state, reason? } tối đa 1 lần cho mỗi pha chuyển trạng thái (ACTIVE / DISCONNECTED); Android đồng thời cập nhật PiP native qua VbMaCallStateManager."
                 }
               ]
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "Khóa slot & miễn quyền Micro khi listen đã khớp, NHƯNG có Parity Gap ở Bridge: Android SDK đã khai báo VbMABridge.sendMonitorCallStateChanged() nhưng VBot-Android chưa gọi khiến Mini App Giám sát không nhận được trạng thái SIP live.",
-              "recommendation": "Cần đấu nối gọi VbMABridge.sendMonitorCallStateChanged() theo vòng đời trạng thái cuộc gọi SIP trong VBot-Android.",
-              "fixTarget": "android"
+              "code": "HUB-15",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả iOS và Android đã đồng bộ khóa slot nguyên tử, miễn quyền Micro khi listen và phát đầy đủ sự kiện monitor_call_state_changed (ACTIVE / DISCONNECTED kèm reason) về JS (trên Android qua MiniAppHelper.sendMonitorCallStateChanged → VbMaSDK.emitEvent, chống phát trùng bằng monitorLock + hasEmittedMonitoringActive).",
+              "recommendation": "Không cần sửa — luồng Giám sát và sự kiện monitor_call_state_changed đã đồng bộ trên cả iOS và Android.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [
@@ -1681,6 +1702,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-18",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1732,6 +1754,7 @@
               }
             },
             "parityAssessment": {
+              "code": "HUB-21",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -1988,7 +2011,7 @@
             "tech": "iOS gọi createMiniAppViewController(id:startParam: 'embedded', extraData: theme_params); Android dùng MiniAppFragment.newInstance()."
           },
           "techDetail": {
-            "platformDiffNote": "Android CallHistoryFragment KHÔNG truyền MiniAppThemeParams vào extraData khi tạo MiniAppFragment.",
+            "platformDiffNote": "iOS truyền MiniAppThemeParams(isDark: false) vào extraData; Android CallHistoryFragment gọi MiniAppFragment.newInstance() và để vb-ma-android-sdk (MiniAppRenderer.getSystemTheme + VbMABridge.handleRequestTheme) tự inject #vbma_theme và tự emit theme_changed theo uiMode.",
             "codeRefs": [
               "VBot/Controller/NewController/Recents/UserHistoryCallViewController.swift"
             ],
@@ -2023,18 +2046,19 @@
                   "miniAppFn": "retrieveLaunchParams() / retrieveAuthData() (@vbotma/sdk)",
                   "payload": "{ id: 'vb-ma-user-history-call', locale: 'vi', startParam: 'embedded', extraData: { theme_params } }",
                   "examplePayload": "{\n  \"id\": \"vb-ma-user-history-call\",\n  \"locale\": \"vi\",\n  \"startParam\": \"embedded\",\n  \"extraData\": {\n    \"theme_params\": { \"bg_color\": \"#FFFFFF\" }\n  }\n}",
-                  "parityNote": "Android CallHistoryFragment không truyền theme_params và không emit theme_changed."
+                  "parityNote": "iOS truyền MiniAppThemeParams(isDark: false) qua extraData; Android để vb-ma-android-sdk (MiniAppRenderer.getSystemTheme + VbMABridge.handleRequestTheme) tự inject #vbma_theme và tự emit theme_changed theo uiMode."
                 }
               ]
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "CallHistoryFragment trên Android bỏ sót tham số theme_params trong extraData lúc khởi tạo MiniAppFragment, khác với chuẩn Host Init trên iOS và các tab Mini App khác trên chính Android.",
-              "recommendation": "Nên truyền đủ MiniAppThemeParams khi tạo MiniAppFragment trong CallHistoryFragment.kt để Mini App nhận đúng theme hiện tại.",
-              "fixTarget": "android"
+              "code": "HUB-06",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả 2 nền tảng đều cung cấp đủ #vbma_theme lúc khởi tạo và đồng bộ Sáng/Tối đúng: iOS truyền MiniAppThemeParams(isDark: false) qua extraData, còn Android dùng cơ chế tự động của vb-ma-android-sdk (MiniAppRenderer.getThemeParams + VbMABridge.handleRequestTheme).",
+              "recommendation": "Không cần sửa — SDK Android đã tự xử lý #vbma_theme và theme_changed đầy đủ cho CallHistoryFragment.",
+              "fixTarget": "none"
             }
           }
         },
@@ -2196,6 +2220,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "HUB-07",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -2385,6 +2410,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "HUB-09",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -2884,6 +2910,7 @@
               ]
             },
             "parityAssessment": {
+              "code": "HUB-16",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -2901,10 +2928,10 @@
           "audience": "tech",
           "summary": {
             "overview": "Trong khi nghe giám sát hoặc khi kết thúc/từ chối Micro, Host phát sự kiện cập nhật trạng thái tức thì về Mini App.",
-            "tech": "iOS (NewCallViewController / VPMAppService) gọi sendMonitorCallStateChanged; Android chỉ cập nhật VbMaCallStateManager phía native và hiện chưa phát event này về JS."
+            "tech": "Cả iOS (NewCallViewController / VPMAppService → MiniAppService.sendMonitorCallStateChanged) và Android (NewCallActivity / MiniAppHelper.startMonitoringSipCall → MiniAppHelper.onMonitoringCallStateChanged / cleanupMonitoring → sendMonitorCallStateChanged → VbMaSDK.emitEvent) đều phát monitor_call_state_changed (ACTIVE / DISCONNECTED kèm reason) về JS."
           },
           "techDetail": {
-            "platformDiffNote": "Parity Gap: VbMABridge.sendMonitorCallStateChanged() đã khai báo trong vb-ma-android-sdk nhưng chưa có caller trong VBot-Android.",
+            "platformDiffNote": "Đã đồng bộ trên cả iOS và Android: đều phát monitor_call_state_changed (ACTIVE và DISCONNECTED kèm reason) tối đa 1 lần cho mỗi pha chuyển trạng thái; Android đồng thời cập nhật VbMaCallStateManager cho PiP native.",
             "codeRefs": [
               "VBot/Service/MiniAppService.swift",
               "VBot/Controller/NewController/CallVC/new/NewCallViewController.swift"
@@ -2918,9 +2945,10 @@
                 ]
               },
               "android": {
-                "summary": "Listener trong MiniAppHelper.startMonitoringSipCall() chỉ cập nhật VbMaCallStateManager và gọi cleanupMonitoring() khi DISCONNECTED; chưa gọi VbMABridge.sendMonitorCallStateChanged().",
+                "summary": "NewCallActivity (CONFIRMED / endCall / destroy) và VBotPhoneListener trong MiniAppHelper.startMonitoringSipCall() gọi onMonitoringCallStateChanged(ACTIVE) (chống trùng qua hasEmittedMonitoringActive) và cleanupMonitoring(reason) (resolveMonitoringEndReason: HANGUP, call_failed, PERMISSION_DENIED, stale_cleanup, ended) → sendMonitorCallStateChanged → VbMaSDK.emitEvent('monitor_call_state_changed'), đồng thời cập nhật VbMaCallStateManager.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/call/NewCallActivity.kt",
                   "vb-ma-android-sdk/vbotma-sdk/src/main/java/com/vbot/miniapp/sdk/VbMABridge.kt"
                 ]
               }
@@ -2928,31 +2956,37 @@
             "miniAppBridge": {
               "miniAppId": "vb-ma-monitoring",
               "embedMode": "modal",
-              "transport": "MiniAppService.sendMonitorCallStateChanged → emitMiniAppEvent",
+              "transport": "MiniAppService / MiniAppHelper.sendMonitorCallStateChanged → emitEvent",
+              "transportByPlatform": {
+                "ios": "MiniAppService.sendMonitorCallStateChanged → emitMiniAppEvent(\"monitor_call_state_changed\")",
+                "android": "MiniAppHelper.sendMonitorCallStateChanged → VbMaSDK.emitEvent(\"monitor_call_state_changed\")"
+              },
               "messages": [
                 {
                   "direction": "host_to_miniapp",
                   "name": "monitor_call_state_changed",
                   "hostFn": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(requestId:state:reason:) → emitMiniAppEvent(\"monitor_call_state_changed\", data:)",
                   "hostFnByPlatform": {
-                    "ios": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(...) → emitMiniAppEvent(\"monitor_call_state_changed\")"
+                    "ios": "NewCallViewController → MiniAppService.shared.sendMonitorCallStateChanged(...) → emitMiniAppEvent(\"monitor_call_state_changed\")",
+                    "android": "NewCallActivity / MiniAppHelper.startMonitoringSipCall → MiniAppHelper.onMonitoringCallStateChanged / cleanupMonitoring → sendMonitorCallStateChanged(...) → VbMaSDK.emitEvent(\"monitor_call_state_changed\")"
                   },
                   "miniAppFn": "on(\"monitor_call_state_changed\", cb) (@vbotma/sdk)",
                   "payload": "{ request_id, state, reason? }",
-                  "examplePayload": "{\n  \"request_id\": \"req_51\",\n  \"state\": \"CONNECTED\"\n}",
-                  "note": "Khi dập máy hoặc bị từ chối quyền Micro, Host iOS phát state = 'DISCONNECTED' kèm reason.",
-                  "parityNote": "Trên Android hàm VbMABridge.sendMonitorCallStateChanged đã có sẵn trong SDK nhưng CHƯA được gọi từ VBot-Android."
+                  "examplePayload": "{\n  \"request_id\": \"req_51\",\n  \"state\": \"ACTIVE\"\n}",
+                  "note": "Khi cuộc gọi kết nối, cả 2 HĐH phát state = 'ACTIVE'; khi dập máy, lỗi SIP hoặc bị từ chối quyền Micro, cả 2 HĐH phát state = 'DISCONNECTED' kèm reason (HANGUP, ended, call_failed, PERMISSION_DENIED, stale_cleanup).",
+                  "parityNote": "Đã đồng bộ trên cả iOS và Android: cùng phát payload { request_id, state, reason? } và đảm bảo mỗi phiên chỉ emit ACTIVE / DISCONNECTED 1 lần."
                 }
               ]
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "Parity Gap rõ ràng: VbMABridge.sendMonitorCallStateChanged() mới có chữ ký trong vb-ma-android-sdk mà có 0 caller bên trong app VBot-Android, nên chỉ iOS đẩy được monitor_call_state_changed xuống Mini App.",
-              "recommendation": "Cần bổ sung caller gọi sendMonitorCallStateChanged() tại nơi cập nhật VbMaCallStateManager / PJSIP listener trên Android.",
-              "fixTarget": "android"
+              "code": "HUB-17",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Đã đồng bộ: VBot-Android (MiniAppHelper.onMonitoringCallStateChanged, cleanupMonitoring và NewCallActivity) đã đấu nối gửi VbMaSDK.emitEvent(\"monitor_call_state_changed\") kèm request_id, state (ACTIVE / DISCONNECTED) và reason khớp với iOS.",
+              "recommendation": "Không cần sửa — sự kiện monitor_call_state_changed đã hoạt động nhất quán trên cả iOS và Android.",
+              "fixTarget": "none"
             }
           }
         }
@@ -2977,7 +3011,7 @@
         {
           "id": "sc-mamon-whisper",
           "name": "VD: Nhắc thầm (Whisper) cuộc gọi qua Bridge",
-          "description": "Mini App gửi monitor_call({ action: 'whisper', transId: 'tr_99120' }) → Host giữ slot & trả CONNECTING → phát monitor_call_state_changed({ state: 'CONNECTED' }).",
+          "description": "Mini App gửi monitor_call({ action: 'whisper', transId: 'tr_99120' }) → Host giữ slot & trả CONNECTING → phát monitor_call_state_changed({ state: 'ACTIVE' }).",
           "audience": "tech",
           "nodeIds": [
             "mamon-request",

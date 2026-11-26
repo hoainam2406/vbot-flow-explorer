@@ -78,7 +78,7 @@ export const STUDIO_TOUR_STEPS: StudioTourStep[] = [
     title: 'Thiết lập Môi trường Host (iOS / Android / Lỗi)',
     description:
       'Đổi qua lại giữa iOS (Swift) và Android (Kotlin), chọn Role Preset (Admin, Sales, Giám sát...) để test RBAC 2 tầng và chọn "Giả lập lỗi" (401 Refresh fail, Android Hotline Sheet, Timeout 5000ms...).',
-    tip: 'Luôn test cả 2 nền tảng iOS và Android trước khi bàn giao để bắt các điểm lệch như show_toast hay monitor_call.',
+    tip: 'Luôn test cả 2 nền tảng iOS và Android trước khi bàn giao để bắt các điểm lệch như show_toast hay request_mini_app_token.',
     requiredView: 'sandbox',
   },
   {

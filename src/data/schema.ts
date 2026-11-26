@@ -1,17 +1,22 @@
 // src/data/schema.ts
-import { z } from 'zod';
+import { z } from "zod";
 
 export const NodeKindSchema = z.enum([
-  'module',
-  'miniapp',
-  'action',
-  'process',
-  'decision',
-  'external',
-  'error',
+  "module",
+  "miniapp",
+  "action",
+  "process",
+  "decision",
+  "external",
+  "error",
 ]);
 
-export const NodeStatusSchema = z.enum(['stable', 'wip', 'needs_review', 'deprecated']);
+export const NodeStatusSchema = z.enum([
+  "stable",
+  "wip",
+  "needs_review",
+  "deprecated",
+]);
 
 export const NodeMetaSchema = z
   .object({
@@ -19,11 +24,11 @@ export const NodeMetaSchema = z
     owner: z.string().min(1).optional(),
     lastVerifiedAt: z
       .string()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, 'lastVerifiedAt must use YYYY-MM-DD')
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "lastVerifiedAt must use YYYY-MM-DD")
       .optional(),
     workTaskUrl: z
       .string()
-      .refine((v) => /^https?:\/\//i.test(v), 'workTaskUrl must be http(s) URL')
+      .refine((v) => /^https?:\/\//i.test(v), "workTaskUrl must be http(s) URL")
       .optional(),
   })
   .strict();
@@ -45,11 +50,11 @@ export const AppRepoConfigSchema = z
   })
   .strict();
 
-export const AudienceScopeSchema = z.enum(['all', 'tech']);
+export const AudienceScopeSchema = z.enum(["all", "tech"]);
 
-export const PlatformSchema = z.enum(['ios', 'android']);
+export const PlatformSchema = z.enum(["ios", "android"]);
 export type Platform = z.infer<typeof PlatformSchema>;
-export type PlatformViewMode = 'ios' | 'android' | 'compare';
+export type PlatformViewMode = "ios" | "android" | "compare";
 
 export const PlatformTechDetailSchema = z
   .object({
@@ -66,14 +71,14 @@ export const PlatformTechDetailSchema = z
 export const MediaItemSchema = z.object({
   src: z.string().min(1),
   caption: z.string().min(1),
-  type: z.enum(['image', 'video']).optional(),
-  frame: z.enum(['phone', 'none']).optional(),
+  type: z.enum(["image", "video"]).optional(),
+  frame: z.enum(["phone", "none"]).optional(),
   audience: AudienceScopeSchema.optional(),
 });
 
 export const BridgeMessageSchema = z
   .object({
-    direction: z.enum(['host_init', 'host_to_miniapp', 'miniapp_to_host']),
+    direction: z.enum(["host_init", "host_to_miniapp", "miniapp_to_host"]),
     name: z.string().min(1),
     hostFn: z.string().min(1).optional(),
     hostFnByPlatform: z
@@ -96,7 +101,7 @@ export const BridgeMessageSchema = z
 export const MiniAppBridgeSchema = z
   .object({
     miniAppId: z.string().min(1),
-    embedMode: z.enum(['inline_tab', 'modal', 'sdk_global']),
+    embedMode: z.enum(["inline_tab", "modal", "sdk_global"]),
     transport: z.string().optional(),
     transportByPlatform: z
       .object({
@@ -110,18 +115,31 @@ export const MiniAppBridgeSchema = z
   .strict();
 
 export const ParityVerdictSchema = z.enum([
-  'action_needed',
-  'logic_diff',
-  'os_impl_only',
-  'synced',
+  "action_needed",
+  "logic_diff",
+  "os_impl_only",
+  "synced",
 ]);
 
-export const ParityNeedsFixSchema = z.enum(['yes', 'consider', 'no']);
+export const ParityNeedsFixSchema = z.enum(["yes", "consider", "no"]);
 
-export const ParityFixTargetSchema = z.enum(['ios', 'android', 'both', 'tbd', 'none']);
+export const ParityFixTargetSchema = z.enum([
+  "ios",
+  "android",
+  "both",
+  "tbd",
+  "none",
+]);
 
 export const ParityAssessmentSchema = z
   .object({
+    code: z
+      .string()
+      .regex(
+        /^[A-Z][A-Z0-9]{1,7}-\d{2,4}$/,
+        "parityAssessment.code must match format like CALL-01",
+      )
+      .optional(),
     verdict: ParityVerdictSchema,
     sameLogic: z.boolean(),
     sameOutcome: z.boolean(),
@@ -197,8 +215,8 @@ export const ScenarioSchema = z
 
 export const SubtreeDefinitionSchema = z.object({
   title: z.string().min(1),
-  layoutHint: z.enum(['tree', 'flow']),
-  direction: z.enum(['LR', 'TB']).optional(),
+  layoutHint: z.enum(["tree", "flow"]),
+  direction: z.enum(["LR", "TB"]).optional(),
   entryNodeIds: z.array(z.string().min(1)).min(1),
   nodes: z.array(FlowNodeDataSchema).min(1),
   edges: z.array(FlowEdgeDataSchema),
@@ -206,13 +224,13 @@ export const SubtreeDefinitionSchema = z.object({
 });
 
 export const FlowModuleFileSchema = z.object({
-  schemaVersion: z.literal('1.0'),
+  schemaVersion: z.literal("1.0"),
   moduleId: z.string().min(1),
   subtrees: z.record(z.string(), SubtreeDefinitionSchema),
 });
 
 export const AppManifestSchema = z.object({
-  schemaVersion: z.literal('1.0'),
+  schemaVersion: z.literal("1.0"),
   app: z.object({
     name: z.string().min(1),
     tagline: z.string().min(1),
@@ -229,8 +247,13 @@ export const AppManifestSchema = z.object({
 
 export const BranchManifestSchema = z
   .object({
-    schemaVersion: z.literal('1.0'),
-    id: z.string().regex(/^[a-zA-Z0-9._-]+$/, 'Branch id must contain only letters, digits, ., _, -'),
+    schemaVersion: z.literal("1.0"),
+    id: z
+      .string()
+      .regex(
+        /^[a-zA-Z0-9._-]+$/,
+        "Branch id must contain only letters, digits, ., _, -",
+      ),
     label: z.string().min(1),
     description: z.string().optional(),
     extends: z.string().min(1).optional(),
@@ -282,7 +305,7 @@ export interface SourceFileMap {
 }
 
 export interface MergedFlowDataset {
-  app: AppManifest['app'];
+  app: AppManifest["app"];
   rootNode: FlowNodeData;
   branches: FlowNodeData[];
   branchEdges: FlowEdgeData[];

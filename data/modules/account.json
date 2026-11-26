@@ -43,6 +43,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-02",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -67,30 +68,33 @@
             "tech": "iOS dùng AppQRCodeViewController + SPQRCode + AppQRCodeHandleViewController; Android dùng GenerateQRCodeActivity + ScanQRCodeProjectActivity (DecoratedBarcodeView/ZXing) + JoinProjectActivity. Cả 2 tạo payload 'VBot ID: <id>' và 'VBot Project: <code>'."
           },
           "techDetail": {
-            "platformDiffNote": "iOS SPQRCode tự cắt prefix bằng dropFirst(9)/dropFirst(14) và gọi song song cả getUserInfo lẫn getByProjectCode ở AppQRCodeHandleVC; Android ScanQRCodeProjectActivity parse bằng split(':'), có bật Flash torch nhưng KHÔNG tự xin quyền CAMERA (phụ thuộc màn hình gọi xin trước).",
+            "platformDiffNote": "Cả iOS (SPQRCodeData.parse hỗ trợ white-label + 'VBot', SPQRCode.scanning tự kiểm tra quyền Camera, AppQRCodeHandleVC tách nhánh loadData theo qrType) và Android (ScanQRCodeHelper.parsePayload tách theo ':' an toàn + ScanQRCodeProjectActivity tự kiểm tra/xin quyền CAMERA & STORAGE) đã đồng bộ parse payload và bảo vệ quyền camera; Android có thêm bật Flash torch (khác biệt mở URL bằng Safari vs dialog sao chép theo dõi riêng ở ACC-08).",
             "codeRefs": [
               "VBot/Controller/NewController/QRCode/AppQRCodeViewController.swift",
               "VBot/Controller/NewController/QRCode/AppQRCodeHandleViewController.swift",
-              "VBot/Service/SPQRCode/SPQRCode.swift"
+              "VBot/Service/SPQRCode/SPQRCode.swift",
+              "VBot/Service/SPQRCode/SPQRCodeData.swift"
             ],
             "byPlatform": {
               "android": {
-                "summary": "GenerateQRCodeActivity (2 tab + lưu MediaStore/Pictures) & ScanQRCodeProjectActivity (camera Flash + ZXing từ thư viện ảnh) điều hướng tới JoinProjectActivity (POST api/project/AddMember) hoặc VBotInformationActivity.",
+                "summary": "GenerateQRCodeActivity (2 tab + lưu MediaStore/Pictures) & ScanQRCodeProjectActivity + ScanQRCodeHelper (tự kiểm tra/xin quyền CAMERA & STORAGE, parse payload an toàn theo ':', camera Flash + ZXing từ thư viện ảnh) điều hướng tới JoinProjectActivity (POST api/project/AddMember) hoặc VBotInformationActivity.",
                 "codeRefs": [
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/GenerateQRCodeActivity.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeHelper.kt",
                   "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/project/JoinProjectActivity.kt"
                 ]
               }
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "Phát hiện 2 điểm dễ lỗi: iOS SPQRCode cắt tiền tố bằng dropFirst(9)/dropFirst(14) phụ thuộc cứng độ dài brand \"VBot\" (sẽ sai với app white-label), còn Android ScanQRCodeProjectActivity không tự xin quyền CAMERA nếu màn gọi quên xin trước.",
-              "recommendation": "Nên đổi iOS sang tách prefix bằng split(\":\") hoặc hasPrefix giống Android, và thêm kiểm tra/xin quyền CAMERA dự phòng bên trong ScanQRCodeProjectActivity.",
-              "fixTarget": "both"
+              "code": "ACC-06",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Đã khắc phục cả 2 điểm: iOS SPQRCodeData.parse tách payload động theo ':' (hỗ trợ cả app white-label theo appName lẫn 'VBot'), SPQRCode.scanning kiểm tra/xin quyền Camera và AppQRCodeHandleViewController.loadData tách nhánh theo qrType; Android bổ sung ScanQRCodeHelper + guard quyền CAMERA/STORAGE ngay trong ScanQRCodeProjectActivity và parse payload an toàn.",
+              "recommendation": "Không cần sửa — luồng parse payload QR (hỗ trợ white-label) và kiểm tra quyền Camera đã đồng bộ trên cả iOS và Android.",
+              "fixTarget": "none"
             }
           },
           "relatedNodeIds": [
@@ -126,6 +130,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-09",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -163,6 +168,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-13",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -207,6 +213,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-17",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -259,6 +266,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-20",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -315,6 +323,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-03",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -387,6 +396,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-04",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -473,6 +483,7 @@
               "VBot/Controller/NewController/ProjectAccount/SetTypeCallViewController.swift"
             ],
             "parityAssessment": {
+              "code": "ACC-05",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -529,27 +540,30 @@
             "tech": "iOS dùng SPQRCode + CIDetectorTypeQRCode cho ảnh thư viện; Android dùng DecoratedBarcodeView + MultiFormatReader (ZXing)."
           },
           "techDetail": {
-            "platformDiffNote": "iOS SPQRCode cắt tiền tố bằng dropFirst(9)/dropFirst(14) (phụ thuộc độ dài tên brand 'VBot'); Android dùng split(':') và yêu cầu màn hình gọi tự xin quyền CAMERA trước khi mở ScanQRCodeProjectActivity.",
+            "platformDiffNote": "Đã đồng bộ trên cả iOS (SPQRCode.scanning kiểm tra quyền Camera + SPQRCodeData.parse tách payload theo ':' hỗ trợ white-label) và Android (ScanQRCodeProjectActivity + ScanQRCodeHelper tự kiểm tra/xin quyền CAMERA & STORAGE và tách payload an toàn theo ':'); Android có thêm Flash torch.",
             "codeRefs": [
               "VBot/Service/SPQRCode/SPQRCode.swift",
+              "VBot/Service/SPQRCode/SPQRCodeData.swift",
               "VBot/Controller/NewController/QRCode/AppQRCodeViewController.swift"
             ],
             "byPlatform": {
               "android": {
-                "summary": "ScanQRCodeProjectActivity (tab Camera hỗ trợ Flash torch + tab Thư viện dùng ZXing MultiFormatReader); phụ thuộc MenuActivity/GenerateQRCodeActivity/Search xin cameraStorePermission() trước.",
+                "summary": "ScanQRCodeProjectActivity + ScanQRCodeHelper (tab Camera hỗ trợ Flash torch + tab Thư viện dùng ZXing MultiFormatReader); tự kiểm tra/xin quyền CAMERA (REQUEST_CODE_CAMERA) & STORAGE (REQUEST_CODE_STORAGE) ngay trong Activity và parse payload an toàn qua ScanQRCodeHelper.parsePayload.",
                 "codeRefs": [
-                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeProjectActivity.kt"
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeProjectActivity.kt",
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/menuleft/qrcode/ScanQRCodeHelper.kt"
                 ]
               }
             },
             "parityAssessment": {
-              "verdict": "action_needed",
-              "sameLogic": false,
-              "sameOutcome": false,
-              "needsFix": "yes",
-              "explanation": "iOS SPQRCode hardcode cắt chuỗi dropFirst(9)/dropFirst(14) dễ parse sai mã QR nếu đổi prefix brand, trong khi Android phụ thuộc caller xin CAMERA trước nên có nguy cơ đen camera khi gọi từ điểm mới.",
-              "recommendation": "Nên dùng split(\":\") thay cho dropFirst() ở SPQRCode.swift và bổ sung guard quyền CAMERA trong ScanQRCodeProjectActivity.kt.",
-              "fixTarget": "both"
+              "code": "ACC-07",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Đã đồng bộ cả 2 phía: iOS thay thế cắt chuỗi cứng dropFirst(9)/dropFirst(14) bằng SPQRCodeData.parse hỗ trợ white-label và kiểm tra quyền Camera qua AVCaptureDevice trong SPQRCode; Android bổ sung ScanQRCodeHelper + guard quyền CAMERA/STORAGE ngay bên trong ScanQRCodeProjectActivity.",
+              "recommendation": "Không cần sửa — cả iOS và Android đã đồng bộ kiểm tra quyền Camera nội bộ và parse mã QR an toàn theo dấu hai chấm.",
+              "fixTarget": "none"
             }
           }
         },
@@ -636,6 +650,7 @@
               "VBot/Controller/NewController/QRCode/AppQRCodeHandleViewController.swift"
             ],
             "parityAssessment": {
+              "code": "ACC-08",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -744,6 +759,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-10",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -813,6 +829,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-11",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -848,6 +865,7 @@
               "VBot/Controller/NewController/Account/Sercurity/qAccountSecurityViewController.swift"
             ],
             "parityAssessment": {
+              "code": "ACC-12",
               "verdict": "action_needed",
               "sameLogic": false,
               "sameOutcome": false,
@@ -930,6 +948,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-14",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -961,6 +980,7 @@
               "VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/account/AllPermissionActivity.kt"
             ],
             "parityAssessment": {
+              "code": "ACC-15",
               "verdict": "os_impl_only",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1021,6 +1041,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-16",
               "verdict": "synced",
               "sameLogic": true,
               "sameOutcome": true,
@@ -1099,6 +1120,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-18",
               "verdict": "logic_diff",
               "sameLogic": false,
               "sameOutcome": false,
@@ -1164,6 +1186,7 @@
               }
             },
             "parityAssessment": {
+              "code": "ACC-19",
               "verdict": "action_needed",
               "sameLogic": false,
               "sameOutcome": false,

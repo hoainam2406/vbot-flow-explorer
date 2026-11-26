@@ -1681,22 +1681,20 @@ postEvent('monitor_call' as any, {
         from: 'host',
         to: 'miniapp',
         dashed: true,
-        arrowLabel: 'monitor_call_state_changed (chỉ iOS) / Native PiP',
+        arrowLabel: 'monitor_call_state_changed (iOS & Android)',
         explanation:
-          'Khi cuộc gọi giám sát Active hoặc Disconnected, iOS đẩy sự kiện monitor_call_state_changed xuống Mini App. Trên Android, state được đẩy vào VbMaCallStateManager để hiển thị trên native PiP và hiện chưa phát lại event monitor_call_state_changed về WebView JS.',
+          'Khi cuộc gọi giám sát chuyển sang ACTIVE hoặc DISCONNECTED (kèm reason), cả iOS và Android đều đẩy sự kiện monitor_call_state_changed xuống Mini App. Android đồng thời cập nhật VbMaCallStateManager để hiển thị trên native PiP.',
         hostIos: {
           fn: 'MiniAppService.sendMonitorCallStateChanged(requestId:state:reason:)',
           detail: 'Emit "monitor_call_state_changed" xuống Mini App mỗi khi đổi state hoặc cleanupMonitoring.',
           codeRef: 'VBot/Service/MiniAppService.swift',
         },
         hostAndroid: {
-          fn: 'VbMaCallStateManager.updateState(...) + cleanupMonitoring()',
+          fn: 'MiniAppHelper.onMonitoringCallStateChanged / cleanupMonitoring → sendMonitorCallStateChanged(...)',
           detail:
-            'Hiển thị trạng thái & timer qua native PiP; CHƯA gọi emitEvent("monitor_call_state_changed") xuống WebView.',
+            'Phát tối đa 1 lần ACTIVE và 1 lần DISCONNECTED (kèm reason) qua VbMaSDK.emitEvent("monitor_call_state_changed"), đồng thời cập nhật VbMaCallStateManager cho native PiP.',
           codeRef: 'VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt',
         },
-        parityWarning:
-          'Lệch Parity: iOS phát event monitor_call_state_changed xuống JS nhưng Android hiện mới cập nhật UI Native PiP mà chưa emit event này.',
       },
     ],
   },
@@ -2220,19 +2218,17 @@ console.log('Params từ cha:', extraData);`,
         dashed: false,
         arrowLabel: 'emitEventIfMiniAppOpen(appId) / VbMaSDK.emitEvent(...)',
         explanation:
-          'Nếu WebSocket SETUP_2FA có logout_other_devices=true thì Host ép đăng xuất toàn app; ngược lại Host đóng gói { is_enable, timestamp } để báo vào vb-ma-2fa-setting. Trên iOS có MiniAppActiveTracker kiểm tra đúng appId đang mở trên đỉnh stack trước khi emit.',
+          'Nếu WebSocket SETUP_2FA có logout_other_devices=true thì Host ép đăng xuất toàn app; ngược lại Host đóng gói { is_enable, timestamp } để báo vào vb-ma-2fa-setting. Cả iOS và Android đều có MiniAppActiveTracker kiểm tra đúng appId đang mở trên đỉnh stack trước khi emit.',
         hostIos: {
           fn: 'MiniAppService.emitEventIfMiniAppOpen(appId: "vb-ma-2fa-setting", eventName: "setup_2fa", payload:)',
           detail: 'Kiểm tra MiniAppActiveTracker.shared.isMiniAppOpen() tránh phát nhầm vào Mini App khác đang mở.',
           codeRef: 'VBot/Service/MiniAppService.swift',
         },
         hostAndroid: {
-          fn: 'MiniAppHelper.emitEvent("setup_2fa", payload) → VbMaSDK.emitEvent(...)',
-          detail: 'Android CHƯA có per-appId ActiveTracker — phát trực tiếp tới VbMaSDK.activeBridge đang gắn hiện tại.',
+          fn: 'MiniAppHelper.emitEventIfMiniAppOpen(MINI_APP_2FA_SETTING_ID, "setup_2fa", payload) → VbMaSDK.emitEvent(...)',
+          detail: 'Kiểm tra MiniAppActiveTracker.shared.isMiniAppOpen() và double-check trên Main Thread trước khi gọi VbMaSDK.emitEvent.',
           codeRef: 'VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt',
         },
-        parityWarning:
-          'Lệch Parity: iOS lọc đúng appId bằng MiniAppActiveTracker; Android chưa lọc theo appId nên Mini App cần tự kiểm tra event hợp lệ trong ngữ cảnh của mình.',
       },
       {
         stepNumber: 3,
@@ -2264,11 +2260,9 @@ console.log('Params từ cha:', extraData);`,
         hostAndroid: {
           fn: 'VbMABridge.sendEvent(...) / MiniAppHelper.emitEvent',
           detail:
-            'SettingActivity Android hỗ trợ Dark/Light mode; riêng CallHistoryFragment hiện CHƯA truyền theme_params lúc mở và CHƯA emit theme_changed.',
+            'SettingActivity Android hỗ trợ Dark/Light mode; MiniAppFragment & VbMABridge.handleRequestTheme tự động phát theme_changed khi ready hoặc đổi cấu hình Sáng/Tối.',
           codeRef: 'VBot-Android/app/src/main/java/com/vpmedia/vbot/ui/phone/CallHistoryFragment.kt',
         },
-        parityWarning:
-          'Lệch Parity: CallHistoryFragment (vb-ma-user-history-call) trên Android chưa truyền theme_params & chưa emit theme_changed; các màn Mini App Tab Lịch sử nên đặt màu fallback sáng rõ ràng.',
       },
       {
         stepNumber: 4,
@@ -2341,8 +2335,8 @@ console.log('Admin?', isAdmin(), 'Embed param:', startParam);`,
       2,
     ),
     iosHandler: 'MiniAppService.openMiniApp / VbMa.shared.createMiniAppViewController (luôn merge theme_params Light & isAdmin)',
-    androidHandler: 'MiniAppHelper.openMiniApp / MiniAppFragment.newInstance (CallHistoryFragment hiện thiếu theme_params)',
-    parityNote: 'iOS ép Light theme toàn cục; Android CallHistoryFragment chưa truyền theme_params.',
+    androidHandler: 'MiniAppHelper.openMiniApp / MiniAppFragment.newInstance (vb-ma-android-sdk tự inject vbma_theme theo uiMode)',
+    parityNote: 'iOS ép Light theme toàn cục; Android tự đồng bộ Light/Dark qua vb-ma-android-sdk.',
     usedByApps: ['Tất cả Mini App'],
   },
   // ── Lifecycle & UI Methods ──────────────────────────────────────
@@ -2557,8 +2551,8 @@ console.log('Admin?', isAdmin(), 'Embed param:', startParam);`,
     responseEvent: 'monitor_call_result | monitor_call_state_changed',
     responseJson: JSON.stringify({ request_id: 'req-m1', action: 'whisper', transId: 'tr_9045', success: true, status: 'CONNECTING' }, null, 2),
     iosHandler: 'MiniAppService.onMonitorCall → MiniAppMonitoringCoordinator + VPMAppService.startMonitoringCall',
-    androidHandler: 'MiniAppHelper.onMonitorCall → tryAcquireMonitoringSlot + startMonitoringSipCall (PiP)',
-    parityNote: 'iOS có đẩy event monitor_call_state_changed xuống JS; Android hiện chỉ cập nhật native PiP.',
+    androidHandler: 'MiniAppHelper.onMonitorCall → tryAcquireMonitoringSlot + startMonitoringSipCall (PiP) + sendMonitorCallStateChanged',
+    parityNote: 'Cả iOS và Android đều phát monitor_call_state_changed (ACTIVE / DISCONNECTED kèm reason) về JS; Android hiển thị thêm native PiP.',
     usedByApps: ['vb-ma-monitoring'],
   },
   // ── Autodial Actions & Events ───────────────────────────────────
@@ -2654,8 +2648,8 @@ console.log('Admin?', isAdmin(), 'Embed param:', startParam);`,
     miniAppCode: `on('refresh_data', ({ reason, force }) => reloadIfNeeded(reason, force));\non('filter_changed', ({ type }) => applyFilter(type));\non('theme_changed', ({ theme_params }) => applyCssVars(theme_params));`,
     responseJson: JSON.stringify({ reason: 'call_ended', force: true }, null, 2),
     iosHandler: 'MiniAppService.emitEventIfMiniAppOpen (qua MiniAppActiveTracker)',
-    androidHandler: 'MiniAppHelper.emitEvent → VbMaSDK.emitEvent / CallHistoryFragment',
-    parityNote: 'Android chưa có MiniAppActiveTracker theo appId & CallHistoryFragment chưa emit theme_changed.',
+    androidHandler: 'MiniAppHelper.emitEventIfMiniAppOpen (qua MiniAppActiveTracker) / CallHistoryFragment',
+    parityNote: 'Cả iOS và Android đã lọc emitEvent theo appId qua MiniAppActiveTracker; Android vb-ma-android-sdk tự phát theme_changed khi đổi Sáng/Tối.',
     usedByApps: ['vb-ma-user-history-call', 'vb-ma-user-contact', 'vb-ma-contact-forward', 'vb-ma-2fa-setting'],
   },
 ];
@@ -2689,7 +2683,7 @@ export const MINI_APP_CATALOG: MiniAppCatalogEntry[] = [
     customActions: ['filter_changed', 'refresh_data', 'make_call', 'check_permissions'],
     simulatorFlowId: 'flow-2fa-history',
     relatedNodeId: 'ma-history-call',
-    parityNote: 'Android CallHistoryFragment chưa truyền theme_params & chưa emit theme_changed (quyền hiển thị đã đồng bộ trên cả 2 HĐH).',
+    parityNote: 'Quyền hiển thị, phát ghi âm và đồng bộ Sáng/Tối (qua vb-ma-android-sdk trên Android) đã nhất quán trên cả 2 HĐH.',
   },
   {
     id: 'vb-ma-user-contact',
@@ -2874,7 +2868,7 @@ export const MINI_APP_CATALOG: MiniAppCatalogEntry[] = [
     customActions: ['monitor_call', 'monitor_call_result', 'monitor_call_state_changed'],
     simulatorFlowId: 'flow-monitoring',
     relatedNodeId: 'ma-monitoring',
-    parityNote: 'iOS phát monitor_call_state_changed xuống JS; Android hiện chưa phát event này.',
+    parityNote: 'Cả iOS và Android đều phát monitor_call_state_changed (ACTIVE / DISCONNECTED) xuống JS; Android hiển thị thêm native PiP.',
   },
   {
     id: 'vb-ma-report',
@@ -3234,7 +3228,7 @@ export const MINI_APP_CATALOG: MiniAppCatalogEntry[] = [
     customActions: ['setup_2fa', 'request_mini_app_token'],
     simulatorFlowId: 'flow-2fa-history',
     relatedNodeId: 'ma-2fa-setting',
-    parityNote: 'iOS theo dõi mở màn qua MiniAppActiveTracker trước khi đẩy setup_2fa.',
+    parityNote: 'Cả iOS và Android đều theo dõi mở màn qua MiniAppActiveTracker + emitEventIfMiniAppOpen trước khi đẩy setup_2fa.',
   },
 ];
 
@@ -3252,20 +3246,6 @@ export const BRIDGE_PARITY_ALERTS: BridgeParityAlert[] = [
       'Luôn chuẩn bị interceptor bắt HTTP 401 để gọi lại requestModuleToken(module, 5000, true) trước khi báo lỗi phiên.',
     simulatorFlowId: 'flow-token-401',
     relatedNodeId: 'vbot-app',
-  },
-  {
-    id: 'pa-monitor-state',
-    title: 'Android chưa phát monitor_call_state_changed & History thiếu theme_changed',
-    severity: 'medium',
-    scope: 'vb-ma-monitoring · vb-ma-user-history-call',
-    iosBehavior:
-      'iOS phát monitor_call_state_changed, truyền theme Light và lọc emitEvent theo MiniAppActiveTracker.',
-    androidBehavior:
-      'Giám sát hiển thị trạng thái qua PiP native (chưa emit monitor_call_state_changed); CallHistoryFragment chưa gửi theme_params/theme_changed.',
-    recommendationForMiniApp:
-      'Không treo spinner chờ monitor_call_state_changed vô hạn; luôn đặt bảng màu fallback mặc định cho giao diện Tab Lịch sử.',
-    simulatorFlowId: 'flow-monitoring',
-    relatedNodeId: 'ma-monitoring',
   },
   {
     id: 'pa-contacts-perm',
