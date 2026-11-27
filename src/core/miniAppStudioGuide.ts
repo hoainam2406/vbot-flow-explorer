@@ -57,7 +57,7 @@ export const STUDIO_TOUR_STEPS: StudioTourStep[] = [
     targetSelector: '[data-studio-tour="modal-tabs"]',
     title: 'Bản đồ 6 Tab của Cầu nối Mini App',
     description:
-      'Thanh này chia rõ từng công cụ: Dev Studio · Mô phỏng (thử trực tiếp), Chạy thử luồng (sơ đồ tuần tự), Tra cứu Hàm & Event, Danh mục 41 Mini App, Quản lý Quyền (RBAC) và Lệch iOS ↔ Android.',
+      'Thanh này chia rõ từng công cụ: Dev Studio · Mô phỏng (thử trực tiếp), Chạy thử luồng (sơ đồ tuần tự), Tra cứu Hàm & Event, Danh mục 42 Mini App, Quản lý Quyền (RBAC) và Lệch iOS ↔ Android.',
     tip: 'Nếu mới bắt đầu làm Mini App, bạn chỉ cần ở tab "Dev Studio · Mô phỏng" và xem thêm tab "Lệch iOS ↔ Android".',
     requiredView: 'sandbox',
   },
@@ -67,7 +67,7 @@ export const STUDIO_TOUR_STEPS: StudioTourStep[] = [
     targetSelector: '[data-studio-tour="studio-header"]',
     title: 'Chọn Mini App & Xem Hợp đồng 2 Chiều',
     description:
-      'Chọn đúng Mini App bạn phụ trách trong 41 app, chuyển sang "Hợp đồng 2 Chiều & Starter Code" để biết Host truyền gì vào (Launch Params / Push Event) và nhận gì lên, hoặc bấm Copy Starter (.ts) / Tải Spec (.md).',
+      'Chọn đúng Mini App bạn phụ trách trong 42 app, chuyển sang "Hợp đồng 2 Chiều & Starter Code" để biết Host truyền gì vào (Launch Params / Push Event) và nhận gì lên, hoặc bấm Copy Starter (.ts) / Tải Spec (.md).',
     tip: 'Bấm "Copy link gửi Dev" để gửi link mở thẳng đúng Mini App đó cho thành viên mới.',
     requiredView: 'sandbox',
   },
@@ -269,7 +269,7 @@ export const BRIDGE_MODAL_TABS_GUIDE: BridgeTabGuideItem[] = [
   },
   {
     tab: 'catalog',
-    label: 'Danh mục 41 Mini App',
+    label: 'Danh mục 42 Mini App',
     whenToUse: 'Tìm app theo vị trí hiển thị (Hub, Tab cố định, In-call, Ẩn) và bấm "Mở Dev Studio" nhanh.',
   },
   {

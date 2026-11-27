@@ -706,13 +706,13 @@ const focusAppInMatrix = (appId: string) => {
                   "
                   :title="
                     item.wildcard
-                      ? `Wildcard ${item.module}: [] — ${item.finalGranted ? 'Được phép' : 'Bị từ chối (thiếu quyền module)'}`
+                      ? `${item.module}: [] (mọi action trong module) — ${item.finalGranted ? 'Được phép' : 'Bị từ chối (thiếu quyền module)'}`
                       : `${item.module}-${item.action}: ${item.finalGranted ? 'Được phép (true)' : 'Bị từ chối (false)'}`
                   "
                 >
                   <Unlock v-if="item.finalGranted" class="h-2.5 w-2.5 shrink-0" />
                   <Lock v-else class="h-2.5 w-2.5 shrink-0" />
-                  <span>{{ item.wildcard && item.action === '*' ? 'wildcard []' : item.action }}</span>
+                  <span>{{ item.wildcard && item.action === '*' ? '[]' : item.action }}</span>
                 </span>
               </div>
             </div>
@@ -788,7 +788,7 @@ const focusAppInMatrix = (appId: string) => {
                       : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
                   "
                 >
-                  {{ mod.wildcardSupported ? 'Hỗ trợ wildcard []' : 'Kiểm từng action' }}
+                  {{ mod.wildcardSupported ? 'Hỗ trợ [] (mọi action)' : 'Kiểm từng action' }}
                 </span>
               </div>
 

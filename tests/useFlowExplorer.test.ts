@@ -625,4 +625,109 @@ describe('createFlowExplorerState', () => {
     expect(state.activeBranchId.value).toBe('Nam-dev');
     expect(state.selectedNodeId.value).toBeNull();
   });
+
+  it('traverses multi-hop upstream and downstream flow edges continuously regardless of edge declaration order or cycles', () => {
+    const dagDataset: MergedFlowDataset = {
+      app: { name: 'VBot', tagline: 'DAG' },
+      rootNode: { id: 'root', label: 'Root', kind: 'module', audience: 'all', summary: { overview: 'R' } },
+      branches: [
+        { id: 'branch', label: 'Branch', kind: 'module', audience: 'all', summary: { overview: 'B' } },
+      ],
+      branchEdges: [{ id: 'e-root-branch', source: 'root', target: 'branch' }],
+      subtreesByParentId: {
+        branch: {
+          title: 'Branch Subtree',
+          layoutHint: 'tree',
+          entryNodeIds: ['parent'],
+          nodes: [{ id: 'parent', label: 'Parent', kind: 'module', audience: 'all', summary: { overview: 'P' } }],
+          edges: [],
+        },
+        parent: {
+          title: 'Agent Status Flow',
+          layoutHint: 'flow',
+          entryNodeIds: ['open'],
+          nodes: [
+            { id: 'open', label: 'Open', kind: 'action', audience: 'all', summary: { overview: 'O' } },
+            { id: 'setStatus', label: 'Set Status', kind: 'action', audience: 'all', summary: { overview: 'S' } },
+            { id: 'setDevices', label: 'Set Devices', kind: 'action', audience: 'all', summary: { overview: 'D' } },
+            { id: 'manage', label: 'Manage', kind: 'action', audience: 'all', summary: { overview: 'M' } },
+            { id: 'autoResume', label: 'Auto Resume', kind: 'process', audience: 'tech', summary: { overview: 'A' } },
+            { id: 'realtime', label: 'Realtime', kind: 'external', audience: 'tech', summary: { overview: 'RT' } },
+          ],
+          edges: [
+            { id: 'e-open-status', source: 'open', target: 'setStatus' },
+            { id: 'e-open-devices', source: 'open', target: 'setDevices' },
+            { id: 'e-status-rt', source: 'setStatus', target: 'realtime' },
+            { id: 'e-devices-rt', source: 'setDevices', target: 'realtime' },
+            { id: 'e-open-manage', source: 'open', target: 'manage' },
+            // Declared before e-auto-rt to catch single-pass edge-order dependency
+            { id: 'e-status-auto', source: 'setStatus', target: 'autoResume' },
+            { id: 'e-auto-rt', source: 'autoResume', target: 'realtime' },
+          ],
+        },
+      },
+    };
+
+    const state = createFlowExplorerState(dagDataset, true);
+    state.setAudienceMode('tech');
+    state.toggleExpand('branch');
+    state.toggleExpand('parent');
+
+    const rtLineage = computeNodeLineage(state.visibleFlow.value, 'realtime');
+    expect(rtLineage.nodeIds).toEqual(
+      new Set(['root', 'branch', 'parent', 'open', 'setStatus', 'setDevices', 'autoResume', 'realtime']),
+    );
+    expect(rtLineage.edgeIds).toEqual(
+      new Set([
+        'e-root-branch',
+        'expand-branch-parent',
+        'expand-parent-open',
+        'e-open-status',
+        'e-open-devices',
+        'e-status-rt',
+        'e-devices-rt',
+        'e-status-auto',
+        'e-auto-rt',
+      ]),
+    );
+    expect(rtLineage.nodeIds.has('manage')).toBe(false);
+    expect(rtLineage.edgeIds.has('e-open-manage')).toBe(false);
+
+    const statusLineage = computeNodeLineage(state.visibleFlow.value, 'setStatus');
+    expect(statusLineage.nodeIds).toEqual(
+      new Set(['root', 'branch', 'parent', 'open', 'setStatus', 'autoResume', 'realtime']),
+    );
+    expect(statusLineage.edgeIds).toEqual(
+      new Set([
+        'e-root-branch',
+        'expand-branch-parent',
+        'expand-parent-open',
+        'e-open-status',
+        'e-status-auto',
+        'e-status-rt',
+        'e-auto-rt',
+      ]),
+    );
+    expect(statusLineage.nodeIds.has('setDevices')).toBe(false);
+    expect(statusLineage.nodeIds.has('manage')).toBe(false);
+    expect(statusLineage.edgeIds.has('e-open-devices')).toBe(false);
+    expect(statusLineage.edgeIds.has('e-devices-rt')).toBe(false);
+    expect(statusLineage.edgeIds.has('e-open-manage')).toBe(false);
+
+    const cycleFlow = {
+      nodes: [
+        { id: 'a', label: 'A', kind: 'action' as const, audience: 'all' as const, summary: { overview: 'A' } },
+        { id: 'b', label: 'B', kind: 'action' as const, audience: 'all' as const, summary: { overview: 'B' } },
+      ],
+      edges: [
+        { id: 'e-ab', source: 'a', target: 'b' },
+        { id: 'e-ba', source: 'b', target: 'a' },
+      ],
+      nodeParentMap: {},
+      activeScenarios: [],
+    };
+    const cycleLineage = computeNodeLineage(cycleFlow, 'a');
+    expect(cycleLineage.nodeIds).toEqual(new Set(['a', 'b']));
+    expect(cycleLineage.edgeIds).toEqual(new Set(['e-ab', 'e-ba']));
+  });
 });

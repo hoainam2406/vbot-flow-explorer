@@ -33,8 +33,8 @@ import { MINI_APP_CATALOG } from '../src/data/miniAppBridgeCatalog';
 import { createRoleStateFromPreset } from '../src/data/miniAppPermissionMatrix';
 
 describe('miniAppContractBuilder', () => {
-  it('builds complete 2-way contracts and codegen for all 41 Mini Apps', () => {
-    expect(MINI_APP_CATALOG).toHaveLength(41);
+  it('builds complete 2-way contracts and codegen for all 42 Mini Apps', () => {
+    expect(MINI_APP_CATALOG).toHaveLength(42);
     expect(FEATURED_STUDIO_APP_IDS).toContain('vb-ma-autodial');
 
     for (const app of MINI_APP_CATALOG) {
@@ -75,6 +75,12 @@ describe('miniAppContractBuilder', () => {
       expect.arrayContaining(['user_contact_get_local', 'user_contact_import_device']),
     );
     expect(contacts.incomingEvents.some((e) => e.eventName === 'user_contacts_updated')).toBe(true);
+
+    const workSchedule = buildMiniAppContract('vb-ma-work-schedule');
+    expect(workSchedule.incomingEvents.some((e) => e.eventName === 'back_button_pressed')).toBe(true);
+    expect(workSchedule.outgoingCommands.map((c) => c.method)).toEqual(
+      expect.arrayContaining(['request_mini_app_token', 'trigger_haptic', 'close']),
+    );
 
     const sdkHostAction = buildCommandSdkSnippet('make_call', { phone: '0901234567' }, true);
     expect(sdkHostAction).toContain("postEvent('request_host_action'");

@@ -488,7 +488,7 @@ const onToggleTheme = () => {
             ? 'bg-cyan-600 text-white shadow-xs dark:bg-cyan-500/25 dark:text-cyan-300 dark:ring-1 dark:ring-cyan-500/40'
             : 'text-cyan-800 hover:text-cyan-950 dark:text-cyan-300 dark:hover:text-cyan-200'
         "
-        title="Trình chạy thử luồng giao tiếp, tra cứu hàm @vbotma/sdk và danh mục 41 Mini App"
+        title="Trình chạy thử luồng giao tiếp, tra cứu hàm @vbotma/sdk và danh mục 42 Mini App"
         @click="emit('openMiniappBridge')"
       >
         <ArrowLeftRight class="h-3.5 w-3.5 shrink-0" />

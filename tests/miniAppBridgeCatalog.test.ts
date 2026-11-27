@@ -65,10 +65,10 @@ describe('miniAppBridgeCatalog', () => {
     }
   });
 
-  it('catalogs all 41 unique Mini Apps (36 active + 5 unused/special) with valid simulator references and clickable action chips', () => {
-    expect(MINI_APP_CATALOG).toHaveLength(41);
+  it('catalogs all 42 unique Mini Apps (37 active + 5 unused/special) with valid simulator references and clickable action chips', () => {
+    expect(MINI_APP_CATALOG).toHaveLength(42);
     const ids = new Set(MINI_APP_CATALOG.map((app) => app.id));
-    expect(ids.size).toBe(41);
+    expect(ids.size).toBe(42);
 
     const autodialApp = MINI_APP_CATALOG.find((app) => app.id === 'vb-ma-autodial');
     expect(autodialApp).toBeDefined();
@@ -92,6 +92,12 @@ describe('miniAppBridgeCatalog', () => {
     const campaignApp = MINI_APP_CATALOG.find((app) => app.id === 'vb-ma-auto-call-campaign');
     expect(campaignApp).toBeDefined();
     expect(campaignApp?.bridgeTier).toBe('core_sdk');
+
+    const workScheduleApp = MINI_APP_CATALOG.find((app) => app.id === 'vb-ma-work-schedule');
+    expect(workScheduleApp).toBeDefined();
+    expect(workScheduleApp?.category).toBe('Cài đặt nhóm');
+    expect(workScheduleApp?.bridgeTier).toBe('core_sdk');
+    expect(workScheduleApp?.relatedNodeId).toBe('ma-work-schedule');
 
     expect(resolveActionFlowTarget('make_call', 'vb-ma-autodial')).toEqual({
       flowId: 'flow-autodial',
@@ -158,11 +164,11 @@ describe('miniAppBridgeCatalog', () => {
     expect(md).toContain('Khởi tạo & Session');
     expect(md).toContain('Hoàn tất & Lỗi');
     expect(md).toContain('## 3. Bảng tra cứu Core Protocol');
-    expect(md).toContain('## 4. Danh mục đầy đủ 41 Mini App');
+    expect(md).toContain('## 4. Danh mục đầy đủ 42 Mini App');
     expect(md).toContain('## 5. Điểm lệch Parity');
   });
 
-  it('structures 6 top-level branches, 6 Prod Hub categories (34 apps), 4 in-call apps, and 41/41 1-1 catalog node links', () => {
+  it('structures 6 top-level branches, 6 Prod Hub categories (35 apps), 4 in-call apps, and 42/42 1-1 catalog node links', () => {
     expect(dataset.branches.map((b) => b.id)).toEqual([
       'mod-calling',
       'mod-auth',
@@ -180,11 +186,14 @@ describe('miniAppBridgeCatalog', () => {
     const hubCategoryNodes = dataset.subtreesByParentId['miniapp-list']?.nodes ?? [];
     expect(hubCategoryNodes).toHaveLength(6);
     expect(dataset.subtreesByParentId['hub-cat-call-mgmt']?.nodes).toHaveLength(11);
+    expect(dataset.subtreesByParentId['hub-cat-group-settings']?.nodes).toHaveLength(10);
+    expect(dataset.subtreesByParentId['ma-work-schedule']?.nodes).toHaveLength(7);
+    expect(dataset.subtreesByParentId['ma-work-schedule']?.scenarios).toHaveLength(3);
     const hubMiniAppCount = hubCategoryNodes.reduce(
       (sum, cat) => sum + (dataset.subtreesByParentId[cat.id]?.nodes.length ?? 0),
       0,
     );
-    expect(hubMiniAppCount).toBe(34);
+    expect(hubMiniAppCount).toBe(35);
 
     const relatedIds = new Set<string>();
     for (const app of MINI_APP_CATALOG) {
@@ -195,6 +204,6 @@ describe('miniAppBridgeCatalog', () => {
       expect(targetNode).toBeDefined();
       expect(targetNode?.kind).toBe('miniapp');
     }
-    expect(relatedIds.size).toBe(41);
+    expect(relatedIds.size).toBe(42);
   });
 });

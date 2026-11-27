@@ -192,7 +192,7 @@ describe("parityAnalyzer", () => {
     const realDataset = loadMergedDataset(process.cwd());
     const report = extractParityReport(realDataset);
 
-    expect(report.total).toBe(125);
+    expect(report.total).toBe(126);
     expect(report.iosOnly).toBeGreaterThan(0);
     expect(report.androidOnly).toBeGreaterThan(0);
     expect(report.behaviorDiff).toBeGreaterThan(0);

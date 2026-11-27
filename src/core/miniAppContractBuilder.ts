@@ -1042,6 +1042,15 @@ const PUSH_EVENTS_CATALOG: Record<string, ContractEventSpec> = {
     ],
     samplePayload: { code: 'BRIDGE_WARNING', message: 'Một hành động mất nhiều thời gian phản hồi' },
   },
+  back_button_pressed: {
+    eventName: 'back_button_pressed',
+    source: 'host_push',
+    title: 'Người dùng bấm nút Quay lại (Native Back)',
+    summary:
+      'Host đẩy xuống khi người dùng bấm nút Back hệ thống / thanh tiêu đề để Mini App đóng sheet/dialog theo thứ tự trước khi gọi close().',
+    payloadSchema: [],
+    samplePayload: {},
+  },
 };
 
 const BASE_CORE_METHODS = [
@@ -1123,6 +1132,8 @@ function resolveAppIncomingEvents(app: MiniAppCatalogEntry): ContractEventSpec[]
     names.add('filter_changed');
   } else if (app.id === 'vb-ma-2fa-setting') {
     names.add('setup_2fa');
+  } else if (app.id === 'vb-ma-work-schedule') {
+    names.add('back_button_pressed');
   }
 
   return Array.from(names)

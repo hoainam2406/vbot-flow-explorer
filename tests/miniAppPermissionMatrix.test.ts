@@ -16,11 +16,11 @@ import {
 } from '../src/data/miniAppPermissionMatrix';
 
 describe('miniAppPermissionMatrix', () => {
-  it('maps every single Mini App in the 41-app catalog without orphan keys', () => {
+  it('maps every single Mini App in the 42-app catalog without orphan keys', () => {
     const catalogIds = MINI_APP_CATALOG.map((app) => app.id).sort();
     const profileKeys = Object.keys(MINI_APP_PERMISSION_PROFILES).sort();
     expect(profileKeys).toEqual(catalogIds);
-    expect(profileKeys).toHaveLength(41);
+    expect(profileKeys).toHaveLength(42);
   });
 
   it('defines all 9 standard permission modules with valid manifest and SDK snippets', () => {
@@ -141,6 +141,14 @@ describe('miniAppPermissionMatrix', () => {
     const groupMemberProfile = MINI_APP_PERMISSION_PROFILES['vb-ma-group-member'];
     expect(evaluateActionGrant(groupMemberProfile, 'THANH_VIEN', 'XEM', minimalMember).finalGranted).toBe(false);
     expect(evaluateActionGrant(groupMemberProfile, 'THANH_VIEN', 'XEM', adminRole).finalGranted).toBe(true);
+
+    const workScheduleVis = evaluateAppVisibility('vb-ma-work-schedule', minimalMember);
+    expect(workScheduleVis.iosVisible).toBe(true);
+    expect(workScheduleVis.androidVisible).toBe(true);
+    expect(workScheduleVis.hasRuntimeParityDiff).toBe(false);
+    const workScheduleProfile = MINI_APP_PERMISSION_PROFILES['vb-ma-work-schedule'];
+    expect(workScheduleProfile.manifestSource).toBe('verified_manifest');
+    expect(workScheduleProfile.manifestCapabilities).toEqual([]);
   });
 
   it('builds parseable manifest JSON, SDK snippets, and complete permission Markdown export', () => {

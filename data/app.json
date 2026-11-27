@@ -338,7 +338,7 @@
       "kind": "module",
       "audience": "all",
       "summary": {
-        "overview": "Trung tâm 34/41 Mini App theo 6 nhóm thực tế trên Production (Cuộc gọi 11, Gọi tự động 6, Cài đặt nhóm 9, CRM 2, Nổi bật 5, Tiện ích 1) kèm thanh trạng thái trực và tìm kiếm toàn cục.",
+        "overview": "Trung tâm 35/42 Mini App theo 6 nhóm thực tế trên Production (Cuộc gọi 11, Gọi tự động 6, Cài đặt nhóm 10, CRM 2, Nổi bật 5, Tiện ích 1) kèm thanh trạng thái trực và tìm kiếm toàn cục.",
         "tech": "Màn hình FeaturesViewControllerV2 / FeatureFragment tải danh sách Mini App từ VbMaSDK qua 4 lớp lọc (hiddenApps, inCallOnlyMiniApps, 7 adminOnlyApps, 15 memberAppPermissions), hiển thị thanh trạng thái (VbUserStateHolder / VbDeviceInboundHolder) và điều phối cầu nối Bridge cho AutodialManager / MiniAppMonitoringCoordinator."
       },
       "techDetail": {

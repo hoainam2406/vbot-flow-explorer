@@ -12,6 +12,7 @@ import {
 import type { DevWorkboardTask, NodeTaskBadgeInfo } from '../core/devWorkboardStore';
 import type { LayoutDirection } from '../core/explorerPreferences';
 import type {
+  FlowEdgeData,
   FlowNodeData,
   MediaItem,
   MergedFlowDataset,
@@ -66,46 +67,50 @@ export function computeNodeLineage(
     return { nodeIds, edgeIds };
   }
 
-  nodeIds.add(targetNodeId);
-
-  // Ancestors via nodeParentMap
-  let cursor: string | undefined = visibleFlow.nodeParentMap[targetNodeId];
-  const ancGuard = new Set<string>([targetNodeId]);
-  while (cursor && !ancGuard.has(cursor)) {
-    ancGuard.add(cursor);
-    if (visibleNodeIds.has(cursor)) {
-      nodeIds.add(cursor);
-    }
-    cursor = visibleFlow.nodeParentMap[cursor];
-  }
-
-  // Descendants whose ancestor chain passes through targetNodeId
-  for (const node of visibleFlow.nodes) {
-    if (nodeIds.has(node.id)) continue;
-    let p: string | undefined = visibleFlow.nodeParentMap[node.id];
-    const descGuard = new Set<string>([node.id]);
-    while (p && !descGuard.has(p)) {
-      if (p === targetNodeId) {
-        nodeIds.add(node.id);
-        break;
-      }
-      descGuard.add(p);
-      p = visibleFlow.nodeParentMap[p];
-    }
-  }
-
+  const incoming = new Map<string, FlowEdgeData[]>();
+  const outgoing = new Map<string, FlowEdgeData[]>();
   for (const edge of visibleFlow.edges) {
     if (!visibleNodeIds.has(edge.source) || !visibleNodeIds.has(edge.target)) {
       continue;
     }
-    if (
-      (nodeIds.has(edge.source) && nodeIds.has(edge.target)) ||
-      edge.source === targetNodeId ||
-      edge.target === targetNodeId
-    ) {
+    const inList = incoming.get(edge.target) ?? [];
+    inList.push(edge);
+    incoming.set(edge.target, inList);
+
+    const outList = outgoing.get(edge.source) ?? [];
+    outList.push(edge);
+    outgoing.set(edge.source, outList);
+  }
+
+  nodeIds.add(targetNodeId);
+
+  // Upstream BFS from targetNodeId towards root
+  const upVisited = new Set<string>([targetNodeId]);
+  const upQueue: string[] = [targetNodeId];
+  while (upQueue.length > 0) {
+    const cur = upQueue.shift()!;
+    for (const edge of incoming.get(cur) ?? []) {
       edgeIds.add(edge.id);
-      nodeIds.add(edge.source);
-      nodeIds.add(edge.target);
+      if (!upVisited.has(edge.source)) {
+        upVisited.add(edge.source);
+        nodeIds.add(edge.source);
+        upQueue.push(edge.source);
+      }
+    }
+  }
+
+  // Downstream BFS from targetNodeId towards leaves
+  const downVisited = new Set<string>([targetNodeId]);
+  const downQueue: string[] = [targetNodeId];
+  while (downQueue.length > 0) {
+    const cur = downQueue.shift()!;
+    for (const edge of outgoing.get(cur) ?? []) {
+      edgeIds.add(edge.id);
+      if (!downVisited.has(edge.target)) {
+        downVisited.add(edge.target);
+        nodeIds.add(edge.target);
+        downQueue.push(edge.target);
+      }
     }
   }
 

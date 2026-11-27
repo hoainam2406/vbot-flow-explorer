@@ -346,7 +346,7 @@ export function buildRoutedEdgePath(params: RoutedEdgePathParams): RoutedEdgePat
     params.sourcePosition === Position.Bottom || params.sourcePosition === Position.Top;
   const waypoints = params.route?.points ?? [];
   const needsWaypointRouting = isVertical
-    ? waypoints.length > 3 && params.targetY <= params.sourceY
+    ? waypoints.length > 3 || params.targetY <= params.sourceY
     : waypoints.length > 3 || params.targetX <= params.sourceX;
 
   if (!needsWaypointRouting) {
@@ -363,27 +363,73 @@ export function buildRoutedEdgePath(params: RoutedEdgePathParams): RoutedEdgePat
   }
 
   if (isVertical) {
-    const stub = 24;
-    const inner = waypoints.length >= 3 ? waypoints.slice(1, -1) : [];
-    const sideX =
-      inner.length > 0
-        ? inner[0].x
-        : Math.max(params.sourceX, params.targetX) + 88;
+    const inner =
+      waypoints.length >= 3
+        ? waypoints.slice(1, -1)
+        : [
+            {
+              x: Math.max(params.sourceX, params.targetX) + 88,
+              y: (params.sourceY + params.targetY) / 2,
+            },
+          ];
+
+    const stub =
+      params.targetY > params.sourceY
+        ? Math.min(24, Math.max(8, (params.targetY - params.sourceY) / 6))
+        : 24;
+
     const rawVertices: EdgePoint[] = [
       { x: params.sourceX, y: params.sourceY },
       { x: params.sourceX, y: params.sourceY + stub },
-      { x: sideX, y: params.sourceY + stub },
-      { x: sideX, y: params.targetY - stub },
+      { x: inner[0].x, y: params.sourceY + stub },
+    ];
+
+    for (const pt of inner.slice(1)) {
+      const last = rawVertices[rawVertices.length - 1];
+      if (Math.abs(pt.x - last.x) > 1) {
+        const midY = (last.y + pt.y) / 2;
+        rawVertices.push({ x: last.x, y: midY }, { x: pt.x, y: midY });
+      }
+      rawVertices.push({ x: pt.x, y: pt.y });
+    }
+
+    const endAnchor = rawVertices[rawVertices.length - 1];
+    rawVertices.push(
+      { x: endAnchor.x, y: params.targetY - stub },
       { x: params.targetX, y: params.targetY - stub },
       { x: params.targetX, y: params.targetY },
-    ];
+    );
+
     const vertices = cleanOrthogonalVertices(rawVertices);
     const path = buildRoundedPolylinePath(vertices, params.borderRadius ?? 12);
-    return {
-      path,
-      labelX: sideX,
-      labelY: (params.sourceY + params.targetY) / 2,
-    };
+
+    let bestSeg: { start: EdgePoint; end: EdgePoint; len: number } | null = null;
+    for (let i = 0; i < vertices.length - 1; i += 1) {
+      const a = vertices[i];
+      const b = vertices[i + 1];
+      if (Math.abs(a.x - b.x) < 1) {
+        const len = Math.abs(b.y - a.y);
+        if (!bestSeg || len > bestSeg.len) {
+          bestSeg = { start: a, end: b, len };
+        }
+      }
+    }
+
+    let labelX = inner[0].x;
+    let labelY = (params.sourceY + params.targetY) / 2;
+
+    if (bestSeg) {
+      labelX = bestSeg.start.x;
+      labelY = (bestSeg.start.y + bestSeg.end.y) / 2;
+      const lp = params.route?.labelPos;
+      const minY = Math.min(bestSeg.start.y, bestSeg.end.y);
+      const maxY = Math.max(bestSeg.start.y, bestSeg.end.y);
+      if (lp && Math.abs(lp.x - labelX) <= 4 && lp.y >= minY + 24 && lp.y <= maxY - 24) {
+        labelY = lp.y;
+      }
+    }
+
+    return { path, labelX, labelY };
   }
 
   const inner =

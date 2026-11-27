@@ -880,6 +880,15 @@ export const MINI_APP_PERMISSION_PROFILES: Record<string, MiniAppPermissionProfi
     ],
     inAppNotes: 'Prod /api/apps trả category="" (hiển thị đầu danh sách Trang Tính năng cho mọi user).',
   },
+  'vb-ma-work-schedule': {
+    appId: 'vb-ma-work-schedule',
+    iosVisibilityRule: 'always_visible',
+    androidVisibilityRule: 'always_visible',
+    manifestSource: 'verified_manifest',
+    manifestCapabilities: [],
+    inAppNotes:
+      'Xác nhận từ vb-ma-work-schedule/manifest.json (v0.1.0, hidden=false, capabilities.permissions={}). Host chưa đưa vào adminOnlyApps / memberAppPermissions nên hiển thị cho mọi Member trên Hub; bên trong phân 2 vai trò qua isAdmin() (Trưởng nhóm quản lý 3 tab Lịch làm việc · Thành viên · Mẫu lịch; Thành viên chỉ xem "Lịch trực của tôi").',
+  },
   'vb-ma-storage-management': {
     appId: 'vb-ma-storage-management',
     iosVisibilityRule: 'always_visible',
@@ -1255,7 +1264,7 @@ export function exportMiniAppPermissionsMarkdown(): string {
     const profile = MINI_APP_PERMISSION_PROFILES[app.id];
     const capsText = profile?.manifestCapabilities.length
       ? profile.manifestCapabilities
-          .map((c) => `${c.module}: [${c.wildcard && c.actions.length === 0 ? '* wildcard' : c.actions.join(', ')}]`)
+          .map((c) => `${c.module}: [${c.wildcard && c.actions.length === 0 ? '' : c.actions.join(', ')}]`)
           .join(' · ')
       : 'Core SDK / isAdmin()';
     lines.push(

@@ -14,16 +14,16 @@
       "nodes": [
         {
           "id": "miniapp-list",
-          "label": "Danh mục Mini App Trang Tính năng (34/41)",
-          "techLabel": "Danh mục Mini App Production theo 6 nhóm (34/41 trên Hub)",
+          "label": "Danh mục Mini App Trang Tính năng (35/42)",
+          "techLabel": "Danh mục Mini App Production theo 6 nhóm (35/42 trên Hub)",
           "kind": "module",
           "audience": "all",
           "summary": {
-            "overview": "Hiển thị lưới Phím tắt yêu thích, Gợi ý và toàn bộ danh mục 34 Mini App tải động từ server (chia thành 6 nhóm thực tế trên app: Cuộc gọi 11, Gọi tự động 6, Cài đặt nhóm 9, CRM 2, Nổi bật 5, Tiện ích 1).",
-            "tech": "FeaturesViewControllerV2 / FeatureFragment gọi VbMaSDK.fetchGlobalMiniApps() tải 35 app từ GET https://vb-ma.vbplatform.workers.dev/api/apps/global (cộng vb-ma-api-key trên /api/apps), phân nhóm theo trường category trả về và lọc 4 lớp (hiddenApps, inCallOnlyMiniApps, 7 adminOnlyApps, 15 memberAppPermissions)."
+            "overview": "Hiển thị lưới Phím tắt yêu thích, Gợi ý và toàn bộ danh mục 35 Mini App tải động từ server (chia thành 6 nhóm thực tế trên app: Cuộc gọi 11, Gọi tự động 6, Cài đặt nhóm 10, CRM 2, Nổi bật 5, Tiện ích 1).",
+            "tech": "FeaturesViewControllerV2 / FeatureFragment gọi VbMaSDK.fetchGlobalMiniApps() tải 36 app từ GET https://vb-ma.vbplatform.workers.dev/api/apps/global (cộng vb-ma-api-key trên /api/apps, gồm vb-ma-work-schedule Lịch làm việc v0.1.0), phân nhóm theo trường category trả về và lọc 4 lớp (hiddenApps, inCallOnlyMiniApps, 7 adminOnlyApps, 15 memberAppPermissions)."
           },
           "techDetail": {
-            "platformDiffNote": "Cả iOS và Android nạp động từ /api/apps/global (35 app Prod) với 7 adminOnlyApps và 15 memberAppPermissions giống hệt nhau — cả vb-ma-user-history-call lẫn vb-ma-crm đều mở cho mọi Member (iOS commit 0fcf3390). Lưu ý 7 app mới phát hiện trên Prod (vb-ma-blacklist, vb-ma-ipcall-control, vb-ma-crm-v2, vb-ma-group-member, vb-ma-storage-management, vb-ma-sdk-mobile-push, vb-ma-widget) hiện chưa nằm trong bộ lọc Host nên mở mặc định cho mọi Member.",
+            "platformDiffNote": "Cả iOS và Android nạp động từ /api/apps/global (36 app Prod) với 7 adminOnlyApps và 15 memberAppPermissions giống hệt nhau — cả vb-ma-user-history-call lẫn vb-ma-crm đều mở cho mọi Member (iOS commit 0fcf3390). Lưu ý 8 app mở mặc định trên Prod (vb-ma-blacklist, vb-ma-ipcall-control, vb-ma-crm-v2, vb-ma-group-member, vb-ma-work-schedule, vb-ma-storage-management, vb-ma-sdk-mobile-push, vb-ma-widget) hiện chưa nằm trong bộ lọc Host nên mở mặc định cho mọi Member.",
             "codeRefs": [
               "VBot/Controller/NewController/Features/V2/FeaturesViewControllerV2.swift",
               "VBot/Service/MiniAppService.swift",
@@ -221,7 +221,7 @@
       "edges": []
     },
     "miniapp-list": {
-      "title": "6 Nhóm Danh mục Mini App Production (34/41 trên Hub)",
+      "title": "6 Nhóm Danh mục Mini App Production (35/42 trên Hub)",
       "layoutHint": "tree",
       "direction": "LR",
       "entryNodeIds": [
@@ -264,13 +264,13 @@
         },
         {
           "id": "hub-cat-group-settings",
-          "label": "Cài đặt nhóm (9)",
-          "techLabel": "Nhóm: Cài đặt nhóm · category=\"Cài đặt nhóm\" (8 global + 1 /api/apps)",
+          "label": "Cài đặt nhóm (10)",
+          "techLabel": "Nhóm: Cài đặt nhóm · category=\"Cài đặt nhóm\" (9 global + 1 /api/apps)",
           "kind": "module",
           "audience": "all",
           "summary": {
-            "overview": "Nhóm 9 Mini App quản trị nhóm, nhân sự & tích hợp: Nhóm thành viên, Phân quyền, Quản lý lưu trữ, SDK Mobile Push, Thành viên, Tiện ích bổ sung, Webhook, Widget gọi nhanh và API Key.",
-            "tech": "Server trả category = \"Cài đặt nhóm\" cho 8 app trên /api/apps/global + vb-ma-api-key trên /api/apps (chưa public global). vb-ma-permission, vb-ma-add-on, vb-ma-webhook, vb-ma-api-key thuộc adminOnlyApps; vb-ma-member lọc THANH_VIEN; 4 app mới (vb-ma-group-member, vb-ma-storage-management, vb-ma-sdk-mobile-push, vb-ma-widget) chưa có rule lọc trên Host."
+            "overview": "Nhóm 10 Mini App quản trị nhóm, nhân sự & tích hợp: Lịch làm việc, Nhóm thành viên, Phân quyền, Quản lý lưu trữ, SDK Mobile Push, Thành viên, Tiện ích bổ sung, Webhook, Widget gọi nhanh và API Key.",
+            "tech": "Server trả category = \"Cài đặt nhóm\" cho 9 app trên /api/apps/global + vb-ma-api-key trên /api/apps (chưa public global). vb-ma-permission, vb-ma-add-on, vb-ma-webhook, vb-ma-api-key thuộc adminOnlyApps; vb-ma-member lọc THANH_VIEN; 5 app (vb-ma-work-schedule, vb-ma-group-member, vb-ma-storage-management, vb-ma-sdk-mobile-push, vb-ma-widget) chưa có rule lọc trên Host."
           },
           "relatedNodeIds": [
             "ma-2fa-setting"
@@ -1036,10 +1036,11 @@
       "edges": []
     },
     "hub-cat-group-settings": {
-      "title": "Cài đặt nhóm (9 Mini App)",
+      "title": "Cài đặt nhóm (10 Mini App)",
       "layoutHint": "tree",
       "direction": "LR",
       "entryNodeIds": [
+        "ma-work-schedule",
         "ma-group-member",
         "ma-permission",
         "ma-storage-management",
@@ -1051,6 +1052,126 @@
         "ma-api-key"
       ],
       "nodes": [
+        {
+          "id": "ma-work-schedule",
+          "label": "Lịch làm việc",
+          "techLabel": "Lịch làm việc (vb-ma-work-schedule)",
+          "kind": "miniapp",
+          "audience": "all",
+          "summary": {
+            "overview": "Quản lý lịch làm việc và ca trực theo chu kỳ tuần hoặc tháng cho nhân sự trong dự án (áp dụng cho hotline khi khách hàng gọi vào theo khung giờ ca trực; gọi nội bộ giữa thành viên vẫn hoạt động 24/7). Trưởng nhóm quản lý bảng lịch toàn dự án, cấu hình ca trực, chế độ trực 24/7, mẫu lịch và sao chép hàng loạt; thành viên xem lịch trực cá nhân.",
+            "tech": "Core SDK Mini App (SvelteKit + @vbotma/sdk >= 1.3.0, manifest v0.1.0, hidden=false, capabilities.permissions={}). Chưa nằm trong adminOnlyApps hay memberAppPermissions trên Host iOS/Android nên mở cho mọi Member trên Hub; bên trong dùng isAdmin() tách 2 vai trò (Manager: 3 tab Lịch làm việc / Thành viên / Mẫu lịch; Member: chỉ xem Lịch trực của tôi), lấy MAIN token qua requestMiniAppToken (auto-retry HTTP 401), hỗ trợ startParam=\"embedded\", đồng bộ theme/locale và lắng nghe back_button_pressed, refresh_data."
+          },
+          "techDetail": {
+            "platformDiffNote": "Cả Host iOS và Android hiện xử lý giống nhau cho vb-ma-work-schedule (chưa lọc trong adminOnlyApps / memberAppPermissions, hiển thị mở cho mọi Member trên Hub; Mini App tự phân quyền 2 vai trò qua isAdmin()).",
+            "apisOrEvents": [
+              "GET /api/project/getAllMember",
+              "GET /api/report/countAllMember (fallback GET /api/project/countAllMember)",
+              "GET /api/project-user-schedule/detail",
+              "POST /api/project-user-schedule/setup (CUSTOM | TEMPLATE | CLONE)",
+              "GET /api/schedule-template/get-all & count-all",
+              "GET /api/schedule-template/detail (fallback POST khi 405/500)",
+              "GET /api/schedule-template/check-exist-name",
+              "POST /api/schedule-template/setup & delete",
+              "SDK: initSDK, retrieveLaunchParams, retrieveAuthData, isAdmin, requestMiniAppToken, back_button_pressed, refresh_data, trigger_haptic, close"
+            ],
+            "edgeCases": [
+              "Nếu tổng số ca = 0 hoặc tắt cờ is_schedule, thành viên tự động chuyển về chế độ Trực tự do 24/7",
+              "Các khung giờ liền kề hoặc cách nhau ≤ 1 phút trong cùng ngày tự động gộp lại khi lưu",
+              "Chỉ áp dụng cho cuộc gọi khách hàng qua hotline; gọi nội bộ giữa thành viên vẫn hoạt động 24/7",
+              "API /api/schedule-template/detail tự fallback sang POST khi gặp HTTP/error 405 hoặc 500; HTTP 401 tự force-refresh token (15s) và retry 1 lần",
+              "Không cho phép tự sao chép lịch của chính mình (clone_from_uid === target)"
+            ],
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            },
+            "miniAppBridge": {
+              "miniAppId": "vb-ma-work-schedule",
+              "embedMode": "modal",
+              "transport": "Core @vbotma/sdk (initSDK + requestMiniAppToken + on/postEvent)",
+              "transportByPlatform": {
+                "ios": "VbMaViewController (WKScriptMessageHandler \"vbma\") ↔ MiniAppService.swift",
+                "android": "VbMABridge (@JavascriptInterface) ↔ MiniAppHelper.kt"
+              },
+              "messages": [
+                {
+                  "direction": "host_init",
+                  "name": "initSDK / launchParams / isAdmin",
+                  "hostFn": "MiniAppService.openMiniApp / MiniAppHelper.openMiniApp",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.openMiniApp(id: \"vb-ma-work-schedule\", locale:startParam:extraData:)",
+                    "android": "MiniAppHelper.openMiniApp(context, \"vb-ma-work-schedule\", locale, startParam, extraData)"
+                  },
+                  "miniAppFn": "initSDK() · retrieveLaunchParams() · retrieveAuthData() · isAdmin()",
+                  "payload": "{ locale, startParam, apiBaseUrl, themeParams, auth: { uid, projectCode, isAdmin } }",
+                  "note": "startParam=\"embedded\" ẩn header đứng riêng; isAdmin() phân vai Manager (3 tab) và Member (1 lịch cá nhân)."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "request_mini_app_token",
+                  "hostFn": "MiniAppService.getMiniAppToken / MiniAppHelper.requestMiniAppToken",
+                  "hostFnByPlatform": {
+                    "ios": "MiniAppService.getMiniAppToken(appId:)",
+                    "android": "MiniAppHelper.requestMiniAppToken(appId)"
+                  },
+                  "miniAppFn": "requestMiniAppToken(timeoutMs) (@vbotma/sdk/svelte)",
+                  "payload": "{ timeout: 5000 | 15000 }",
+                  "response": "MAIN Bearer token (tự force-refresh 15s & retry 1 lần khi API trả HTTP 401)"
+                },
+                {
+                  "direction": "host_to_miniapp",
+                  "name": "back_button_pressed / refresh_data / theme_changed",
+                  "hostFn": "VbMaViewController / VbMABridge.sendEvent(...)",
+                  "hostFnByPlatform": {
+                    "ios": "VbMaViewController.sendEvent(\"back_button_pressed\" | \"refresh_data\" | \"theme_changed\")",
+                    "android": "VbMABridge.sendEvent(\"back_button_pressed\" | \"refresh_data\" | \"theme_changed\")"
+                  },
+                  "miniAppFn": "on(\"back_button_pressed\") · on(\"refresh_data\") · themeParams",
+                  "payload": "{ force?: boolean } | ThemeParams",
+                  "note": "back_button_pressed đóng lần lượt popup/sheet đang mở (kèm cảnh báo chưa lưu) trước khi gọi close()."
+                },
+                {
+                  "direction": "miniapp_to_host",
+                  "name": "trigger_haptic / close",
+                  "hostFn": "VbMaViewController / VbMABridge.post(...)",
+                  "hostFnByPlatform": {
+                    "ios": "VbMaViewController.handleTriggerHaptic / handleClose",
+                    "android": "VbMABridge.handleHapticFeedback / handleClose"
+                  },
+                  "miniAppFn": "postEvent(\"trigger_haptic\", params) · postEvent(\"close\", { return_back: true })",
+                  "payload": "{ type: \"selection_change\" | \"impact\" } / { return_back: true }"
+                }
+              ]
+            },
+            "parityAssessment": {
+              "code": "HUB-26",
+              "verdict": "synced",
+              "sameLogic": true,
+              "sameOutcome": true,
+              "needsFix": "no",
+              "explanation": "Cả Host iOS và Host Android đều mở vb-ma-work-schedule cho mọi Member trên Hub (chưa lọc trong adminOnlyApps hay memberAppPermissions) và giao tiếp qua bộ Core @vbotma/sdk chuẩn.",
+              "recommendation": "Không cần sửa lệch giữa 2 OS; chỉ cập nhật đồng bộ cả 2 Host nếu PO yêu cầu giới hạn quyền riêng sau này.",
+              "fixTarget": "none"
+            }
+          },
+          "relatedNodeIds": [
+            "ma-member",
+            "ma-group-member",
+            "hotline-project"
+          ]
+        },
         {
           "id": "ma-group-member",
           "label": "Nhóm thành viên",
@@ -3021,6 +3142,273 @@
           "edgeIds": [
             "e-mamon-1",
             "e-mamon-2"
+          ]
+        }
+      ]
+    },
+    "ma-work-schedule": {
+      "title": "Luồng hoạt động Mini App Lịch làm việc (vb-ma-work-schedule)",
+      "layoutHint": "flow",
+      "direction": "LR",
+      "entryNodeIds": [
+        "maws-init"
+      ],
+      "nodes": [
+        {
+          "id": "maws-init",
+          "label": "1. Mở Lịch làm việc & Khởi tạo phiên",
+          "techLabel": "1. initSDK() · retrieveLaunchParams() · MAIN Token (Auto-retry 401)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Người dùng mở Lịch làm việc từ mục Cài đặt nhóm trên Trang Tính năng. Hệ thống nạp ngôn ngữ (Tiếng Việt / Tiếng Anh), đồng bộ giao diện Sáng/Tối và xác thực phiên làm việc của dự án.",
+            "tech": "initSDK() đồng bộ locale (vi/en), startParam (\"embedded\" ẩn Header đứng riêng), apiBaseUrl (mặc định https://api.vbot.vn) và themeParams (chuyển màu + CSS var --brand). createModuleTokenManager('MAIN') gọi requestMiniAppToken (5s thường / 15s force khi HTTP 401, retry 1 lần)."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "initSDK() / retrieveLaunchParams() / retrieveAuthData()",
+              "requestMiniAppToken(5000 | 15000)"
+            ],
+            "codeRefs": [
+              "VBot/Service/MiniAppService.swift"
+            ],
+            "byPlatform": {
+              "ios": {
+                "codeRefs": [
+                  "VBot/Service/MiniAppService.swift"
+                ]
+              },
+              "android": {
+                "codeRefs": [
+                  "VBot-Android/app/src/main/java/com/vpmedia/vbot/utils/MiniAppHelper.kt"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "maws-role-gate",
+          "label": "2. Phân quyền theo vai trò (Trưởng nhóm vs Thành viên)",
+          "techLabel": "2. isManagerRole() → isAdmin() phân nhánh Manager (3 tab) / Member",
+          "kind": "decision",
+          "audience": "all",
+          "summary": {
+            "overview": "Xác định người dùng là Trưởng nhóm (Admin/Manager) hay Thành viên thường để hiển thị đúng quyền xem và thao tác lịch trực.",
+            "tech": "isManagerRole() đọc auth.isAdmin qua isAdmin() của @vbotma/sdk. Nếu true: mở 3 tab (Lịch làm việc · Thành viên · Mẫu lịch), nút (+), bộ lọc nhân sự và các thao tác chỉnh sửa/hàng loạt. Nếu false: chỉ hiển thị tab Lịch trực của tôi (không gọi getAllMember)."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "isAdmin() (@vbotma/sdk/svelte)"
+            ]
+          }
+        },
+        {
+          "id": "maws-member-view",
+          "label": "3a. Thành viên: Xem Lịch trực của tôi",
+          "techLabel": "3a. Member View · GET /api/project-user-schedule/detail",
+          "kind": "process",
+          "audience": "all",
+          "summary": {
+            "overview": "Thành viên xem lịch ca trực cá nhân theo Tuần hoặc Tháng, phân biệt rõ ca Sáng / Chiều / Tối / Cả ngày hay chế độ Trực tự do 24/7, bấm vào từng ngày để xem chi tiết ca và xem quy tắc áp dụng cho hotline.",
+            "tech": "Gọi GET /api/project-user-schedule/detail với { uid, project_code }. Nếu is_schedule=false hoặc không có item, hiển thị trạng thái Trực tự do 24/7. Nhấn biểu tượng (i) để xem quy tắc: chỉ áp dụng khi khách hàng gọi qua hotline theo khung giờ ca trực, gọi nội bộ vẫn thông 24/7."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/project-user-schedule/detail"
+            ]
+          }
+        },
+        {
+          "id": "maws-manager-calendar",
+          "label": "3b. Trưởng nhóm: Bảng Lịch toàn dự án (Tuần / Tháng)",
+          "techLabel": "3b. Manager Calendar · getAllMember + countAllMember + detail (Concurrency 6)",
+          "kind": "process",
+          "audience": "all",
+          "summary": {
+            "overview": "Trưởng nhóm theo dõi toàn cảnh ca trực của cả đội ngũ theo Tuần hoặc Tháng, lọc nhanh theo tên nhân sự hoặc loại ca trực, mở chi tiết ngày theo dạng Timeline hoặc theo Nhân sự và mở menu Tác vụ nhanh (+).",
+            "tech": "workScheduleStore.initialize() nạp song song thành viên (GET /api/project/getAllMember phân trang 100, trừ 1 cho owner khi isManager, tối đa 20 trang) + GET /api/report/countAllMember (fallback /api/project/countAllMember), sau đó nạp lịch từng thành viên với concurrency=6 kèm bộ đệm SWR."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/project/getAllMember",
+              "GET /api/report/countAllMember (fallback GET /api/project/countAllMember)",
+              "GET /api/project-user-schedule/detail"
+            ]
+          }
+        },
+        {
+          "id": "maws-manager-members",
+          "label": "4a. Tab Thành viên: Cấu hình giờ, 24/7 & Thao tác hàng loạt",
+          "techLabel": "4a. MemberListTab · POST /api/project-user-schedule/setup (CUSTOM | TEMPLATE | CLONE)",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Quản lý danh sách thành viên, bật/tắt áp dụng lịch trực hoặc chọn nhiều thành viên để cấu hình khung giờ ca trực (Sáng, Chiều, Tối, Hành chính), đặt ngày nghỉ, áp dụng mẫu lịch hoặc sao chép lịch từ đồng nghiệp khác.",
+            "tech": "Gửi POST /api/project-user-schedule/setup hỗ trợ 3 config_type: CUSTOM (chu kỳ WEEKLY 0-6 hoặc MONTHLY 1-31, tự gộp khung giờ cách <= 1 phút, tổng 0 ca tự chuyển 24/7), TEMPLATE (kèm template_id) và CLONE (kèm clone_from_uid, chặn tự sao chép chính mình)."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "POST /api/project-user-schedule/setup"
+            ],
+            "edgeCases": [
+              "Tự động gộp 2 khoảng giờ liền kề hoặc cách nhau <= 1 phút trong cùng ngày trước khi lưu",
+              "Không thể bật áp dụng lịch (is_schedule=true) khi thành viên chưa có khung giờ làm việc nào"
+            ]
+          }
+        },
+        {
+          "id": "maws-manager-templates",
+          "label": "4b. Tab Mẫu lịch: Tạo, Sửa & Xóa mẫu ca trực",
+          "techLabel": "4b. ScheduleTemplateTab · CRUD /api/schedule-template/*",
+          "kind": "action",
+          "audience": "all",
+          "summary": {
+            "overview": "Tạo và quản lý thư viện mẫu lịch dùng chung cho dự án (ví dụ: Ca Hành Chính Chuẩn) theo chu kỳ tuần hoặc tháng; kiểm tra trùng tên và cho phép xóa mẫu cũ mà không làm ảnh hưởng lịch đã áp dụng.",
+            "tech": "templateStore dùng GET /api/schedule-template/get-all, count-all, detail (tự fallback POST nếu HTTP/error 405 hoặc 500), check-exist-name (kiểm tra trùng tên realtime), POST /api/schedule-template/setup và /api/schedule-template/delete."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "GET /api/schedule-template/get-all & count-all",
+              "GET /api/schedule-template/detail (fallback POST khi 405/500)",
+              "GET /api/schedule-template/check-exist-name",
+              "POST /api/schedule-template/setup & delete"
+            ]
+          }
+        },
+        {
+          "id": "maws-lifecycle-sync",
+          "label": "5. Làm mới dữ liệu & Đóng tuần tự khi bấm Quay lại",
+          "techLabel": "5. PullToRefresh · refresh_data · trigger_haptic · back_button_pressed → close",
+          "kind": "process",
+          "audience": "all",
+          "summary": {
+            "overview": "Hỗ trợ kéo để làm mới dữ liệu và tự động đồng bộ khi ứng dụng yêu cầu; khi bấm nút Quay lại sẽ lần lượt đóng các bảng đang mở (có nhắc nếu chưa lưu) trước khi thoát màn hình.",
+            "tech": "PullToRefresh và listener on(\"refresh_data\") gọi initialize({ forceRefresh: true }). Các thao tác chạm gọi postEvent(\"trigger_haptic\"). Listener on(\"back_button_pressed\") đóng tuần tự dialog/bottom sheet (kiểm tra unsaved changes) rồi mới gọi postEvent(\"close\", { return_back: true })."
+          },
+          "techDetail": {
+            "apisOrEvents": [
+              "on(\"refresh_data\")",
+              "on(\"back_button_pressed\")",
+              "postEvent(\"trigger_haptic\", params)",
+              "postEvent(\"close\", { return_back: true })"
+            ]
+          }
+        }
+      ],
+      "edges": [
+        {
+          "id": "e-maws-1",
+          "source": "maws-init",
+          "target": "maws-role-gate",
+          "label": "Kiểm tra vai trò",
+          "audience": "all"
+        },
+        {
+          "id": "e-maws-2",
+          "source": "maws-role-gate",
+          "target": "maws-member-view",
+          "label": "Thành viên",
+          "audience": "all"
+        },
+        {
+          "id": "e-maws-3",
+          "source": "maws-role-gate",
+          "target": "maws-manager-calendar",
+          "label": "Trưởng nhóm",
+          "audience": "all"
+        },
+        {
+          "id": "e-maws-4",
+          "source": "maws-manager-calendar",
+          "target": "maws-manager-members",
+          "label": "Cấu hình giờ / 24/7 / Sao chép",
+          "audience": "all"
+        },
+        {
+          "id": "e-maws-5",
+          "source": "maws-manager-calendar",
+          "target": "maws-manager-templates",
+          "label": "Quản lý mẫu lịch",
+          "audience": "all"
+        },
+        {
+          "id": "e-maws-6",
+          "source": "maws-manager-templates",
+          "target": "maws-manager-members",
+          "label": "Áp dụng mẫu lịch",
+          "audience": "all"
+        },
+        {
+          "id": "e-maws-7",
+          "source": "maws-member-view",
+          "target": "maws-lifecycle-sync",
+          "label": "Làm mới / Quay lại",
+          "audience": "all"
+        },
+        {
+          "id": "e-maws-8",
+          "source": "maws-manager-members",
+          "target": "maws-lifecycle-sync",
+          "label": "Lưu lịch · đồng bộ",
+          "audience": "all"
+        }
+      ],
+      "scenarios": [
+        {
+          "id": "sc-maws-member",
+          "name": "Thành viên xem Lịch trực cá nhân",
+          "description": "Mở Lịch làm việc với vai trò Thành viên → xem Lịch trực của tôi theo Tuần/Tháng và quy tắc áp dụng hotline.",
+          "audience": "all",
+          "nodeIds": [
+            "maws-init",
+            "maws-role-gate",
+            "maws-member-view",
+            "maws-lifecycle-sync"
+          ],
+          "edgeIds": [
+            "e-maws-1",
+            "e-maws-2",
+            "e-maws-7"
+          ]
+        },
+        {
+          "id": "sc-maws-manager-config",
+          "name": "Trưởng nhóm cấu hình ca trực & chế độ 24/7",
+          "description": "Trưởng nhóm mở bảng lịch dự án → cấu hình khung giờ ca trực hoặc bật/tắt 24/7 cho thành viên và đồng bộ.",
+          "audience": "all",
+          "nodeIds": [
+            "maws-init",
+            "maws-role-gate",
+            "maws-manager-calendar",
+            "maws-manager-members",
+            "maws-lifecycle-sync"
+          ],
+          "edgeIds": [
+            "e-maws-1",
+            "e-maws-3",
+            "e-maws-4",
+            "e-maws-8"
+          ]
+        },
+        {
+          "id": "sc-maws-manager-template",
+          "name": "Trưởng nhóm tạo Mẫu lịch & Áp dụng hàng loạt",
+          "description": "Trưởng nhóm tạo mẫu lịch dùng chung ở tab Mẫu lịch rồi áp dụng hàng loạt cho nhiều thành viên.",
+          "audience": "all",
+          "nodeIds": [
+            "maws-init",
+            "maws-role-gate",
+            "maws-manager-calendar",
+            "maws-manager-templates",
+            "maws-manager-members",
+            "maws-lifecycle-sync"
+          ],
+          "edgeIds": [
+            "e-maws-1",
+            "e-maws-3",
+            "e-maws-5",
+            "e-maws-6",
+            "e-maws-8"
           ]
         }
       ]

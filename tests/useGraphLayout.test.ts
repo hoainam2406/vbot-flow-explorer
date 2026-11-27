@@ -102,6 +102,42 @@ describe('computeDagreLayout', () => {
     expect(routed.labelY < fallbackTop || routed.labelY > fallbackBottom).toBe(true);
   });
 
+  it('routes TB bypass edges around intermediate nodes instead of cutting through them', () => {
+    const nodes: FlowNodeData[] = [
+      { id: 'api', label: 'Gửi lệnh chuyển ngay', kind: 'external', audience: 'tech', summary: { overview: 'API' } },
+      { id: 'fallback', label: 'Fallback DTMF #1', kind: 'error', audience: 'tech', summary: { overview: 'Fallback' } },
+      { id: 'done', label: 'Nhân viên cúp máy', kind: 'action', audience: 'all', summary: { overview: 'Done' } },
+    ];
+    const edges: FlowEdgeData[] = [
+      { id: 'e-ok', source: 'api', target: 'done', label: '+OK' },
+      { id: 'e-err', source: 'api', target: 'fallback', label: 'Lỗi / Timeout 5s' },
+      { id: 'e-fb', source: 'fallback', target: 'done' },
+    ];
+
+    const { nodes: layoutNodes, edgeRoutes } = computeDagreGraphLayout(nodes, edges, {
+      direction: 'TB',
+    });
+    expect(edgeRoutes['e-ok'].points.length).toBeGreaterThan(3);
+
+    const apiNode = layoutNodes.find((n) => n.id === 'api')!;
+    const fallbackNode = layoutNodes.find((n) => n.id === 'fallback')!;
+    const doneNode = layoutNodes.find((n) => n.id === 'done')!;
+
+    const routed = buildRoutedEdgePath({
+      sourceX: apiNode.position.x + apiNode.data.estimatedWidth / 2,
+      sourceY: apiNode.position.y + apiNode.data.estimatedHeight,
+      sourcePosition: Position.Bottom,
+      targetX: doneNode.position.x + doneNode.data.estimatedWidth / 2,
+      targetY: doneNode.position.y,
+      targetPosition: Position.Top,
+      route: edgeRoutes['e-ok'],
+    });
+
+    const fallbackLeft = fallbackNode.position.x;
+    const fallbackRight = fallbackLeft + fallbackNode.data.estimatedWidth;
+    expect(routed.labelX < fallbackLeft || routed.labelX > fallbackRight).toBe(true);
+  });
+
   it('allocates enough horizontal gap for long Vietnamese decision branch labels', () => {
     const nodes: FlowNodeData[] = [
       { id: 'decision', label: 'Người nhận đồng ý tiếp nhận?', kind: 'decision', audience: 'all', summary: { overview: 'D' } },

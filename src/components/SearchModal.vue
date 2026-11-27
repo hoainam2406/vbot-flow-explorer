@@ -257,7 +257,7 @@ const allCommands = computed<PaletteCommand[]>(() => {
       {
         id: 'cmd-miniapp-bridge',
         title: 'Mở Cầu nối Mini App (@vbotma/sdk)',
-        subtitle: 'Chạy thử 8 luồng 4 làn, tra cứu hàm, 41 Mini App & Quyền RBAC',
+        subtitle: 'Chạy thử 8 luồng 4 làn, tra cứu hàm, 42 Mini App & Quyền RBAC',
         keywords: 'mini app bridge sdk simulator rbac catalog',
         badge: 'Tech',
         icon: ArrowLeftRight,

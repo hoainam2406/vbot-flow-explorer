@@ -2650,7 +2650,7 @@ console.log('Admin?', isAdmin(), 'Embed param:', startParam);`,
     iosHandler: 'MiniAppService.emitEventIfMiniAppOpen (qua MiniAppActiveTracker)',
     androidHandler: 'MiniAppHelper.emitEventIfMiniAppOpen (qua MiniAppActiveTracker) / CallHistoryFragment',
     parityNote: 'Cả iOS và Android đã lọc emitEvent theo appId qua MiniAppActiveTracker; Android vb-ma-android-sdk tự phát theme_changed khi đổi Sáng/Tối.',
-    usedByApps: ['vb-ma-user-history-call', 'vb-ma-user-contact', 'vb-ma-contact-forward', 'vb-ma-2fa-setting'],
+    usedByApps: ['vb-ma-user-history-call', 'vb-ma-user-contact', 'vb-ma-contact-forward', 'vb-ma-2fa-setting', 'vb-ma-work-schedule'],
   },
 ];
 
@@ -2988,7 +2988,23 @@ export const MINI_APP_CATALOG: MiniAppCatalogEntry[] = [
     relatedNodeId: 'ma-auto-call-custom-field',
   },
 
-  // ── 12 Mini App mở mặc định / nạp động từ Production ───────────
+  // ── 13 Mini App mở mặc định / nạp động từ Production ───────────
+  {
+    id: 'vb-ma-work-schedule',
+    nameVi: 'Lịch làm việc',
+    nameEn: 'Work Schedule',
+    category: 'Cài đặt nhóm',
+    placement: 'features_hub',
+    accessLevel: 'everyone',
+    iosPermissionRule:
+      'Mọi user (chưa đưa vào adminOnlyApps / memberAppPermissions trên Host; bên trong phân vai Manager vs Member bằng isAdmin())',
+    androidPermissionRule:
+      'Mọi user (chưa đưa vào adminOnlyApps / memberAppPermissions trên Host; bên trong phân vai Manager vs Member bằng isAdmin())',
+    bridgeTier: 'core_sdk',
+    customActions: ['request_mini_app_token', 'refresh_data', 'theme_changed', 'close'],
+    simulatorFlowId: 'flow-token-401',
+    relatedNodeId: 'ma-work-schedule',
+  },
   {
     id: 'vb-ma-autodial',
     nameVi: 'Quay số tự động',

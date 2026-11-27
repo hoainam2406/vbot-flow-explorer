@@ -289,7 +289,7 @@ export const TECH_FEATURE_CATEGORIES: GuideFeatureCategory[] = [
   {
     id: 'miniapp-studio',
     label: 'Mini App Studio (@vbotma/sdk)',
-    description: 'Môi trường thử nghiệm, giả lập Bridge Host ↔ Mini App và tra cứu danh mục 41 Mini App.',
+    description: 'Môi trường thử nghiệm, giả lập Bridge Host ↔ Mini App và tra cứu danh mục 42 Mini App.',
     items: [
       {
         id: 'studio-sandbox-sim',
@@ -309,7 +309,7 @@ export const TECH_FEATURE_CATEGORIES: GuideFeatureCategory[] = [
       {
         id: 'studio-catalog-perm',
         categoryId: 'miniapp-studio',
-        title: 'Danh mục 41 Mini App & Ma trận Quyền (Permissions)',
+        title: 'Danh mục 42 Mini App & Ma trận Quyền (Permissions)',
         summary: 'Tra cứu đầy đủ thông tin embedMode, phân quyền RBAC và cảnh báo chênh lệch Bridge giữa 2 nền tảng.',
         whenToUse: 'Khi cần kiểm tra một Mini App thuộc loại inline_tab/modal/sdk_global hay yêu cầu những quyền gì.',
         steps: [
