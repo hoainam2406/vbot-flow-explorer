@@ -3,11 +3,13 @@ import { computed, inject, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import {
   AlertCircle,
   ArrowLeft,
+  ArrowLeftRight,
   Check,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   ClipboardList,
+  Code2,
   Copy,
   Download,
   ExternalLink,
@@ -27,6 +29,7 @@ import {
   downloadTextFile,
   slugifyFilename,
 } from '../core/downloadHelper';
+import { findNodeById } from '../core/graphEngine';
 import {
   compareParityAgainstBase,
   exportParityReportToMarkdown,
@@ -53,7 +56,16 @@ import {
   type ParityTriageStatus,
   type VbotWorkTaskDraft,
 } from '../core/vbotWorkTemplates';
-import { buildParityItemAiContextPrompt } from '../core/aiContextExport';
+import {
+  buildParityItemAiContextPrompt,
+  buildParityPortPrompt,
+  type LiveSourceContextSnippet,
+} from '../core/aiContextExport';
+import {
+  extractCodeRefsByPlatform,
+  fetchLocalSourceFile,
+  type SourcePeekLaunchContext,
+} from '../core/sourcePeekClient';
 import { loadDevWorkspaceSettings } from '../core/workspaceSettings';
 import type {
   MergedFlowDataset,
@@ -72,6 +84,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:open': [value: boolean];
+  openSourcePeek: [context: SourcePeekLaunchContext];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -105,6 +118,96 @@ const promptPreviewOpen = ref(false);
 const activePromptTab = ref<Platform>('ios');
 const copiedCode = ref<string | null>(null);
 let codeCopyTimer: ReturnType<typeof setTimeout> | null = null;
+const includeLocalCodeInPortPrompt = ref(true);
+const copyingPortPrompt = ref(false);
+
+const handleOpenSourcePeekForItem = (item: ParityItem) => {
+  const node = findNodeById(explorer.dataset, item.nodeId);
+  if (!node) return;
+  const grouped = extractCodeRefsByPlatform(node);
+  if (grouped.ios.length === 0 && grouped.android.length === 0) {
+    pushToast('Mục này chưa gắn codeRefs', 'info');
+    return;
+  }
+  emit('openSourcePeek', {
+    title: `${item.code} · ${item.nodeLabel}`,
+    nodeId: item.nodeId,
+    iosRef: grouped.ios[0],
+    androidRef: grouped.android[0],
+    iosRefs: grouped.ios,
+    androidRefs: grouped.android,
+  });
+};
+
+const handleCopyPortPrompt = async (
+  item: ParityItem,
+  direction: 'ios_to_android' | 'android_to_ios',
+) => {
+  copyingPortPrompt.value = true;
+  try {
+    const freshSettings = loadDevWorkspaceSettings();
+    devSettings.value = freshSettings;
+    const liveSources: LiveSourceContextSnippet[] = [];
+
+    if (includeLocalCodeInPortPrompt.value) {
+      const node = findNodeById(explorer.dataset, item.nodeId);
+      if (node) {
+        const grouped = extractCodeRefsByPlatform(node);
+        const jobs: Array<Promise<void>> = [];
+        for (const refPath of grouped.ios.slice(0, 2)) {
+          jobs.push(
+            fetchLocalSourceFile({ codeRef: refPath, platform: 'ios', includeGitDiff: true }).then(
+              (res) => {
+                if (!res.ok) return;
+                const lines = res.data.content.split('\n');
+                liveSources.push({
+                  platform: 'ios',
+                  ref: res.data.resolvedRelPath,
+                  excerpt: lines.slice(0, 120).join('\n'),
+                  gitDiff: res.data.gitDiff,
+                });
+              },
+            ),
+          );
+        }
+        for (const refPath of grouped.android.slice(0, 2)) {
+          jobs.push(
+            fetchLocalSourceFile({
+              codeRef: refPath,
+              platform: 'android',
+              includeGitDiff: true,
+            }).then((res) => {
+              if (!res.ok) return;
+              const lines = res.data.content.split('\n');
+              liveSources.push({
+                platform: 'android',
+                ref: res.data.resolvedRelPath,
+                excerpt: lines.slice(0, 120).join('\n'),
+                gitDiff: res.data.gitDiff,
+              });
+            }),
+          );
+        }
+        await Promise.all(jobs);
+      }
+    }
+
+    const prompt = buildParityPortPrompt(item, explorer.dataset, {
+      direction,
+      settings: freshSettings,
+      liveSources,
+    });
+    const ok = await copyTextToClipboard(prompt);
+    pushToast(
+      ok
+        ? `Đã copy Port Prompt (${direction === 'ios_to_android' ? 'iOS → Android' : 'Android → iOS'}${liveSources.length > 0 ? ` · kèm ${liveSources.length} file local` : ''})`
+        : 'Không thể sao chép Port Prompt',
+      ok ? 'success' : 'error',
+    );
+  } finally {
+    copyingPortPrompt.value = false;
+  }
+};
 
 const vbotWorkUrl = computed(() =>
   resolveVbotWorkUrl(loadDevWorkspaceSettings(), explorer.dataset.app.repoConfig, 'general'),
@@ -1225,6 +1328,16 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
 
               <button
                 type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                title="Đối chiếu trực tiếp mã nguồn Swift ↔ Kotlin từ repo local"
+                @click="handleOpenSourcePeekForItem(selectedItem)"
+              >
+                <Code2 class="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                Soi Code
+              </button>
+
+              <button
+                type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-indigo-500 dark:bg-cyan-500 dark:text-slate-950 dark:hover:bg-cyan-400"
                 @click="handleJump(selectedItem)"
               >
@@ -1444,6 +1557,31 @@ const handleParityTaskCreated = (payload: { itemKey: string; task: CreatedVbotWo
                         : 'Copy Prompt Android'
                   }}
                 </button>
+
+                <button
+                  type="button"
+                  :disabled="copyingPortPrompt"
+                  class="inline-flex items-center gap-1 rounded-lg border border-cyan-300 bg-cyan-50 px-2.5 py-1 text-[11px] font-semibold text-cyan-800 transition hover:bg-cyan-100 disabled:opacity-60 dark:border-cyan-500/40 dark:bg-cyan-500/15 dark:text-cyan-200"
+                  title="Tạo Prompt port logic từ iOS sang Android"
+                  @click="handleCopyPortPrompt(selectedItem, 'ios_to_android')"
+                >
+                  <ArrowLeftRight class="h-3 w-3" />
+                  Port iOS → Android
+                </button>
+                <button
+                  type="button"
+                  :disabled="copyingPortPrompt"
+                  class="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800 transition hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
+                  title="Tạo Prompt port logic từ Android sang iOS"
+                  @click="handleCopyPortPrompt(selectedItem, 'android_to_ios')"
+                >
+                  <ArrowLeftRight class="h-3 w-3" />
+                  Port Android → iOS
+                </button>
+                <label class="inline-flex cursor-pointer items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[10.5px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <input v-model="includeLocalCodeInPortPrompt" type="checkbox" class="rounded" />
+                  <span>Kèm code/diff local</span>
+                </label>
 
                 <button
                   type="button"

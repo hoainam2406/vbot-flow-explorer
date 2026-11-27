@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Check,
   ClipboardList,
+  Code2,
   Download,
   FilePenLine,
   FileText,
@@ -11,8 +12,10 @@ import {
   GitBranch,
   GitBranchPlus,
   Link2,
+  Pin,
   RotateCcw,
   Sparkles,
+  StickyNote,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../../composables/useFlowExplorer';
@@ -20,6 +23,7 @@ import { useToast } from '../../composables/useToast';
 import type { DraftPatch } from '../../core/datasetDraftStore';
 import { copyTextToClipboard, downloadTextFile, slugifyFilename } from '../../core/downloadHelper';
 import type { ImpactAxis } from '../../core/impactAnalyzer';
+import type { SourcePeekLaunchContext } from '../../core/sourcePeekClient';
 import {
   getNodeDisplayLabel,
   isVisibleForMode,
@@ -35,6 +39,7 @@ const emit = defineEmits<{
   openMiniappBridge: [context: MiniAppBridgeLaunchContext];
   openSettings: [];
   openImpact: [context: { query: string; axis: ImpactAxis }];
+  openSourcePeek: [context: SourcePeekLaunchContext];
   applyDraftPatch: [patch: DraftPatch];
   openAddFlow: [anchorNode: FlowNodeData];
 }>();
@@ -244,6 +249,59 @@ const handleOpenAddFlow = () => {
 const copiedAiPrompt = ref(false);
 let aiPromptTimer: ReturnType<typeof setTimeout> | null = null;
 
+const isPinnedNode = computed(
+  () => Boolean(node.value) && explorer.pinnedNodeIds.value.includes(node.value!.id),
+);
+const personalNoteOpen = ref(false);
+const personalNoteDraft = computed(() =>
+  node.value ? explorer.devNotesByNodeId.value[node.value.id] ?? '' : '',
+);
+const hasNodeCodeRefs = computed(() => {
+  if (!__ENABLE_TECH_MODE__ || !node.value) return false;
+  const d = node.value.techDetail;
+  if (!d) return false;
+  return Boolean(
+    d.codeRefs?.length ||
+      d.byPlatform?.ios?.codeRefs?.length ||
+      d.byPlatform?.android?.codeRefs?.length,
+  );
+});
+
+watch(
+  () => node.value?.id,
+  (id) => {
+    personalNoteOpen.value = Boolean(id && explorer.devNotesByNodeId.value[id]?.trim());
+  },
+);
+
+const handleTogglePin = () => {
+  if (!__ENABLE_TECH_MODE__ || !node.value) return;
+  const wasPinned = isPinnedNode.value;
+  explorer.togglePinnedNode(node.value.id);
+  pushToast(
+    wasPinned ? 'Đã bỏ ghim khỏi Đang làm' : 'Đã ghim vào thanh Đang làm',
+    'info',
+  );
+};
+
+const handleOpenNodeSourcePeek = async () => {
+  if (!__ENABLE_TECH_MODE__ || !node.value) return;
+  const { extractCodeRefsByPlatform } = await import('../../core/sourcePeekClient');
+  const grouped = extractCodeRefsByPlatform(node.value);
+  if (grouped.ios.length === 0 && grouped.android.length === 0) {
+    pushToast('Node này chưa gắn codeRefs', 'info');
+    return;
+  }
+  emit('openSourcePeek', {
+    title: node.value.techLabel || node.value.label,
+    nodeId: node.value.id,
+    iosRef: grouped.ios[0],
+    androidRef: grouped.android[0],
+    iosRefs: grouped.ios,
+    androidRefs: grouped.android,
+  });
+};
+
 const handleCopyAiPrompt = async () => {
   const current = node.value;
   if (!__ENABLE_TECH_MODE__ || !current) return;
@@ -315,6 +373,22 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="flex shrink-0 items-center gap-1">
+        <button
+          v-if="enableTechMode && isTechView"
+          type="button"
+          :aria-label="isPinnedNode ? 'Bỏ ghim đang làm' : 'Ghim vào Đang làm'"
+          :title="isPinnedNode ? 'Bỏ ghim khỏi Đang làm' : 'Ghim vào thanh Đang làm'"
+          class="rounded-lg p-1.5 transition"
+          :class="
+            isPinnedNode
+              ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-300'
+              : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200'
+          "
+          @click="handleTogglePin"
+        >
+          <Pin class="h-4 w-4" :class="isPinnedNode ? 'fill-current' : ''" />
+        </button>
+
         <button
           type="button"
           :aria-label="copiedLink ? 'Đã sao chép đường dẫn' : 'Sao chép đường dẫn tới mục này'"
@@ -405,6 +479,33 @@ onBeforeUnmount(() => {
         </button>
 
         <button
+          v-if="enableTechMode && isTechView && hasNodeCodeRefs"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800"
+          title="Mở đối chiếu code Swift ↔ Kotlin ngay trong web"
+          @click="handleOpenNodeSourcePeek"
+        >
+          <Code2 class="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+          Soi Code
+        </button>
+
+        <button
+          v-if="enableTechMode && isTechView"
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition"
+          :class="
+            personalNoteOpen || personalNoteDraft
+              ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300'
+              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800'
+          "
+          title="Ghi chú kỹ thuật cá nhân (chỉ lưu localStorage của bạn)"
+          @click="personalNoteOpen = !personalNoteOpen"
+        >
+          <StickyNote class="h-3.5 w-3.5" />
+          Note
+        </button>
+
+        <button
           v-if="enableTechMode && isTechView"
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1.5 text-xs font-semibold text-cyan-800 transition hover:bg-cyan-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300 dark:hover:bg-cyan-500/25"
@@ -452,6 +553,33 @@ onBeforeUnmount(() => {
       />
 
       <template v-else>
+        <section
+          v-if="enableTechMode && isTechView && personalNoteOpen"
+          class="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-500/35 dark:bg-amber-500/10"
+        >
+          <div class="flex items-center justify-between text-[11px] font-bold text-amber-800 dark:text-amber-300">
+            <span class="inline-flex items-center gap-1">
+              <StickyNote class="h-3.5 w-3.5" />
+              Ghi chú Dev cá nhân (tự lưu localStorage)
+            </span>
+            <button
+              v-if="personalNoteDraft"
+              type="button"
+              class="text-[10.5px] font-semibold text-amber-700 hover:underline dark:text-amber-200"
+              @click="explorer.updateNodeDevNote(node.id, ''); personalNoteOpen = false"
+            >
+              Xóa note
+            </button>
+          </div>
+          <textarea
+            :value="personalNoteDraft"
+            rows="2"
+            placeholder="Nhập ghi chú kỹ thuật cá nhân cho bước này..."
+            class="w-full rounded-lg border border-amber-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-amber-400 focus:outline-none dark:border-amber-500/30 dark:bg-slate-900 dark:text-slate-100"
+            @input="explorer.updateNodeDevNote(node.id, ($event.target as HTMLTextAreaElement).value)"
+          />
+        </section>
+
         <MediaGallery
           :media="node.media"
           :audience-mode="explorer.audienceMode.value"
@@ -474,6 +602,7 @@ onBeforeUnmount(() => {
           @open-miniapp-bridge="emit('openMiniappBridge', $event)"
           @open-settings="emit('openSettings')"
           @open-impact="emit('openImpact', $event)"
+          @open-source-peek="emit('openSourcePeek', $event)"
         />
 
         <section v-if="relatedNodes.length > 0" class="space-y-2 border-t border-slate-100 pt-4 dark:border-slate-800">

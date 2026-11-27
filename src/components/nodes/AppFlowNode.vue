@@ -237,11 +237,20 @@ const scenarioCardClass = computed(() => {
         ? 'ring-2 ring-emerald-500 shadow-lg dark:ring-emerald-400'
         : 'hover:ring-1 hover:ring-emerald-400';
     }
+    if (enableTechMode && isTechView.value && explorer.traceOverlay.value) {
+      const step = explorer.traceOverlay.value.stepByNodeId[props.data.id];
+      const isErr = explorer.traceOverlay.value.errorNodeIds.has(props.data.id);
+      if (isErr) return 'ring-2 ring-rose-500 shadow-lg dark:ring-rose-400';
+      if (step) return 'ring-2 ring-fuchsia-500 shadow-lg dark:ring-cyan-400';
+      return 'opacity-25 saturate-50';
+    }
     if (enableTechMode && isTechView.value && explorer.snapshotDiffOverlay.value) {
       const diffSt = explorer.snapshotDiffOverlay.value.nodeStatus[props.data.id];
       if (diffSt === 'added') return 'ring-2 ring-emerald-500 shadow-lg dark:ring-emerald-400';
       if (diffSt === 'modified') return 'ring-2 ring-amber-500 shadow-lg dark:ring-amber-400';
-      return 'opacity-55';
+      return explorer.snapshotDiffOverlay.value.onlyChanged
+        ? 'opacity-15 saturate-0'
+        : 'opacity-55';
     }
     if (enableTechMode && isTechView.value && explorer.impactHighlight.value) {
       return explorer.impactHighlight.value.nodeIds.has(props.data.id)
@@ -300,6 +309,29 @@ const recordingOrder = computed<number | null>(() => {
 const snapshotDiffBadge = computed<'added' | 'modified' | null>(() => {
   if (!enableTechMode || !isTechView.value || !explorer.snapshotDiffOverlay.value) return null;
   return explorer.snapshotDiffOverlay.value.nodeStatus[props.data.id] ?? null;
+});
+
+const traceStepInfo = computed<{ step: number; isError: boolean } | null>(() => {
+  if (!enableTechMode || !isTechView.value || !explorer.traceOverlay.value) return null;
+  const step = explorer.traceOverlay.value.stepByNodeId[props.data.id];
+  if (!step) return null;
+  return {
+    step,
+    isError: explorer.traceOverlay.value.errorNodeIds.has(props.data.id),
+  };
+});
+
+const taskBadge = computed<{ label: string; cls: string } | null>(() => {
+  if (!enableTechMode || !isTechView.value) return null;
+  const info = explorer.nodeTaskBadgesMap.value[props.data.id];
+  if (!info) return null;
+  const cls =
+    info.status === 'done'
+      ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300'
+      : info.status === 'doing' || info.status === 'review'
+        ? 'border-cyan-300 bg-cyan-50 text-cyan-800 dark:border-cyan-500/40 dark:bg-cyan-500/15 dark:text-cyan-300'
+        : 'border-indigo-200 bg-indigo-50 text-indigo-800 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-200';
+  return { label: info.label, cls };
 });
 
 const onSelectNode = () => {
@@ -370,6 +402,14 @@ const onMouseLeave = () => {
     </span>
 
     <span
+      v-else-if="enableTechMode && traceStepInfo"
+      class="absolute -top-2.5 -left-2.5 z-10 flex h-5 items-center justify-center rounded-full px-1.5 font-mono text-[9.5px] font-bold text-white shadow-sm ring-2 ring-white dark:ring-slate-900"
+      :class="traceStepInfo.isError ? 'bg-rose-600' : 'bg-fuchsia-600 dark:bg-cyan-500 dark:text-slate-950'"
+    >
+      {{ traceStepInfo.isError ? `ERR #${traceStepInfo.step}` : `#${traceStepInfo.step}` }}
+    </span>
+
+    <span
       v-else-if="enableTechMode && snapshotDiffBadge"
       class="absolute -top-2.5 -right-2 z-10 rounded-full px-1.5 py-0.5 font-mono text-[9px] font-bold text-white shadow-sm"
       :class="snapshotDiffBadge === 'added' ? 'bg-emerald-600' : 'bg-amber-500'"
@@ -425,6 +465,22 @@ const onMouseLeave = () => {
           :class="nodeMetaStatusBadge.cls"
         >
           {{ nodeMetaStatusBadge.label }}
+        </span>
+
+        <span
+          v-if="enableTechMode && taskBadge"
+          class="inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[9.5px] font-bold"
+          :class="taskBadge.cls"
+        >
+          {{ taskBadge.label }}
+        </span>
+
+        <span
+          v-if="enableTechMode && taskBadge"
+          class="inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 font-mono text-[9.5px] font-bold"
+          :class="taskBadge.cls"
+        >
+          {{ taskBadge.label }}
         </span>
       </div>
 

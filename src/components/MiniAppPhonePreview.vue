@@ -28,6 +28,10 @@ import {
   type SandboxHostConfig,
   type SandboxHostState,
 } from '../core/miniAppSandboxEngine';
+import {
+  loadMiniAppUrlPresets,
+  saveMiniAppUrlPreset,
+} from '../core/miniAppDevPresets';
 
 const props = defineProps<{
   contract: MiniAppContract;
@@ -51,12 +55,32 @@ type PreviewMode = 'mock' | 'iframe';
 const previewMode = ref<PreviewMode>('mock');
 
 const iframeUrlInput = ref('http://localhost:5173');
+const urlPresets = ref<string[]>(loadMiniAppUrlPresets(props.contract.app.id));
 const activeIframeSrc = ref('');
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 const showShimCard = ref(true);
 const showLaunchDetail = ref(false);
 const copiedKey = ref<string | null>(null);
 let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.contract.app.id,
+  (nextAppId) => {
+    urlPresets.value = loadMiniAppUrlPresets(nextAppId);
+    if (urlPresets.value[0]) {
+      iframeUrlInput.value = urlPresets.value[0];
+    }
+  },
+);
+
+const saveCurrentUrlPreset = () => {
+  if (!iframeValidation.value.valid) {
+    pushToast(iframeValidation.value.reason ?? 'URL không hợp lệ', 'error');
+    return;
+  }
+  urlPresets.value = saveMiniAppUrlPreset(props.contract.app.id, iframeUrlInput.value);
+  pushToast(`Đã lưu URL dev cho ${props.contract.app.id}`, 'success');
+};
 
 const iframeValidation = computed(() => validateIframeDevUrl(iframeUrlInput.value));
 
@@ -495,6 +519,40 @@ const missingThemeOnAndroidHistory = computed(
         <!-- IFRAME LOCALHOST MODE -->
         <div v-else class="flex min-h-0 flex-1 flex-col gap-2 p-2.5 text-xs">
           <div class="space-y-1.5">
+            <div class="flex items-center gap-1 text-[10px]">
+              <select
+                :value="urlPresets.includes(iframeUrlInput) ? iframeUrlInput : ''"
+                aria-label="Preset URL localhost"
+                class="min-w-0 flex-1 rounded border px-1.5 py-0.5 font-mono text-[10px]"
+                :class="
+                  state.theme === 'dark'
+                    ? 'border-slate-700 bg-slate-900 text-slate-300'
+                    : 'border-slate-300 bg-white text-slate-700'
+                "
+                @change="
+                  ($event.target as HTMLSelectElement).value &&
+                    (iframeUrlInput = ($event.target as HTMLSelectElement).value)
+                "
+              >
+                <option value="">-- Preset localhost ({{ props.contract.app.id }}) --</option>
+                <option v-for="preset in urlPresets" :key="preset" :value="preset">
+                  {{ preset }}
+                </option>
+              </select>
+              <button
+                type="button"
+                class="shrink-0 rounded border px-1.5 py-0.5 font-semibold transition"
+                :class="
+                  state.theme === 'dark'
+                    ? 'border-slate-700 bg-slate-800 text-cyan-300 hover:bg-slate-700'
+                    : 'border-slate-300 bg-slate-100 text-cyan-700 hover:bg-slate-200'
+                "
+                title="Lưu URL hiện tại làm preset cho Mini App này"
+                @click="saveCurrentUrlPreset"
+              >
+                Lưu URL
+              </button>
+            </div>
             <div class="flex items-center gap-1">
               <input
                 v-model="iframeUrlInput"

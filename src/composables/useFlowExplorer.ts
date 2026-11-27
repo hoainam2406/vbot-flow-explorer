@@ -9,6 +9,7 @@ import {
   type ViewMode,
   type VisibleFlowResult,
 } from '../core/graphEngine';
+import type { DevWorkboardTask, NodeTaskBadgeInfo } from '../core/devWorkboardStore';
 import type { LayoutDirection } from '../core/explorerPreferences';
 import type {
   FlowNodeData,
@@ -277,7 +278,49 @@ export function createFlowExplorerState(
   const snapshotDiffOverlay = ref<{
     label: string;
     nodeStatus: Record<string, 'added' | 'modified'>;
+    onlyChanged?: boolean;
   } | null>(null);
+  const traceOverlay = ref<{
+    label: string;
+    orderedNodeIds: string[];
+    errorNodeIds: Set<string>;
+    stepByNodeId: Record<string, number>;
+  } | null>(null);
+  const pinnedNodeIds = ref<string[]>([]);
+  const devNotesByNodeId = ref<Record<string, string>>({});
+  const workboardTasks = ref<DevWorkboardTask[]>([]);
+  const nodeTaskBadgesMap = ref<Record<string, NodeTaskBadgeInfo>>({});
+
+  const rebuildTaskBadges = () => {
+    if (!ALLOW_TECH_RUNTIME || !allowTechMode || typeof window === 'undefined') {
+      nodeTaskBadgesMap.value = {};
+      return;
+    }
+    void import('../core/devWorkboardStore').then(({ collectNodeTaskBadges }) => {
+      nodeTaskBadgesMap.value = collectNodeTaskBadges(datasetRef.value, {
+        tasks: workboardTasks.value,
+      });
+    });
+  };
+
+  const refreshDevLocalState = () => {
+    if (!ALLOW_TECH_RUNTIME || !allowTechMode || typeof window === 'undefined') return;
+    void Promise.all([
+      import('../core/devWorkspacePins'),
+      import('../core/devWorkboardStore'),
+    ]).then(([{ loadDevWorkspacePins }, { loadDevWorkboard, collectNodeTaskBadges }]) => {
+      const savedPins = loadDevWorkspacePins();
+      pinnedNodeIds.value = savedPins.pinnedNodeIds;
+      devNotesByNodeId.value = savedPins.notesByNodeId;
+      const wb = loadDevWorkboard();
+      workboardTasks.value = wb.tasks;
+      nodeTaskBadgesMap.value = collectNodeTaskBadges(datasetRef.value, wb);
+    });
+  };
+
+  if (ALLOW_TECH_RUNTIME && allowTechMode && typeof window !== 'undefined') {
+    refreshDevLocalState();
+  }
   const scenarioRecordingParentId = ref<string | null>(null);
   const scenarioRecordingNodeIds = ref<string[]>([]);
   const canvasLens = ref<CanvasLensFilter>(createDefaultCanvasLens());
@@ -757,6 +800,7 @@ export function createFlowExplorerState(
   const setSnapshotDiffOverlay = (
     nodeStatus: Record<string, 'added' | 'modified'>,
     label: string,
+    options?: { onlyChanged?: boolean },
   ) => {
     const ids = Object.keys(nodeStatus);
     if (ids.length === 0) {
@@ -772,12 +816,96 @@ export function createFlowExplorerState(
       }
     }
     expandedIds.value = nextExpanded;
-    snapshotDiffOverlay.value = { label, nodeStatus };
+    snapshotDiffOverlay.value = {
+      label,
+      nodeStatus,
+      onlyChanged: options?.onlyChanged ?? snapshotDiffOverlay.value?.onlyChanged ?? false,
+    };
     setCameraTarget('all');
+  };
+
+  const toggleSnapshotDiffOnlyChanges = () => {
+    if (!snapshotDiffOverlay.value) return;
+    snapshotDiffOverlay.value = {
+      ...snapshotDiffOverlay.value,
+      onlyChanged: !snapshotDiffOverlay.value.onlyChanged,
+    };
   };
 
   const clearSnapshotDiffOverlay = () => {
     snapshotDiffOverlay.value = null;
+  };
+
+  const setTraceOverlay = (
+    orderedNodeIds: string[],
+    errorNodeIds: string[],
+    label: string,
+  ) => {
+    if (orderedNodeIds.length === 0) {
+      traceOverlay.value = null;
+      return;
+    }
+    const nextExpanded = new Set(expandedIds.value);
+    const stepByNodeId: Record<string, number> = {};
+    orderedNodeIds.forEach((id, idx) => {
+      stepByNodeId[id] = idx + 1;
+      for (const ancId of getAncestorChain(id).slice(0, -1)) {
+        if (datasetRef.value.subtreesByParentId[ancId]) {
+          nextExpanded.add(ancId);
+        }
+      }
+    });
+    expandedIds.value = nextExpanded;
+    traceOverlay.value = {
+      label,
+      orderedNodeIds,
+      errorNodeIds: new Set(errorNodeIds),
+      stepByNodeId,
+    };
+    setCameraTarget('all');
+  };
+
+  const clearTraceOverlay = () => {
+    traceOverlay.value = null;
+  };
+
+  const setWorkboardTasks = (tasks: DevWorkboardTask[]) => {
+    if (!ALLOW_TECH_RUNTIME || !allowTechMode) return;
+    workboardTasks.value = tasks;
+    rebuildTaskBadges();
+  };
+
+  const togglePinnedNode = (nodeId: string) => {
+    if (!ALLOW_TECH_RUNTIME || !allowTechMode) return;
+    const exists = pinnedNodeIds.value.includes(nodeId);
+    pinnedNodeIds.value = exists
+      ? pinnedNodeIds.value.filter((id) => id !== nodeId)
+      : [nodeId, ...pinnedNodeIds.value].slice(0, 20);
+    void import('../core/devWorkspacePins').then(({ saveDevWorkspacePins }) => {
+      saveDevWorkspacePins({
+        pinnedNodeIds: pinnedNodeIds.value,
+        notesByNodeId: devNotesByNodeId.value,
+        updatedAt: Date.now(),
+      });
+    });
+  };
+
+  const updateNodeDevNote = (nodeId: string, note: string) => {
+    if (!ALLOW_TECH_RUNTIME || !allowTechMode) return;
+    const nextNotes = { ...devNotesByNodeId.value };
+    if (!note.trim()) {
+      delete nextNotes[nodeId];
+    } else {
+      nextNotes[nodeId] = note;
+    }
+    devNotesByNodeId.value = nextNotes;
+    void import('../core/devWorkspacePins').then(({ saveDevWorkspacePins }) => {
+      saveDevWorkspacePins({
+        pinnedNodeIds: pinnedNodeIds.value,
+        notesByNodeId: nextNotes,
+        updatedAt: Date.now(),
+      });
+    });
   };
 
   const startScenarioRecording = (parentId: string, initialNodeIds: string[] = []) => {
@@ -875,11 +1003,13 @@ export function createFlowExplorerState(
     ) {
       focusRootId.value = null;
     }
+    rebuildTaskBadges();
   };
 
   const setBaseDataset = (next: MergedFlowDataset, branchId?: string) => {
     baseDatasetRef.value = next;
     datasetRef.value = next;
+    rebuildTaskBadges();
     activeBranchId.value =
       ALLOW_TECH_RUNTIME && allowTechMode
         ? (branchId ?? next.app.techBranch ?? activeBranchId.value)
@@ -887,6 +1017,7 @@ export function createFlowExplorerState(
     clearScenarioState();
     impactHighlight.value = null;
     snapshotDiffOverlay.value = null;
+    traceOverlay.value = null;
     scenarioRecordingParentId.value = null;
     scenarioRecordingNodeIds.value = [];
 
@@ -962,6 +1093,11 @@ export function createFlowExplorerState(
     hoveredLineage,
     impactHighlight,
     snapshotDiffOverlay,
+    traceOverlay,
+    pinnedNodeIds,
+    devNotesByNodeId,
+    workboardTasks,
+    nodeTaskBadgesMap,
     scenarioRecordingParentId,
     scenarioRecordingNodeIds,
     canvasLens,
@@ -1005,7 +1141,14 @@ export function createFlowExplorerState(
     setImpactHighlight,
     clearImpactHighlight,
     setSnapshotDiffOverlay,
+    toggleSnapshotDiffOnlyChanges,
     clearSnapshotDiffOverlay,
+    setTraceOverlay,
+    clearTraceOverlay,
+    togglePinnedNode,
+    updateNodeDevNote,
+    setWorkboardTasks,
+    refreshDevLocalState,
     startScenarioRecording,
     toggleScenarioRecordedNode,
     stopScenarioRecording,

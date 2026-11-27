@@ -134,6 +134,7 @@ function normalizeRelativeRepoRef(codeRef: string, platform: 'ios' | 'android'):
 export function buildIdeFileUrl(
   codeRef: string,
   settings: DevWorkspaceSettings,
+  line?: number,
 ): string | null {
   const trimmedRef = codeRef.trim();
   if (!trimmedRef) return null;
@@ -151,7 +152,9 @@ export function buildIdeFileUrl(
   }
 
   const joined = `${cleanBase}/${rel}`;
-  const url = `${settings.preferredIde}://file/${joined.replace(/^\/+/, '')}`;
+  const lineSuffix =
+    typeof line === 'number' && Number.isInteger(line) && line > 0 ? `:${line}` : '';
+  const url = `${settings.preferredIde}://file/${joined.replace(/^\/+/, '')}${lineSuffix}`;
   return isSafeExternalUrl(url) ? url : null;
 }
 

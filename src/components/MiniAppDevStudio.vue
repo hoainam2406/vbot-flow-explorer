@@ -47,6 +47,7 @@ import {
   saveHostFetchMockRules,
   type HostFetchMockRule,
 } from '../core/miniAppHostFetchMock';
+import { buildMockRuleFromWireFrame } from '../core/miniAppDevPresets';
 import {
   evaluateLiveIframeWireLogs,
   exportContractReportMarkdown,
@@ -129,6 +130,16 @@ const mockRules = ref<HostFetchMockRule[]>([]);
 const proxyAvailable = ref(false);
 const proxyEnabled = ref(false);
 const allowedOriginsText = ref('https://api-dev.vbot.vn');
+const breakpointEnabled = ref(false);
+const breakpointFilter = ref('');
+const pendingIntercept = ref<{
+  id: string;
+  method: string;
+  payloadText: string;
+  spoofResponseText: string;
+  mode: 'forward' | 'spoof';
+  createdAt: string;
+} | null>(null);
 
 function resolveValidAppId(candidate?: string): string {
   if (candidate && MINI_APP_CATALOG.some((a) => a.id === candidate)) {
@@ -292,7 +303,18 @@ const updateMockRules = (rules: HostFetchMockRule[]) => {
   mockRules.value = saveHostFetchMockRules(selectedAppId.value, rules);
 };
 
-const executeCommandWithMocksAndProxy = async (
+const shouldInterceptCommand = (method: string): boolean => {
+  if (!breakpointEnabled.value) return false;
+  const filterRaw = breakpointFilter.value.trim();
+  if (!filterRaw) return true;
+  const allowed = filterRaw
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+  return allowed.includes(method.toLowerCase());
+};
+
+const runCommandPipeline = async (
   method: string,
   payload: Record<string, unknown>,
 ) => {
@@ -351,6 +373,126 @@ const executeCommandWithMocksAndProxy = async (
   }
 
   applyHostResult(res);
+};
+
+const executeCommandWithMocksAndProxy = async (
+  method: string,
+  payload: Record<string, unknown>,
+) => {
+  if (shouldInterceptCommand(method)) {
+    pendingIntercept.value = {
+      id: `bp-${Date.now()}`,
+      method,
+      payloadText: JSON.stringify(payload, null, 2),
+      spoofResponseText: JSON.stringify(
+        {
+          success: true,
+          intercepted_spoof: true,
+          method,
+        },
+        null,
+        2,
+      ),
+      mode: 'forward',
+      createdAt: new Date().toTimeString().slice(0, 8),
+    };
+    pushToast(`Breakpoint đã chặn lệnh "${method}"`, 'info');
+    return;
+  }
+  await runCommandPipeline(method, payload);
+};
+
+const resumeInterceptedCommand = async () => {
+  const bp = pendingIntercept.value;
+  if (!bp) return;
+  let parsedPayload: Record<string, unknown> = {};
+  try {
+    const raw: unknown = JSON.parse(bp.payloadText || '{}');
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      parsedPayload = raw as Record<string, unknown>;
+    }
+  } catch {
+    pushToast('Payload JSON trong Breakpoint chưa hợp lệ', 'error');
+    return;
+  }
+
+  if (bp.mode === 'forward') {
+    pendingIntercept.value = null;
+    await runCommandPipeline(bp.method, parsedPayload);
+    return;
+  }
+
+  let parsedResp: Record<string, unknown> = {};
+  try {
+    const rawResp: unknown = JSON.parse(bp.spoofResponseText || '{}');
+    if (rawResp && typeof rawResp === 'object' && !Array.isArray(rawResp)) {
+      parsedResp = rawResp as Record<string, unknown>;
+    }
+  } catch {
+    pushToast('Response giả lập JSON chưa hợp lệ', 'error');
+    return;
+  }
+
+  const baseRes = executeHostCommand(bp.method, parsedPayload, hostConfig.value, hostState.value, {
+    mockRules: mockRules.value,
+  });
+  const spoofOk = parsedResp.success !== false;
+  const rxFrame = baseRes.wireFrames[baseRes.wireFrames.length - 1];
+  if (rxFrame) {
+    rxFrame.status = spoofOk ? 'ok' : 'error';
+    rxFrame.payload = parsedResp;
+  }
+  baseRes.ok = spoofOk;
+  baseRes.status = spoofOk ? 'ok' : 'error';
+  baseRes.responsePayload = parsedResp;
+  pendingIntercept.value = null;
+  applyHostResult(baseRes);
+  pushToast(`Đã trả Response giả lập cho "${bp.method}"`, 'success');
+};
+
+const rejectInterceptedCommand = () => {
+  const bp = pendingIntercept.value;
+  if (!bp) return;
+  const errPayload = {
+    success: false,
+    error_code: 'INTERCEPT_ABORTED',
+    message: `Lệnh "${bp.method}" bị chặn bởi Bridge Breakpoint`,
+  };
+  const now = new Date().toTimeString().slice(0, 8);
+  wireLogs.value = [
+    ...wireLogs.value,
+    {
+      id: `bp-rx-${Date.now()}`,
+      timestamp: now,
+      direction: 'host_to_miniapp',
+      channel: 'Bridge Breakpoint',
+      methodOrEvent: `${bp.method}_result`,
+      status: 'error',
+      payload: errPayload,
+    },
+  ];
+  phonePreviewRef.value?.postEventToIframe(`${bp.method}_result`, errPayload);
+  pendingIntercept.value = null;
+  pushToast(`Đã hủy lệnh "${bp.method}" và trả lỗi về Mini App`, 'info');
+};
+
+const canRecordSelectedWireMock = computed(() => {
+  const frame = selectedWireFrame.value;
+  return Boolean(frame && frame.methodOrEvent.toLowerCase().includes('host_fetch'));
+});
+
+const recordSelectedWireToMock = () => {
+  const frame = selectedWireFrame.value;
+  if (!frame) return;
+  const idx = wireLogs.value.findIndex((f) => f.id === frame.id);
+  const prevReq = idx > 0 ? wireLogs.value[idx - 1] : undefined;
+  const rule = buildMockRuleFromWireFrame(frame, prevReq);
+  if (!rule) {
+    pushToast('Chỉ hỗ trợ lưu thành Mock Rule từ frame host_fetch', 'info');
+    return;
+  }
+  updateMockRules([rule, ...mockRules.value]);
+  pushToast(`Đã lưu Mock Rule "${rule.name}" (xem tab Mock API)`, 'success');
 };
 
 const runSelectedCommand = () => {
@@ -956,6 +1098,28 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
           Theme: {{ hostConfig.theme === 'dark' ? 'Dark' : 'Light' }}
         </button>
 
+        <!-- Breakpoint Toggle -->
+        <div class="flex items-center gap-1.5">
+          <label class="inline-flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition"
+            :class="
+              breakpointEnabled
+                ? 'border-amber-400 bg-amber-100 text-amber-900 dark:border-amber-500/50 dark:bg-amber-500/20 dark:text-amber-200'
+                : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+            "
+            title="Tạm dừng lệnh miniapp_to_host trước khi Host xử lý để sửa payload hoặc giả lập response"
+          >
+            <input v-model="breakpointEnabled" type="checkbox" class="rounded" />
+            <span>Breakpoint</span>
+          </label>
+          <input
+            v-if="breakpointEnabled"
+            v-model="breakpointFilter"
+            type="text"
+            placeholder="Mọi lệnh (hoặc make_call,host_fetch)"
+            class="w-44 rounded-lg border border-amber-300 bg-white px-2 py-1 font-mono text-[10.5px] text-slate-800 dark:border-amber-500/40 dark:bg-slate-800 dark:text-slate-200"
+          />
+        </div>
+
         <button
           type="button"
           class="ml-auto inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
@@ -964,6 +1128,69 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
           <RotateCcw class="h-3 w-3" />
           Reset Host
         </button>
+      </div>
+
+      <!-- Breakpoint Interceptor Banner -->
+      <div
+        v-if="pendingIntercept"
+        class="space-y-2 border-b border-amber-300 bg-amber-50/95 px-4 py-3 text-xs text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/12 dark:text-amber-100"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="rounded bg-amber-500 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-950">
+              PAUSED · {{ pendingIntercept.createdAt }}
+            </span>
+            <span class="font-bold">
+              Đang chặn lệnh <code class="font-mono">{{ pendingIntercept.method }}</code>
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              class="rounded-md px-2 py-1 text-[11px] font-semibold"
+              :class="pendingIntercept.mode === 'forward' ? 'bg-slate-900 text-white dark:bg-cyan-500 dark:text-slate-950' : 'border border-amber-300 bg-white dark:border-amber-500/30 dark:bg-slate-900'"
+              @click="pendingIntercept.mode = 'forward'"
+            >
+              Sửa Payload &amp; Chạy Host
+            </button>
+            <button
+              type="button"
+              class="rounded-md px-2 py-1 text-[11px] font-semibold"
+              :class="pendingIntercept.mode === 'spoof' ? 'bg-slate-900 text-white dark:bg-cyan-500 dark:text-slate-950' : 'border border-amber-300 bg-white dark:border-amber-500/30 dark:bg-slate-900'"
+              @click="pendingIntercept.mode = 'spoof'"
+            >
+              Giả lập Response trực tiếp
+            </button>
+            <button
+              type="button"
+              class="rounded-lg bg-emerald-600 px-3 py-1 font-bold text-white hover:bg-emerald-500"
+              @click="resumeInterceptedCommand"
+            >
+              {{ pendingIntercept.mode === 'forward' ? 'Tiếp tục (Forward)' : 'Trả Response này' }}
+            </button>
+            <button
+              type="button"
+              class="rounded-lg bg-rose-600 px-2.5 py-1 font-bold text-white hover:bg-rose-500"
+              @click="rejectInterceptedCommand"
+            >
+              Trả lỗi (Reject)
+            </button>
+          </div>
+        </div>
+        <textarea
+          v-if="pendingIntercept.mode === 'forward'"
+          v-model="pendingIntercept.payloadText"
+          rows="4"
+          spellcheck="false"
+          class="w-full rounded-lg border border-amber-300 bg-[#0b1120] p-2 font-mono text-[11px] text-cyan-100"
+        />
+        <textarea
+          v-else
+          v-model="pendingIntercept.spoofResponseText"
+          rows="4"
+          spellcheck="false"
+          class="w-full rounded-lg border border-amber-300 bg-[#0b1120] p-2 font-mono text-[11px] text-emerald-200"
+        />
       </div>
 
       <!-- 3-Column Interactive Studio Grid -->
@@ -1286,18 +1513,30 @@ const WIRE_BADGE: Record<SandboxWireLogEntry['direction'], { label: string; cls:
                   <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>{{ lastResult.parityAlertNote }}</span>
                 </div>
-                <div class="flex items-center justify-between text-[11px]">
+                <div class="flex flex-wrap items-center justify-between gap-1.5 text-[11px]">
                   <span class="font-mono font-semibold text-slate-500 dark:text-slate-400">
                     {{ selectedWireFrame ? selectedWireFrame.methodOrEvent : activeCommandSpec.method }}
                   </span>
-                  <button
-                    type="button"
-                    class="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-                    @click="copyValue('inspect-json', inspectedJsonString, 'Wire JSON')"
-                  >
-                    <Copy class="h-2.5 w-2.5" />
-                    Copy
-                  </button>
+                  <div class="flex items-center gap-1.5">
+                    <button
+                      v-if="canRecordSelectedWireMock"
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300"
+                      title="Lưu kết quả host_fetch này thành Mock Rule dùng lại"
+                      @click="recordSelectedWireToMock"
+                    >
+                      <Webhook class="h-2.5 w-2.5" />
+                      + Lưu Mock Rule
+                    </button>
+                    <button
+                      type="button"
+                      class="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      @click="copyValue('inspect-json', inspectedJsonString, 'Wire JSON')"
+                    >
+                      <Copy class="h-2.5 w-2.5" />
+                      Copy
+                    </button>
+                  </div>
                 </div>
                 <JsonCodeBlock :code="inspectedJsonString" />
               </div>

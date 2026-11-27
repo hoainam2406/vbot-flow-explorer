@@ -662,6 +662,8 @@ export function flowDataPlugin(buildTarget: 'public' | 'internal'): Plugin {
               gitInspect: true,
               mediaUpload: true,
               gitSnapshot: true,
+              sourcePeek: true,
+              gitStatus: true,
             },
             vbotWork: {
               configured: Boolean(resolveVbotWorkAuthHeader(resolvedConfig.root)),

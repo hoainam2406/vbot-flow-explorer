@@ -8,11 +8,16 @@ import {
   loadBranchDataset,
 } from 'virtual:flow-branches';
 import FlowCanvas from './components/FlowCanvas.vue';
+import AppWalkthroughOverlay from './components/AppWalkthroughOverlay.vue';
 import GuideGlossaryModal from './components/GuideGlossaryModal.vue';
 import ScenarioFlowDialog from './components/ScenarioFlowDialog.vue';
 import SearchModal from './components/SearchModal.vue';
 import type { ImpactLaunchContext } from './components/ImpactAnalysisModal.vue';
 import type { MiniAppBridgeLaunchContext } from './components/MiniAppBridgeModal.vue';
+import type {
+  LocalGitStatusResult,
+  SourcePeekLaunchContext,
+} from './core/sourcePeekClient';
 import ToastHost from './components/ToastHost.vue';
 import TopBar from './components/TopBar.vue';
 import DetailDrawer from './components/drawer/DetailDrawer.vue';
@@ -34,6 +39,15 @@ import {
 import { getNodeDisplayLabel, isVisibleForMode, isVisibleForPlatform } from './core/graphEngine';
 import { exportNodeOverviewMarkdown } from './core/publicMarkdownExport';
 import type { DraftPatch } from './core/datasetDraftStore';
+import {
+  loadAppTourCompleted,
+  resolveTourStepsForTrack,
+  saveAppTourCompleted,
+  type AppTourStep,
+  type AppTourTrack,
+  type GuideQuickAction,
+} from './core/appTourEngine';
+import { PUBLIC_TOUR_STEPS } from './data/publicGuideData';
 import type { FlowEdgeData, FlowNodeData, Scenario } from './data/schema';
 import type { GovernanceHubTab } from './components/GovernanceHubModal.vue';
 
@@ -64,6 +78,9 @@ const EdgeEditorPopover = __ENABLE_TECH_MODE__
 const ScenarioEditorModal = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./components/ScenarioEditorModal.vue'))
   : null;
+const SourcePeekModal = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./components/SourcePeekModal.vue'))
+  : null;
 
 const explorer = createFlowExplorerState(dataset, __ENABLE_TECH_MODE__);
 provide(FLOW_EXPLORER_KEY, explorer);
@@ -72,7 +89,13 @@ const { pushToast } = useToast();
 const searchOpen = ref(false);
 const parityOpen = ref(false);
 const guideOpen = ref(false);
+const tourOpen = ref(false);
+const tourSteps = ref<AppTourStep[]>(PUBLIC_TOUR_STEPS);
+const tourStepIndex = ref(0);
+const tourTrack = ref<AppTourTrack>('overview');
+const tourCompleted = ref(loadAppTourCompleted());
 const settingsOpen = ref(false);
+const settingsInitialTab = ref<'paths' | 'media' | 'backup'>('paths');
 const impactOpen = ref(false);
 const impactLaunchContext = ref<ImpactLaunchContext | null>(null);
 const miniAppModalOpen = ref(false);
@@ -83,7 +106,10 @@ const savingDraft = ref(false);
 const addFlowOpen = ref(false);
 const addFlowAnchor = ref<FlowNodeData | null>(null);
 const governanceOpen = ref(false);
-const governanceTab = ref<GovernanceHubTab>('qa');
+const governanceTab = ref<GovernanceHubTab>('dashboard');
+const sourcePeekOpen = ref(false);
+const sourcePeekContext = ref<SourcePeekLaunchContext | null>(null);
+const localGitStatus = ref<LocalGitStatusResult | null>(null);
 const edgeEditorOpen = ref(false);
 const editingEdge = ref<FlowEdgeData | null>(null);
 const editingEdgeParentId = ref('');
@@ -112,7 +138,7 @@ const openParity = () => {
   parityOpen.value = true;
 };
 
-const openGovernance = (tab: GovernanceHubTab = 'qa') => {
+const openGovernance = (tab: GovernanceHubTab = 'dashboard') => {
   if (!__ENABLE_TECH_MODE__) return;
   miniAppModalOpen.value = false;
   parityOpen.value = false;
@@ -121,9 +147,217 @@ const openGovernance = (tab: GovernanceHubTab = 'qa') => {
   governanceOpen.value = true;
 };
 
-const openSettings = () => {
+const openSourcePeek = (context?: SourcePeekLaunchContext) => {
   if (!__ENABLE_TECH_MODE__) return;
+  sourcePeekContext.value = context ?? null;
+  sourcePeekOpen.value = true;
+};
+
+const refreshLocalGitStatus = async () => {
+  if (!__ENABLE_TECH_MODE__ || !import.meta.env.DEV) return;
+  const { fetchLocalGitStatus } = await import('./core/sourcePeekClient');
+  const res = await fetchLocalGitStatus();
+  localGitStatus.value = res.ok ? res.data : null;
+};
+
+const handleCompareBranch = async (targetBranchId: string) => {
+  if (!__ENABLE_TECH_MODE__) return;
+  try {
+    const [{ diffDatasets }, baseDs] = await Promise.all([
+      import('./core/flowSnapshotDiff'),
+      loadBranchDataset(targetBranchId),
+    ]);
+    const report = diffDatasets(baseDs, explorer.dataset, {
+      baseLabel: `Nhánh ${targetBranchId}`,
+      currentLabel: `Nhánh ${explorer.activeBranchId.value}`,
+    });
+    const statusMap: Record<string, 'added' | 'modified'> = {};
+    for (const item of report.items) {
+      if (item.entityKind === 'node' && (item.change === 'added' || item.change === 'modified')) {
+        statusMap[item.id] = item.change;
+      }
+    }
+    if (Object.keys(statusMap).length === 0) {
+      pushToast(`Không có khác biệt node nào so với nhánh ${targetBranchId}`, 'info');
+      return;
+    }
+    explorer.setAudienceMode('tech');
+    explorer.setSnapshotDiffOverlay(statusMap, `${targetBranchId} ↔ ${explorer.activeBranchId.value}`);
+    pushToast(
+      `Đã bật Diff ${targetBranchId} ↔ ${explorer.activeBranchId.value} (${Object.keys(statusMap).length} node)`,
+      'success',
+    );
+  } catch (err) {
+    pushToast(
+      err instanceof Error ? err.message : `Không thể so sánh với nhánh ${targetBranchId}`,
+      'error',
+    );
+  }
+};
+
+const handleHighlightGitDirty = async () => {
+  if (!__ENABLE_TECH_MODE__) return;
+  await refreshLocalGitStatus();
+  const dirtyFiles = [
+    ...(localGitStatus.value?.ios?.changedFiles ?? []),
+    ...(localGitStatus.value?.android?.changedFiles ?? []),
+  ];
+  if (dirtyFiles.length === 0) {
+    pushToast('Repo local hiện sạch (không có file đang sửa)', 'info');
+    return;
+  }
+  const [
+    { buildImpactIndex },
+    { analyzePrImpact },
+    { MINI_APP_CATALOG, CORE_BRIDGE_SPECS, BRIDGE_PARITY_ALERTS },
+    { MINI_APP_PERMISSION_PROFILES },
+  ] = await Promise.all([
+    import('./core/impactAnalyzer'),
+    import('./core/prImpactEngine'),
+    import('./data/miniAppBridgeCatalog'),
+    import('./data/miniAppPermissionMatrix'),
+  ]);
+  const index = buildImpactIndex(
+    explorer.dataset,
+    MINI_APP_CATALOG,
+    CORE_BRIDGE_SPECS,
+    MINI_APP_PERMISSION_PROFILES,
+    BRIDGE_PARITY_ALERTS,
+  );
+  const prReport = analyzePrImpact(index, dirtyFiles, explorer.dataset);
+  if (prReport.affectedNodes.length === 0) {
+    pushToast(`${dirtyFiles.length} file đang sửa nhưng chưa khớp node nào trên sơ đồ`, 'info');
+    return;
+  }
+  explorer.setAudienceMode('tech');
+  explorer.setImpactHighlight(
+    prReport.affectedNodes.map((a) => a.node.id),
+    `Git Local (${dirtyFiles.length} file sửa)`,
+  );
+  pushToast(
+    `Đã tô sáng ${prReport.affectedNodes.length} node bị ảnh hưởng bởi Git Local`,
+    'success',
+  );
+};
+
+const openSettings = (tab: 'paths' | 'media' | 'backup' = 'paths') => {
+  if (!__ENABLE_TECH_MODE__) return;
+  settingsInitialTab.value = tab;
   settingsOpen.value = true;
+};
+
+const startAppTour = async (requestedTrack?: AppTourTrack) => {
+  const track: AppTourTrack =
+    __ENABLE_TECH_MODE__ &&
+    (requestedTrack === 'tech' ||
+      (!requestedTrack && explorer.audienceMode.value === 'tech'))
+      ? 'tech'
+      : 'overview';
+
+  miniAppModalOpen.value = false;
+  parityOpen.value = false;
+  governanceOpen.value = false;
+  guideOpen.value = false;
+  searchOpen.value = false;
+  settingsOpen.value = false;
+  impactOpen.value = false;
+  explorer.setZenMode(false);
+
+  let techSteps: AppTourStep[] | null = null;
+  if (track === 'tech' && __ENABLE_TECH_MODE__) {
+    explorer.setAudienceMode('tech');
+    const handbookMod = await import('./data/techGuideHandbookData');
+    techSteps = handbookMod.TECH_TOUR_STEPS;
+  }
+
+  tourTrack.value = track;
+  tourSteps.value = resolveTourStepsForTrack(PUBLIC_TOUR_STEPS, techSteps, track);
+  tourStepIndex.value = 0;
+  tourOpen.value = true;
+};
+
+const handleTourClose = (completed: boolean) => {
+  tourOpen.value = false;
+  if (completed) {
+    saveAppTourCompleted(true);
+    tourCompleted.value = true;
+    pushToast(
+      'Đã hoàn tất Tour hướng dẫn! Bạn có thể bấm phím ? bất kỳ lúc nào để mở Sổ tay.',
+      'success',
+    );
+  }
+};
+
+watch(
+  () => [tourOpen.value, tourStepIndex.value] as const,
+  ([isOpen, idx]) => {
+    if (!isOpen) return;
+    const step = tourSteps.value[idx];
+    if (
+      step?.ensureSampleExpanded &&
+      explorer.visibleFlow.value.activeScenarios.length === 0 &&
+      explorer.findNode('mod-calling')
+    ) {
+      if (!explorer.expandedIds.value.has('mod-calling')) {
+        explorer.toggleExpand('mod-calling');
+      }
+    }
+  },
+);
+
+const handleGuideQuickAction = (action: GuideQuickAction) => {
+  if (action.type === 'start_tour') {
+    void startAppTour(action.track);
+    return;
+  }
+  if (action.type === 'open_search') {
+    searchOpen.value = true;
+    return;
+  }
+  if (action.type === 'toggle_zen') {
+    const next = explorer.toggleZenMode();
+    pushToast(next ? 'Đã bật Zen Mode (Esc hoặc Z để thoát)' : 'Đã thoát Zen Mode', 'info');
+    return;
+  }
+  if (action.type === 'toggle_direction') {
+    const next = explorer.toggleLayoutDirection();
+    saveLayoutDirection(next);
+    pushToast(next === 'TB' ? 'Sơ đồ hướng dọc (TB)' : 'Sơ đồ hướng ngang (LR)', 'info');
+    return;
+  }
+  if (action.type === 'jump_node') {
+    miniAppModalOpen.value = false;
+    parityOpen.value = false;
+    governanceOpen.value = false;
+    if (action.platform && __ENABLE_TECH_MODE__) {
+      explorer.setAudienceMode('tech');
+      explorer.setPlatformMode(action.platform);
+    }
+    if (explorer.findNode(action.nodeId)) {
+      if (action.expand && !explorer.expandedIds.value.has(action.nodeId)) {
+        explorer.toggleExpand(action.nodeId);
+      }
+      explorer.jumpToNode(action.nodeId);
+    }
+    return;
+  }
+
+  if (!__ENABLE_TECH_MODE__) return;
+
+  if (action.type === 'open_governance') {
+    openGovernance(action.tab);
+  } else if (action.type === 'open_parity') {
+    openParity();
+  } else if (action.type === 'open_miniapp_studio') {
+    explorer.setAudienceMode('tech');
+    openMiniAppBridge({ tab: action.tab ?? 'sandbox' });
+  } else if (action.type === 'open_settings') {
+    explorer.setAudienceMode('tech');
+    openSettings(action.tab ?? 'paths');
+  } else if (action.type === 'open_impact') {
+    explorer.setAudienceMode('tech');
+    openImpact();
+  }
 };
 
 const openImpact = (context?: ImpactLaunchContext) => {
@@ -326,6 +560,15 @@ const handleApplyDraftPatch = async (patch: DraftPatch) => {
   if (draftPatches.value.length === next.length) {
     const { summarizeDraftPatch } = await import('./core/datasetDraftStore');
     pushToast(`Đã ghi nháp: ${summarizeDraftPatch(patch)}`, 'success');
+  }
+};
+
+const handleApplyDraftPatches = async (patches: DraftPatch[]) => {
+  if (!__ENABLE_TECH_MODE__ || patches.length === 0) return;
+  const next = [...draftPatches.value, ...patches];
+  await syncDraftOverlay(next, true);
+  if (draftPatches.value.length === next.length) {
+    pushToast(`Đã ghi nháp ${patches.length} cập nhật node`, 'success');
   }
 };
 
@@ -540,7 +783,16 @@ const applyInitialState = () => {
     } else if (viewParam === 'governance') {
       const gtab = mergedParams.get('gtab');
       const validGtab: GovernanceHubTab =
-        gtab === 'health' || gtab === 'diff' || gtab === 'qa' ? gtab : 'qa';
+        gtab === 'dashboard' ||
+        gtab === 'nodes' ||
+        gtab === 'workboard' ||
+        gtab === 'atlas' ||
+        gtab === 'tracer' ||
+        gtab === 'health' ||
+        gtab === 'diff' ||
+        gtab === 'qa'
+          ? gtab
+          : 'dashboard';
       openGovernance(validGtab);
     }
   }
@@ -622,6 +874,7 @@ useKeyboardNavigation({
     searchOpen.value ||
     parityOpen.value ||
     guideOpen.value ||
+    tourOpen.value ||
     settingsOpen.value ||
     impactOpen.value ||
     addFlowOpen.value ||
@@ -629,6 +882,7 @@ useKeyboardNavigation({
     edgeEditorOpen.value ||
     scenarioEditorOpen.value ||
     miniAppModalOpen.value ||
+    sourcePeekOpen.value ||
     explorer.scenarioDialogOpen.value,
   onToggleSearch: () => {
     searchOpen.value = !searchOpen.value;
@@ -673,6 +927,7 @@ onMounted(async () => {
       } catch {
         localDevWritable.value = false;
       }
+      void refreshLocalGitStatus();
     }
   }
   applyInitialState();
@@ -716,6 +971,15 @@ watch(
 );
 
 watch(
+  () => settingsOpen.value,
+  (isOpen) => {
+    if (!isOpen) {
+      void refreshLocalGitStatus();
+    }
+  },
+);
+
+watch(
   () => explorer.layoutDirection.value,
   (dir) => {
     if (!hydrated.value) return;
@@ -734,7 +998,10 @@ watch(
       :available-branches="availableBranches"
       :active-branch-id="explorer.activeBranchId.value"
       :branch-loading="branchLoading"
+      :local-git-status="localGitStatus"
       @switch-branch="handleSwitchBranch($event)"
+      @compare-branch="handleCompareBranch($event)"
+      @highlight-git-dirty="handleHighlightGitDirty()"
       @open-search="searchOpen = true"
       @open-parity="openParity()"
       @close-parity="parityOpen = false"
@@ -776,7 +1043,7 @@ watch(
         <FlowCanvas
           class="min-w-0 flex-1"
           @open-guide="guideOpen = true"
-          @open-parity="openParity()"
+          @start-tour="startAppTour($event)"
           @edit-edge="handleEditEdge"
           @create-scenario="handleCreateScenario"
           @edit-scenario="handleEditScenario"
@@ -789,6 +1056,7 @@ watch(
             @open-miniapp-bridge="openMiniAppBridge"
             @open-settings="openSettings()"
             @open-impact="openImpact($event)"
+            @open-source-peek="openSourcePeek($event)"
             @apply-draft-patch="handleApplyDraftPatch"
             @open-add-flow="openAddFlow"
           />
@@ -824,14 +1092,20 @@ watch(
         :base-branch-dataset="dataset"
         :base-branch-id="defaultBranchId"
         class="min-h-0 min-w-0 flex-1"
+        @open-source-peek="openSourcePeek($event)"
       />
       <component
         :is="GovernanceHubModal"
         v-if="GovernanceHubModal && governanceOpen"
         v-model:open="governanceOpen"
         :initial-tab="governanceTab"
+        :available-branches="availableBranches"
+        :active-branch-id="explorer.activeBranchId.value"
         class="min-h-0 min-w-0 flex-1"
         @update:tab="governanceTab = $event"
+        @open-source-peek="openSourcePeek($event)"
+        @apply-draft-patches="handleApplyDraftPatches($event)"
+        @open-parity="openParity()"
       />
     </div>
 
@@ -839,6 +1113,7 @@ watch(
       v-model:open="searchOpen"
       @open-parity="openParity()"
       @open-guide="guideOpen = true"
+      @start-tour="startAppTour($event)"
       @open-settings="openSettings()"
       @open-impact="openImpact()"
       @open-miniapp-bridge="openMiniAppBridge()"
@@ -851,10 +1126,24 @@ watch(
     />
     <GuideGlossaryModal
       v-model:open="guideOpen"
+      :tour-completed="tourCompleted"
       @open-mini-app-studio="openMiniAppBridge({ tab: 'sandbox' })"
+      @run-action="handleGuideQuickAction"
+    />
+    <AppWalkthroughOverlay
+      v-model:step-index="tourStepIndex"
+      :open="tourOpen"
+      :steps="tourSteps"
+      :track-label="tourTrack === 'tech' ? 'Tour Dev Toàn tập' : 'Tour Tổng quan'"
+      @close="handleTourClose"
     />
     <ScenarioFlowDialog />
-    <component :is="DevSettingsModal" v-if="DevSettingsModal" v-model:open="settingsOpen" />
+    <component
+      :is="DevSettingsModal"
+      v-if="DevSettingsModal"
+      v-model:open="settingsOpen"
+      :initial-tab="settingsInitialTab"
+    />
     <component
       :is="ImpactAnalysisModal"
       v-if="ImpactAnalysisModal"
@@ -888,6 +1177,13 @@ watch(
       :recorded-node-ids="scenarioRecordedIds"
       @submit-patch="handleApplyDraftPatch"
       @pick-on-canvas="handlePickScenarioOnCanvas"
+    />
+    <component
+      :is="SourcePeekModal"
+      v-if="SourcePeekModal"
+      v-model:open="sourcePeekOpen"
+      :context="sourcePeekContext"
+      @open-settings="openSettings()"
     />
     <ToastHost />
   </div>

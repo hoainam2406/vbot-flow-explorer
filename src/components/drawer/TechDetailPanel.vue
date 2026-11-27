@@ -7,9 +7,11 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Code2,
   Columns2,
   Copy,
   ExternalLink,
+  Eye,
   FolderOpen,
   Network,
   PlayCircle,
@@ -22,6 +24,10 @@ import { MINI_APP_CATALOG } from '../../data/miniAppBridgeCatalog';
 import { copyTextToClipboard } from '../../core/downloadHelper';
 import type { ImpactAxis } from '../../core/impactAnalyzer';
 import { detectCodeRefLanguage } from '../../core/jsonHighlight';
+import {
+  extractCodeRefsByPlatform,
+  type SourcePeekLaunchContext,
+} from '../../core/sourcePeekClient';
 import {
   PARITY_FIX_TARGET_LABELS,
   PARITY_NEEDS_FIX_LABELS,
@@ -57,7 +63,37 @@ const emit = defineEmits<{
   openMiniappBridge: [context: MiniAppBridgeLaunchContext];
   openSettings: [];
   openImpact: [context: { query: string; axis: ImpactAxis }];
+  openSourcePeek: [context: SourcePeekLaunchContext];
 }>();
+
+const nodeRefsByPlatform = computed(() => extractCodeRefsByPlatform(props.node));
+const hasAnyCodeRefs = computed(
+  () => nodeRefsByPlatform.value.ios.length > 0 || nodeRefsByPlatform.value.android.length > 0,
+);
+
+const peekSingleCodeRef = (codeRef: string, preferredPlatform?: 'ios' | 'android') => {
+  const grouped = nodeRefsByPlatform.value;
+  emit('openSourcePeek', {
+    title: props.node.techLabel || props.node.label,
+    nodeId: props.node.id,
+    iosRef: preferredPlatform === 'ios' ? codeRef : grouped.ios[0],
+    androidRef: preferredPlatform === 'android' ? codeRef : grouped.android[0],
+    iosRefs: grouped.ios,
+    androidRefs: grouped.android,
+  });
+};
+
+const peekCompareNodeCode = () => {
+  const grouped = nodeRefsByPlatform.value;
+  emit('openSourcePeek', {
+    title: props.node.techLabel || props.node.label,
+    nodeId: props.node.id,
+    iosRef: grouped.ios[0],
+    androidRef: grouped.android[0],
+    iosRefs: grouped.ios,
+    androidRefs: grouped.android,
+  });
+};
 
 const AUTODIAL_NODE_SUBFLOW_MAP: Record<string, string> = {
   'maad-init': 'autodial-init-session',
@@ -495,9 +531,20 @@ const techSections = computed<RenderedTechSection[]>(() => {
       <Columns2 class="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
       Chế độ đối chiếu iOS (Swift) ↔ Android (Kotlin/Java)
     </span>
-    <span class="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-slate-800 dark:text-indigo-300">
-      Cột trái: iOS · Cột phải: Android
-    </span>
+    <div class="flex flex-wrap items-center gap-1.5">
+      <button
+        v-if="hasAnyCodeRefs"
+        type="button"
+        class="inline-flex items-center gap-1 rounded-md border border-indigo-300 bg-white px-2 py-0.5 text-[11px] font-bold text-indigo-700 transition hover:bg-indigo-100 dark:border-cyan-500/40 dark:bg-slate-900 dark:text-cyan-300 dark:hover:bg-slate-800"
+        @click="peekCompareNodeCode"
+      >
+        <Code2 class="h-3 w-3" />
+        Soi Code Swift ↔ Kotlin
+      </button>
+      <span class="rounded bg-white px-2 py-0.5 text-[11px] font-semibold text-indigo-700 dark:bg-slate-800 dark:text-indigo-300">
+        Cột trái: iOS · Cột phải: Android
+      </span>
+    </div>
   </div>
 
   <div
@@ -914,6 +961,15 @@ const techSections = computed<RenderedTechSection[]>(() => {
                 <button
                   v-if="section.key === 'codeRefs'"
                   type="button"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-cyan-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+                  title="Xem nhanh mã nguồn ngay trong web (Source Peek)"
+                  @click="peekSingleCodeRef(item, 'ios')"
+                >
+                  <Eye class="h-3.5 w-3.5" />
+                </button>
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
                   class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
                   title="Mở file trong IDE (VS Code / Cursor)"
                   @click="openCodeRefInIde(item)"
@@ -982,6 +1038,15 @@ const techSections = computed<RenderedTechSection[]>(() => {
                 <span class="break-all">{{ item }}</span>
               </div>
               <div class="flex shrink-0 items-center gap-0.5">
+                <button
+                  v-if="section.key === 'codeRefs'"
+                  type="button"
+                  class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-emerald-700 dark:hover:bg-slate-800 dark:hover:text-emerald-300"
+                  title="Xem nhanh mã nguồn ngay trong web (Source Peek)"
+                  @click="peekSingleCodeRef(item, 'android')"
+                >
+                  <Eye class="h-3.5 w-3.5" />
+                </button>
                 <button
                   v-if="section.key === 'codeRefs'"
                   type="button"
@@ -1061,6 +1126,15 @@ const techSections = computed<RenderedTechSection[]>(() => {
               @click="emit('openImpact', { query: item, axis: 'api_event' })"
             >
               <Network class="h-3.5 w-3.5" />
+            </button>
+            <button
+              v-if="section.key === 'codeRefs'"
+              type="button"
+              class="mt-0.5 rounded p-1 text-slate-400 transition hover:bg-white hover:text-cyan-600 dark:hover:bg-slate-800 dark:hover:text-cyan-300"
+              title="Xem nhanh mã nguồn ngay trong web (Source Peek)"
+              @click="peekSingleCodeRef(item)"
+            >
+              <Eye class="h-3.5 w-3.5" />
             </button>
             <button
               v-if="section.key === 'codeRefs'"

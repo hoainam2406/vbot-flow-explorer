@@ -3,31 +3,74 @@ import { computed, inject, ref } from 'vue';
 import {
   AlertTriangle,
   Blocks,
+  Bug,
+  Check,
   Filter,
   GitFork,
   ImageOff,
   Network,
+  Pin,
   RotateCcw,
   Sparkles,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
-import type { NodeKind, NodeStatus } from '../data/schema';
+import { useToast } from '../composables/useToast';
+import { copyTextToClipboard } from '../core/downloadHelper';
+import { getNodeDisplayLabel } from '../core/graphEngine';
+import type { FlowNodeData, NodeKind, NodeStatus } from '../data/schema';
 
 const explorer = inject(FLOW_EXPLORER_KEY);
 if (!explorer) {
   throw new Error('FLOW_EXPLORER_KEY must be provided');
 }
 
+const { pushToast } = useToast();
 const expanded = ref(false);
+const copiedPinnedPrompt = ref(false);
 
 const hasImpact = computed(() => Boolean(explorer.impactHighlight.value));
+const hasTrace = computed(() => Boolean(explorer.traceOverlay.value));
 const hasSnapshotDiff = computed(() => Boolean(explorer.snapshotDiffOverlay.value));
-const snapshotDiffCount = computed(() => {
+const snapshotDiffStats = computed(() => {
   const overlay = explorer.snapshotDiffOverlay.value;
-  if (!overlay) return 0;
-  return explorer.visibleFlow.value.nodes.filter((n) => Boolean(overlay.nodeStatus[n.id])).length;
+  if (!overlay) return { visible: 0, added: 0, modified: 0 };
+  let added = 0;
+  let modified = 0;
+  for (const st of Object.values(overlay.nodeStatus)) {
+    if (st === 'added') added += 1;
+    else if (st === 'modified') modified += 1;
+  }
+  const visible = explorer.visibleFlow.value.nodes.filter((n) => Boolean(overlay.nodeStatus[n.id])).length;
+  return { visible, added, modified };
 });
+const pinnedNodes = computed(() =>
+  explorer.pinnedNodeIds.value
+    .map((id) => explorer.findNode(id))
+    .filter((n): n is FlowNodeData => Boolean(n)),
+);
+
+const copyPinnedMultiNodePrompt = async () => {
+  if (pinnedNodes.value.length === 0) return;
+  const [{ buildMultiNodeAiContextPrompt }, { loadDevWorkspaceSettings }] = await Promise.all([
+    import('../core/aiContextExport'),
+    import('../core/workspaceSettings'),
+  ]);
+  const prompt = buildMultiNodeAiContextPrompt(pinnedNodes.value, explorer.dataset, {
+    title: `Ngữ cảnh Đang làm (${pinnedNodes.value.length} node đã ghim)`,
+    platformMode: explorer.platformMode.value,
+    settings: loadDevWorkspaceSettings(),
+    personalNotesByNodeId: explorer.devNotesByNodeId.value,
+  });
+  const ok = await copyTextToClipboard(prompt);
+  if (ok) {
+    copiedPinnedPrompt.value = true;
+    pushToast(`Đã copy Multi-Node AI Prompt (${pinnedNodes.value.length} node)`, 'success');
+    setTimeout(() => {
+      copiedPinnedPrompt.value = false;
+    }, 1600);
+  }
+};
 const hasLens = computed(() => explorer.hasActiveCanvasLens.value);
 const matchedCount = computed(() => {
   if (explorer.impactHighlight.value) {
@@ -53,43 +96,7 @@ const toggleStatus = (status: NodeStatus) => {
 </script>
 
 <template>
-  <div class="pointer-events-auto flex flex-col items-start gap-1.5">
-    <div
-      v-if="hasImpact && explorer.impactHighlight.value"
-      class="inline-flex items-center gap-2 rounded-full border border-cyan-300 bg-cyan-50/95 px-3 py-1 text-xs font-semibold text-cyan-900 shadow-sm backdrop-blur-md dark:border-cyan-500/45 dark:bg-cyan-500/15 dark:text-cyan-200"
-    >
-      <Network class="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-      <span>
-        Impact: <strong>{{ explorer.impactHighlight.value.label }}</strong> ({{ matchedCount }} node đang hiển thị)
-      </span>
-      <button
-        type="button"
-        aria-label="Xóa tô sáng ảnh hưởng"
-        class="rounded-full p-0.5 hover:bg-cyan-200/70 dark:hover:bg-cyan-500/30"
-        @click="explorer.clearImpactHighlight()"
-      >
-        <X class="h-3.5 w-3.5" />
-      </button>
-    </div>
-
-    <div
-      v-if="hasSnapshotDiff && explorer.snapshotDiffOverlay.value"
-      class="inline-flex items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50/95 px-3 py-1 text-xs font-semibold text-emerald-900 shadow-sm backdrop-blur-md dark:border-emerald-500/45 dark:bg-emerald-500/15 dark:text-emerald-200"
-    >
-      <Sparkles class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-      <span>
-        Diff: <strong>{{ explorer.snapshotDiffOverlay.value.label }}</strong> ({{ snapshotDiffCount }} node thay đổi đang hiển thị)
-      </span>
-      <button
-        type="button"
-        aria-label="Tắt lớp phủ Diff"
-        class="rounded-full p-0.5 hover:bg-emerald-200/70 dark:hover:bg-emerald-500/30"
-        @click="explorer.clearSnapshotDiffOverlay()"
-      >
-        <X class="h-3.5 w-3.5" />
-      </button>
-    </div>
-
+  <div data-tour="canvas-filter" class="pointer-events-auto flex flex-col items-start gap-1.5">
     <div class="flex flex-wrap items-center gap-1.5">
       <button
         type="button"
@@ -224,6 +231,105 @@ const toggleStatus = (status: NodeStatus) => {
           Xóa lọc
         </button>
       </template>
+    </div>
+
+    <div
+      v-if="hasImpact && explorer.impactHighlight.value"
+      class="inline-flex items-center gap-2 rounded-full border border-cyan-300 bg-cyan-50/95 px-3 py-1 text-xs font-semibold text-cyan-900 shadow-sm backdrop-blur-md dark:border-cyan-500/45 dark:bg-cyan-500/15 dark:text-cyan-200"
+    >
+      <Network class="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+      <span>
+        Impact: <strong>{{ explorer.impactHighlight.value.label }}</strong> ({{ matchedCount }} node đang hiển thị)
+      </span>
+      <button
+        type="button"
+        aria-label="Xóa tô sáng ảnh hưởng"
+        class="rounded-full p-0.5 hover:bg-cyan-200/70 dark:hover:bg-cyan-500/30"
+        @click="explorer.clearImpactHighlight()"
+      >
+        <X class="h-3.5 w-3.5" />
+      </button>
+    </div>
+
+    <div
+      v-if="hasTrace && explorer.traceOverlay.value"
+      class="inline-flex items-center gap-2 rounded-full border border-fuchsia-300 bg-fuchsia-50/95 px-3 py-1 text-xs font-semibold text-fuchsia-950 shadow-sm backdrop-blur-md dark:border-cyan-500/45 dark:bg-cyan-500/15 dark:text-cyan-200"
+    >
+      <Bug class="h-3.5 w-3.5 text-rose-500" />
+      <span>
+        {{ explorer.traceOverlay.value.label }}
+        <template v-if="explorer.traceOverlay.value.errorNodeIds.size > 0">
+          · <strong class="text-rose-600 dark:text-rose-300">{{ explorer.traceOverlay.value.errorNodeIds.size }} lỗi</strong>
+        </template>
+      </span>
+      <button
+        type="button"
+        aria-label="Tắt Log Trace"
+        class="rounded-full p-0.5 hover:bg-fuchsia-200/70 dark:hover:bg-cyan-500/30"
+        @click="explorer.clearTraceOverlay()"
+      >
+        <X class="h-3.5 w-3.5" />
+      </button>
+    </div>
+
+    <div
+      v-if="hasSnapshotDiff && explorer.snapshotDiffOverlay.value"
+      class="inline-flex flex-wrap items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50/95 px-3 py-1 text-xs font-semibold text-emerald-900 shadow-sm backdrop-blur-md dark:border-emerald-500/45 dark:bg-emerald-500/15 dark:text-emerald-200"
+    >
+      <Sparkles class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+      <span>
+        Diff: <strong>{{ explorer.snapshotDiffOverlay.value.label }}</strong>
+        (+{{ snapshotDiffStats.added }} mới · ~{{ snapshotDiffStats.modified }} sửa · {{ snapshotDiffStats.visible }} đang hiện)
+      </span>
+      <button
+        type="button"
+        class="rounded-full border px-2 py-0.2 text-[10.5px] font-bold transition"
+        :class="
+          explorer.snapshotDiffOverlay.value.onlyChanged
+            ? 'border-emerald-600 bg-emerald-600 text-white'
+            : 'border-emerald-300 bg-white/80 text-emerald-800 hover:bg-white dark:border-emerald-500/40 dark:bg-slate-900 dark:text-emerald-200'
+        "
+        @click="explorer.toggleSnapshotDiffOnlyChanges()"
+      >
+        Chỉ node đổi
+      </button>
+      <button
+        type="button"
+        aria-label="Tắt lớp phủ Diff"
+        class="rounded-full p-0.5 hover:bg-emerald-200/70 dark:hover:bg-emerald-500/30"
+        @click="explorer.clearSnapshotDiffOverlay()"
+      >
+        <X class="h-3.5 w-3.5" />
+      </button>
+    </div>
+
+    <div
+      v-if="pinnedNodes.length > 0"
+      class="flex flex-wrap items-center gap-1.5 rounded-xl border border-amber-200/90 bg-amber-50/90 px-2.5 py-1 text-[11px] shadow-2xs backdrop-blur-md dark:border-amber-500/35 dark:bg-amber-500/10"
+    >
+      <span class="inline-flex items-center gap-1 font-bold text-amber-800 dark:text-amber-300">
+        <Pin class="h-3 w-3" />
+        Đang làm ({{ pinnedNodes.length }}):
+      </span>
+      <button
+        v-for="pNode in pinnedNodes"
+        :key="pNode.id"
+        type="button"
+        class="max-w-36 truncate rounded-md border border-amber-200 bg-white px-2 py-0.5 font-semibold text-slate-700 transition hover:border-amber-400 hover:text-amber-900 dark:border-amber-500/30 dark:bg-slate-900 dark:text-slate-200"
+        @click="explorer.jumpToNode(pNode.id)"
+      >
+        {{ getNodeDisplayLabel(pNode, 'tech') }}
+      </button>
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 font-bold text-indigo-800 hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-200"
+        title="Đóng gói tất cả node đang ghim thành 1 Multi-Node AI Prompt"
+        @click="copyPinnedMultiNodePrompt"
+      >
+        <Check v-if="copiedPinnedPrompt" class="h-3 w-3 text-emerald-500" />
+        <Sparkles v-else class="h-3 w-3" />
+        {{ copiedPinnedPrompt ? 'Đã copy Prompt' : 'AI Prompt nhóm' }}
+      </button>
     </div>
   </div>
 </template>

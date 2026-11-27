@@ -118,3 +118,59 @@ export function detectCodeRefLanguage(refText: string): CodeRefLanguageMeta | nu
   }
   return null;
 }
+
+export type SourceHighlightLang = 'swift' | 'kotlin' | 'ts' | 'json' | 'text';
+
+const CODE_KEYWORDS = new Set([
+  'import', 'package', 'class', 'struct', 'enum', 'protocol', 'interface', 'extension',
+  'object', 'data', 'sealed', 'open', 'final', 'private', 'public', 'internal', 'protected',
+  'fileprivate', 'override', 'func', 'fun', 'suspend', 'inline', 'var', 'let', 'val', 'const',
+  'typealias', 'init', 'deinit', 'return', 'if', 'else', 'guard', 'switch', 'when', 'case',
+  'default', 'for', 'while', 'in', 'try', 'catch', 'throw', 'throws', 'async', 'await',
+  'true', 'false', 'nil', 'null', 'self', 'this', 'super', 'weak', 'unowned', 'companion',
+]);
+
+const CODE_LINE_TOKEN_RE =
+  /(\/\/.*$|"(?:\\.|[^"\\])*"|@[A-Za-z_][A-Za-z0-9_]*|\b[A-Za-z_][A-Za-z0-9_]*\b|\b\d+(?:\.\d+)?\b)/g;
+
+/**
+ * Tô màu cú pháp nhẹ, an toàn XSS cho từng dòng Swift/Kotlin/TS trong Source Peek.
+ */
+export function highlightCodeLine(line: string, lang: SourceHighlightLang): string {
+  if (!line) return '';
+  if (lang === 'json') return highlightJson(line);
+  if (lang === 'text') return escapeHtml(line);
+
+  let result = '';
+  let lastIndex = 0;
+
+  for (const match of line.matchAll(CODE_LINE_TOKEN_RE)) {
+    const idx = match.index ?? 0;
+    if (idx > lastIndex) {
+      result += escapeHtml(line.slice(lastIndex, idx));
+    }
+
+    const token = match[0];
+    let cls = '';
+    if (token.startsWith('//')) {
+      cls = 'text-slate-500 italic';
+    } else if (token.startsWith('"')) {
+      cls = 'text-emerald-300';
+    } else if (token.startsWith('@')) {
+      cls = 'text-amber-300';
+    } else if (/^\d/.test(token)) {
+      cls = 'text-amber-300';
+    } else if (CODE_KEYWORDS.has(token)) {
+      cls = 'text-fuchsia-300 font-semibold';
+    }
+
+    result += cls ? `<span class="${cls}">${escapeHtml(token)}</span>` : escapeHtml(token);
+    lastIndex = idx + token.length;
+  }
+
+  if (lastIndex < line.length) {
+    result += escapeHtml(line.slice(lastIndex));
+  }
+
+  return result;
+}

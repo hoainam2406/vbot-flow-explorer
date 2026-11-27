@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ArrowRight, Search, Terminal } from 'lucide-vue-next';
+import { normalizeGuideSearch } from '../core/appTourEngine';
 import {
   DEV_ONBOARDING_STEPS,
   TECH_GLOSSARY_TERMS,
@@ -11,6 +12,7 @@ import {
 const props = defineProps<{
   tab: 'onboarding' | 'glossary';
   techBranch?: string;
+  externalQuery?: string;
 }>();
 
 const emit = defineEmits<{
@@ -24,14 +26,17 @@ onMounted(() => {
   glossaryQuery.value = '';
 });
 
+const effectiveQuery = computed(() => {
+  const local = glossaryQuery.value.trim();
+  if (local) return local;
+  return props.externalQuery?.trim() ?? '';
+});
+
 const filteredGlossary = computed<TechGlossaryItem[]>(() => {
-  const q = glossaryQuery.value.trim().toLowerCase();
+  const q = normalizeGuideSearch(effectiveQuery.value);
   if (!q) return TECH_GLOSSARY_TERMS;
-  return TECH_GLOSSARY_TERMS.filter(
-    (item) =>
-      item.term.toLowerCase().includes(q) ||
-      item.shortTag.toLowerCase().includes(q) ||
-      item.explanation.toLowerCase().includes(q),
+  return TECH_GLOSSARY_TERMS.filter((item) =>
+    normalizeGuideSearch(`${item.term} ${item.shortTag} ${item.explanation}`).includes(q),
   );
 });
 </script>
@@ -96,7 +101,7 @@ const filteredGlossary = computed<TechGlossaryItem[]>(() => {
     </div>
 
     <p v-if="filteredGlossary.length === 0" class="py-8 text-center text-xs text-slate-500 dark:text-slate-400">
-      Không tìm thấy thuật ngữ phù hợp với "{{ glossaryQuery }}".
+      Không tìm thấy thuật ngữ phù hợp với "{{ effectiveQuery }}".
     </p>
 
     <ul v-else class="space-y-2.5">

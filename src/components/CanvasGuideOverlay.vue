@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, inject, onMounted, ref } from 'vue';
-import { BookOpen, Compass, HelpCircle, Sparkles, X } from 'lucide-vue-next';
+import { BookOpen, Compass, Play, Sparkles, X } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
+import type { AppTourTrack } from '../core/appTourEngine';
 import {
   loadOnboardingDismissed,
   saveOnboardingDismissed,
@@ -9,6 +10,7 @@ import {
 
 const emit = defineEmits<{
   openGuide: [];
+  startTour: [track?: AppTourTrack];
 }>();
 
 const explorer = inject(FLOW_EXPLORER_KEY);
@@ -43,15 +45,19 @@ const openCallingSample = () => {
   explorer.selectNode('mod-calling', { recordHistory: false });
 };
 
+const launchTour = () => {
+  emit('startTour', isTechView.value ? 'tech' : 'overview');
+};
+
 const techBannerTip = __ENABLE_TECH_MODE__
-  ? 'Mẹo cho Dev: Bấm thẻ xem chi tiết & Bridge · ⌘K tìm hàm / lệnh · Rê chuột lên thẻ để soi nhánh liên kết · Dùng So sánh / Chênh lệch đối chiếu iOS ↔ Android.'
+  ? 'Mẹo nhanh: Chạy Tour tương tác để nắm toàn bộ Workspace, dùng ⌘K tìm API/lệnh, hoặc mở Sổ tay đầy đủ cho tất cả công cụ Dev.'
   : '';
 </script>
 
 <template>
   <div
     v-if="!dismissedBanner"
-    class="pointer-events-auto max-w-2xl rounded-2xl border border-slate-200/90 bg-white/92 px-3.5 py-2.5 shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/90"
+    class="pointer-events-auto max-w-2xl rounded-2xl border border-slate-200/90 bg-white/94 px-3.5 py-2.5 shadow-md backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/92"
   >
     <div class="flex items-start justify-between gap-3">
       <div class="flex items-start gap-2.5">
@@ -59,18 +65,36 @@ const techBannerTip = __ENABLE_TECH_MODE__
           <Sparkles class="h-3.5 w-3.5" />
         </span>
 
-        <div class="space-y-1.5">
+        <div class="space-y-2">
           <p v-if="isTechView" class="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
             {{ techBannerTip }}
           </p>
           <p v-else class="text-xs leading-relaxed text-slate-700 dark:text-slate-300">
-            <span class="font-semibold text-slate-900 dark:text-slate-100">Cách xem nhanh:</span>
-            Bấm vào thẻ để đọc chi tiết · Bấm nút
+            <span class="font-semibold text-slate-900 dark:text-slate-100">Mới sử dụng lần đầu?</span>
+            Bấm thẻ xem chi tiết · Bấm
             <code class="rounded border border-slate-200 bg-slate-100 px-1 py-0.5 font-mono text-[10px] font-bold text-indigo-700 dark:border-slate-700 dark:bg-slate-800 dark:text-cyan-300">+N</code>
             (hoặc bấm đúp) để bung luồng · Giữ vùng trống để kéo sơ đồ.
           </p>
 
-          <div class="flex flex-wrap items-center gap-2">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-bold text-white shadow-2xs transition hover:bg-indigo-500 dark:bg-cyan-600 dark:hover:bg-cyan-500"
+              @click="launchTour"
+            >
+              <Play class="h-3 w-3 fill-current" />
+              Bắt đầu Tour hướng dẫn
+            </button>
+
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800"
+              @click="emit('openGuide')"
+            >
+              <BookOpen class="h-3 w-3 text-indigo-600 dark:text-cyan-400" />
+              Mở Sổ tay đầy đủ
+            </button>
+
             <button
               v-if="canQuickDemoCalling"
               type="button"
@@ -80,16 +104,6 @@ const techBannerTip = __ENABLE_TECH_MODE__
               <Compass class="h-3 w-3" />
               Mở thử Gọi thoại
             </button>
-
-            <button
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-200 dark:hover:bg-slate-800"
-              @click="emit('openGuide')"
-            >
-              <BookOpen v-if="isTechView" class="h-3 w-3 text-indigo-600 dark:text-cyan-400" />
-              <HelpCircle v-else class="h-3 w-3 text-indigo-600 dark:text-cyan-400" />
-              {{ isTechView ? 'Từ điển VBot & Lộ trình Dev' : 'Hướng dẫn & Phím tắt' }}
-            </button>
           </div>
         </div>
       </div>
@@ -97,7 +111,7 @@ const techBannerTip = __ENABLE_TECH_MODE__
       <button
         type="button"
         aria-label="Ẩn gợi ý thao tác"
-        title="Ẩn gợi ý này"
+        title="Ẩn gợi ý này (mở lại bất kỳ lúc nào qua nút Hướng dẫn ?)"
         class="shrink-0 rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-200"
         @click="dismissBanner"
       >

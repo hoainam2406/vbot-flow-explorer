@@ -9,10 +9,12 @@ const props = withDefaults(
   defineProps<{
     showParity?: boolean;
     parityActive?: boolean;
+    embedded?: boolean;
   }>(),
   {
     showParity: true,
     parityActive: false,
+    embedded: false,
   },
 );
 
@@ -35,12 +37,17 @@ const selectPlatform = (mode: PlatformViewMode) => {
 </script>
 
 <template>
-  <div class="inline-flex items-center gap-1.5">
+  <div data-tour="topbar-platform" class="inline-flex items-center gap-1.5">
     <div
       v-if="!props.parityActive"
       role="group"
       aria-label="Chọn nền tảng kỹ thuật"
-      class="inline-flex items-center rounded-lg border border-slate-200 bg-slate-100 p-0.5 text-xs font-semibold dark:border-slate-700/80 dark:bg-slate-900"
+      class="inline-flex items-center rounded-lg p-0.5 text-xs font-semibold"
+      :class="
+        props.embedded
+          ? 'bg-slate-100/85 dark:bg-slate-800/80'
+          : 'border border-slate-200 bg-slate-100 dark:border-slate-700/80 dark:bg-slate-900'
+      "
     >
       <button
         type="button"

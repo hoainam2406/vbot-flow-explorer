@@ -7,9 +7,11 @@ import { describe, expect, it } from 'vitest';
 import {
   DevMiddlewareError,
   inspectLocalGitRepo,
+  inspectLocalGitStatus,
   isAllowedProxyUrl,
   listRecentDatasetCommits,
   readDatasetSnapshotFromGit,
+  readLocalSourceFile,
   saveUploadedMediaFile,
   validateGitRef,
 } from '../plugins/devWorkspaceMiddleware';
@@ -139,5 +141,79 @@ describe('devWorkspaceMiddleware security & helpers', () => {
     expect(snap.dataset.branches.length).toBeGreaterThan(0);
 
     expect(() => readDatasetSnapshotFromGit(repoRoot, '--evil')).toThrowError(DevMiddlewareError);
+  });
+
+  it('reads local source files safely with symbol search, git diff, and symlink escape protection', () => {
+    const tmpRepo = fs.mkdtempSync(path.join(os.tmpdir(), 'vbot-src-peek-'));
+    const outsideFile = path.join(os.tmpdir(), `vbot-outside-${Date.now()}.swift`);
+    fs.writeFileSync(outsideFile, 'let secret = "outside"\n');
+
+    try {
+      execFileSync('git', ['init'], { cwd: tmpRepo, stdio: 'ignore' });
+      execFileSync('git', ['config', 'user.email', 'test@vbot.vn'], { cwd: tmpRepo });
+      execFileSync('git', ['config', 'user.name', 'Test Dev'], { cwd: tmpRepo });
+
+      fs.mkdirSync(path.join(tmpRepo, 'VBot', 'Call'), { recursive: true });
+      const targetFile = path.join(tmpRepo, 'VBot', 'Call', 'CallSurveyHelper.swift');
+      fs.writeFileSync(
+        targetFile,
+        ['import Foundation', '', 'final class CallSurveyHelper {', '  func surveyCall() {', '    print("ok")', '  }', '}'].join('\n'),
+      );
+      execFileSync('git', ['add', '.'], { cwd: tmpRepo });
+      execFileSync('git', ['commit', '-m', 'init'], { cwd: tmpRepo, stdio: 'ignore' });
+
+      // Modify line to verify gitDiff inclusion
+      fs.writeFileSync(
+        targetFile,
+        ['import Foundation', '', 'final class CallSurveyHelper {', '  func surveyCall() {', '    print("updated")', '  }', '}'].join('\n'),
+      );
+
+      const readRes = readLocalSourceFile({
+        repoPath: tmpRepo,
+        codeRef: 'VBot/Call/CallSurveyHelper.swift',
+        platform: 'ios',
+        symbolQuery: 'surveyCall',
+        includeGitDiff: true,
+      });
+      expect(readRes.ok).toBe(true);
+      expect(readRes.language).toBe('swift');
+      expect(readRes.primaryLine).toBe(4);
+      expect(readRes.matchedLines).toContain(4);
+      expect(readRes.gitDiff).toContain('print("updated")');
+
+      // Symlink pointing outside repo must be blocked with 403
+      const symlinkPath = path.join(tmpRepo, 'VBot', 'Call', 'EscapeLink.swift');
+      fs.symlinkSync(outsideFile, symlinkPath);
+      expect(() =>
+        readLocalSourceFile({
+          repoPath: tmpRepo,
+          codeRef: 'VBot/Call/EscapeLink.swift',
+          platform: 'ios',
+        }),
+      ).toThrowError(DevMiddlewareError);
+
+      // Binary file must be rejected
+      const binPath = path.join(tmpRepo, 'VBot', 'Call', 'blob.swift');
+      fs.writeFileSync(binPath, Buffer.from([0x00, 0x01, 0x02, 0x03]));
+      expect(() =>
+        readLocalSourceFile({
+          repoPath: tmpRepo,
+          codeRef: 'VBot/Call/blob.swift',
+          platform: 'ios',
+        }),
+      ).toThrowError(DevMiddlewareError);
+
+      const statusRes = inspectLocalGitStatus({
+        iosRepoPath: tmpRepo,
+        androidRepoPath: '/non-existent-path-vbot-test',
+      });
+      expect(statusRes.ok).toBe(true);
+      expect(statusRes.ios?.dirtyCount).toBeGreaterThan(0);
+      expect(statusRes.ios?.changedFiles).toContain('VBot/Call/CallSurveyHelper.swift');
+      expect(statusRes.android?.error).toBeTruthy();
+    } finally {
+      fs.rmSync(tmpRepo, { recursive: true, force: true });
+      if (fs.existsSync(outsideFile)) fs.unlinkSync(outsideFile);
+    }
   });
 });

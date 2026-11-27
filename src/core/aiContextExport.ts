@@ -532,3 +532,233 @@ export function buildMiniAppAiContextPrompt(contract: MiniAppContract): string {
 
   return lines.join("\n") + "\n";
 }
+
+export interface LiveSourceContextSnippet {
+  platform: Platform;
+  ref: string;
+  excerpt?: string;
+  gitDiff?: string;
+}
+
+/**
+ * Tạo AI Port Prompt chuyên dụng để đồng bộ logic/UI giữa iOS (Swift) và Android (Kotlin),
+ * hỗ trợ nhúng kèm code hoặc git diff thực tế từ repo local.
+ */
+export function buildParityPortPrompt(
+  item: ParityItem,
+  dataset: MergedFlowDataset,
+  options: {
+    direction: "ios_to_android" | "android_to_ios" | "sync_both";
+    settings?: DevWorkspaceSettings;
+    liveSources?: LiveSourceContextSnippet[];
+  },
+): string {
+  const { direction, settings, liveSources = [] } = options;
+  const node = findNodeById(dataset, item.nodeId);
+  const iosRefs = collectPlatformCodeRefs(node, "ios");
+  const androidRefs = collectPlatformCodeRefs(node, "android");
+  const branchName =
+    settings?.branchOverride?.trim() || dataset.app.techBranch || "Nam-dev";
+
+  const heading =
+    direction === "ios_to_android"
+      ? `[PORT iOS → Android] ${item.code} · ${item.nodeLabel}`
+      : direction === "android_to_ios"
+        ? `[PORT Android → iOS] ${item.code} · ${item.nodeLabel}`
+        : `[SYNC iOS ↔ Android] ${item.code} · ${item.nodeLabel}`;
+
+  const mission =
+    direction === "ios_to_android"
+      ? "Hãy lấy hành vi hiện tại của **iOS (Swift)** làm chuẩn và port/đồng bộ sang **Android (Kotlin/Java)** trong `VBot-Android`."
+      : direction === "android_to_ios"
+        ? "Hãy lấy hành vi hiện tại của **Android (Kotlin/Java)** làm chuẩn và port/đồng bộ sang **iOS (Swift)** trong `VBot-iOS`."
+        : "Hãy đối chiếu cả 2 nền tảng **iOS (Swift)** và **Android (Kotlin/Java)** để đưa ra bản vá đồng bộ cả 2 bên theo hợp đồng chung.";
+
+  const iosApis = collectPlatformList(
+    node?.techDetail?.apisOrEvents,
+    node?.techDetail?.byPlatform?.ios?.apisOrEvents,
+  );
+  const androidApis = collectPlatformList(
+    node?.techDetail?.apisOrEvents,
+    node?.techDetail?.byPlatform?.android?.apisOrEvents,
+  );
+  const edgeCases = node ? collectNodeEdgeCases(node) : [];
+
+  const lines: string[] = [
+    `# ${heading}`,
+    "",
+    mission,
+    "",
+    "## 1. Ngữ cảnh chênh lệch & Quyết định kỹ thuật",
+    `- **Mã Parity:** \`${item.code}\` · **Node ID:** \`${item.nodeId}\``,
+    `- **Đường dẫn luồng:** ${item.breadcrumb.join(" › ")}`,
+    `- **Nhánh đối soát:** \`${branchName}\``,
+    `- **Phân loại:** ${PARITY_VERDICT_LABELS[item.assessment.verdict]} · ${PARITY_NEEDS_FIX_LABELS[item.assessment.needsFix]} · fixTarget: ${PARITY_FIX_TARGET_LABELS[item.assessment.fixTarget]}`,
+    `- **Giải thích:** ${item.assessment.explanation}`,
+    `- **Khuyến nghị:** ${item.assessment.recommendation}`,
+    ...(item.platformDiffNote
+      ? [`- **Diff Note:** ${item.platformDiffNote}`]
+      : []),
+    "",
+    "## 2. So sánh xử lý hiện tại",
+    `- **iOS (Swift):** ${item.iosSummary || node?.techDetail?.byPlatform?.ios?.summary || "Chưa ghi chú"}`,
+    `- **Android (Kotlin):** ${item.androidSummary || node?.techDetail?.byPlatform?.android?.summary || "Chưa ghi chú"}`,
+  ];
+
+  if (iosApis.length > 0 || androidApis.length > 0) {
+    lines.push("", "## 3. API / Event / Socket");
+    if (iosApis.length > 0) {
+      lines.push(`- **iOS:** ${iosApis.map((a) => `\`${a}\``).join(", ")}`);
+    }
+    if (androidApis.length > 0) {
+      lines.push(
+        `- **Android:** ${androidApis.map((a) => `\`${a}\``).join(", ")}`,
+      );
+    }
+  }
+
+  lines.push("", "## 4. File mã nguồn liên quan");
+  lines.push("### VBot-iOS");
+  if (iosRefs.length > 0) {
+    lines.push(
+      ...iosRefs.map((ref) => formatPlatformCodeRefLine(ref, "ios", settings)),
+    );
+  } else {
+    lines.push("- (Chưa gắn codeRefs iOS)");
+  }
+  lines.push("", "### VBot-Android");
+  if (androidRefs.length > 0) {
+    lines.push(
+      ...androidRefs.map((ref) =>
+        formatPlatformCodeRefLine(ref, "android", settings),
+      ),
+    );
+  } else {
+    lines.push("- (Chưa gắn codeRefs Android)");
+  }
+
+  if (edgeCases.length > 0) {
+    lines.push("", "## 5. Edge Cases bắt buộc giữ nguyên khi Port");
+    lines.push(...edgeCases.map((e) => `- ${e}`));
+  }
+
+  if (liveSources.length > 0) {
+    lines.push("", "## 6. Trích đoạn Source / Git Diff thực tế từ local");
+    for (const src of liveSources) {
+      lines.push(
+        "",
+        `### [${src.platform.toUpperCase()}] \`${src.ref}\``,
+      );
+      if (src.gitDiff?.trim()) {
+        lines.push("```diff", src.gitDiff.trim(), "```");
+      }
+      if (src.excerpt?.trim()) {
+        const lang = src.platform === "ios" ? "swift" : "kotlin";
+        lines.push(`\`\`\`${lang}`, src.excerpt.trim(), "```");
+      }
+    }
+  }
+
+  lines.push(
+    "",
+    "## Yêu cầu đầu ra",
+    "1. Đối chiếu logic thực tế trong các file ở mục 4 (và diff ở mục 6 nếu có).",
+    "2. Chỉ ra chính xác điểm lệch dòng/hàm và áp dụng bản vá cho bên mục tiêu.",
+    "3. Giữ nguyên edge cases, error codes và tương thích ngược với Mini App Bridge.",
+  );
+
+  return lines.join("\n") + "\n";
+}
+
+/**
+ * Đóng gói nhiều node (đang ghim hoặc đang chạm trong git status) thành 1 AI Prompt duy nhất.
+ */
+export function buildMultiNodeAiContextPrompt(
+  nodes: FlowNodeData[],
+  dataset: MergedFlowDataset,
+  options: {
+    title?: string;
+    platformMode: PlatformViewMode;
+    settings?: DevWorkspaceSettings;
+    personalNotesByNodeId?: Record<string, string>;
+    changedFiles?: string[];
+  },
+): string {
+  const uniqueNodes: FlowNodeData[] = [];
+  const seenIds = new Set<string>();
+  for (const n of nodes) {
+    if (!seenIds.has(n.id)) {
+      seenIds.add(n.id);
+      uniqueNodes.push(n);
+    }
+  }
+
+  const branchName =
+    options.settings?.branchOverride?.trim() ||
+    dataset.app.techBranch ||
+    "Nam-dev";
+  const allCodeRefs = new Set<string>();
+  const allApis = new Set<string>();
+  const allEdgeCases = new Set<string>();
+
+  for (const node of uniqueNodes) {
+    for (const r of collectNodeCodeRefs(node)) allCodeRefs.add(r);
+    for (const a of collectNodeApis(node)) allApis.add(a);
+    for (const e of collectNodeEdgeCases(node)) allEdgeCases.add(e);
+  }
+
+  const lines: string[] = [
+    `# ${options.title?.trim() || `Ngữ cảnh Multi-Node VBot (${uniqueNodes.length} node)`}`,
+    "",
+    `- **Nhánh đối soát:** \`${branchName}\` · **Platform đang xem:** \`${options.platformMode}\``,
+    `- **Tổng số node đóng gói:** ${uniqueNodes.length}`,
+  ];
+
+  if (options.changedFiles && options.changedFiles.length > 0) {
+    lines.push(
+      "",
+      `## File đang thay đổi trên Git local (${options.changedFiles.length})`,
+      ...options.changedFiles.slice(0, 40).map((f) => `- \`${f}\``),
+    );
+  }
+
+  lines.push("", "## Danh sách Node & Yêu cầu kỹ thuật");
+  for (const node of uniqueNodes) {
+    const label = getNodeDisplayLabel(node, "tech");
+    const note = options.personalNotesByNodeId?.[node.id]?.trim();
+    lines.push(
+      "",
+      `### ${label} (\`${node.id}\` · \`${node.kind}\`)`,
+      `- **Tổng quan:** ${node.summary.overview}`,
+      ...(node.summary.tech ? [`- **Kỹ thuật:** ${node.summary.tech}`] : []),
+      ...(node.techDetail?.platformDiffNote
+        ? [`- **Chênh lệch iOS/Android:** ${node.techDetail.platformDiffNote}`]
+        : []),
+      ...(node.techDetail?.parityAssessment
+        ? [
+            `- **Parity (${node.techDetail.parityAssessment.code ?? node.techDetail.parityAssessment.verdict}):** ${node.techDetail.parityAssessment.recommendation}`,
+          ]
+        : []),
+      ...(note ? [`- **Ghi chú Dev cá nhân:** ${note}`] : []),
+    );
+  }
+
+  if (allCodeRefs.size > 0) {
+    lines.push("", "## Tổng hợp File mã nguồn cần đọc (`codeRefs`)");
+    lines.push(
+      ...[...allCodeRefs].map((ref) => formatCodeRefLine(ref, options.settings)),
+    );
+  }
+
+  if (allApis.size > 0) {
+    lines.push("", "## Tổng hợp APIs / WebSocket / Sự kiện");
+    lines.push(...[...allApis].map((a) => `- \`${a}\``));
+  }
+
+  if (allEdgeCases.size > 0) {
+    lines.push("", "## Tổng hợp Edge Cases cần bảo toàn");
+    lines.push(...[...allEdgeCases].map((e) => `- ${e}`));
+  }
+
+  return lines.join("\n") + "\n";
+}

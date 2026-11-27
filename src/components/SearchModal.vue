@@ -3,6 +3,7 @@ import { computed, inject, nextTick, ref, watch, type Component } from 'vue';
 import {
   ArrowLeftRight,
   ArrowUpDown,
+  Bug,
   Clock,
   Command,
   CornerDownRight,
@@ -16,22 +17,27 @@ import {
   Maximize2,
   Moon,
   Network,
+  Pin,
   Play,
   Scale,
   Search,
   Settings,
   ShieldCheck,
   Smartphone,
+  Sparkles,
   Sun,
   Upload,
+  Webhook,
   X,
 } from 'lucide-vue-next';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { searchFlowNodes, type SearchHit } from '../composables/useSearch';
 import { useTheme } from '../composables/useTheme';
 import { useToast } from '../composables/useToast';
+import type { AppTourTrack } from '../core/appTourEngine';
 import { saveLayoutDirection } from '../core/explorerPreferences';
 import { getNodeDisplayLabel } from '../core/graphEngine';
+import type { GovernanceHubTab } from './GovernanceHubModal.vue';
 import type { FlowNodeData } from '../data/schema';
 
 const props = defineProps<{
@@ -42,10 +48,11 @@ const emit = defineEmits<{
   'update:open': [value: boolean];
   openParity: [];
   openGuide: [];
+  startTour: [track?: AppTourTrack];
   openSettings: [];
   openImpact: [];
   openMiniappBridge: [];
-  openGovernance: [tab?: 'qa' | 'health' | 'diff'];
+  openGovernance: [tab?: GovernanceHubTab];
   importPatch: [];
   exportPng: [];
   exportSvg: [];
@@ -170,10 +177,22 @@ const allCommands = computed<PaletteCommand[]>(() => {
       },
     },
     {
+      id: 'cmd-start-tour',
+      title: 'Bắt đầu Tour hướng dẫn tương tác',
+      subtitle: 'Khoanh sáng từng khu vực giao diện và giải thích cho người mới',
+      keywords: 'tour walkthrough huong dan nguoi moi spotlight onboarding',
+      icon: Play,
+      run: () => {
+        const track: AppTourTrack =
+          __ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech' ? 'tech' : 'overview';
+        emit('startTour', track);
+      },
+    },
+    {
       id: 'cmd-guide',
-      title: 'Mở Hướng dẫn & Phím tắt',
-      subtitle: 'Xem cách đọc sơ đồ và các phím tắt điều hướng',
-      keywords: 'huong dan help phim tat shortcut glossary',
+      title: 'Mở Sổ tay Hướng dẫn Toàn tập & Phím tắt',
+      subtitle: 'Hướng dẫn đầy đủ mọi chức năng, tình huống nhanh, phím tắt & từ điển',
+      keywords: 'huong dan help phim tat shortcut glossary so tay',
       shortcut: '?',
       icon: HelpCircle,
       run: () => {
@@ -284,15 +303,75 @@ const allCommands = computed<PaletteCommand[]>(() => {
         },
       },
       {
-        id: 'cmd-gov-qa',
-        title: 'Mở QA Release Hub',
-        subtitle: 'Theo dõi tiến độ Pass/Fail toàn app theo đợt phát hành & xuất Sign-off',
-        keywords: 'qa release hub checklist signoff test dot phat hanh',
-        badge: 'Tech',
+        id: 'cmd-gov-dashboard',
+        title: 'Mở Dev Home Dashboard (Tổng quan việc)',
+        subtitle: 'Xem hàng đợi Parity iOS/Android, Node đang ghim, WIP & Task VbM-*',
+        keywords: 'dev home dashboard tong quan viec parity wip pin',
+        badge: 'Dev',
+        icon: Layers,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'dashboard');
+        },
+      },
+      {
+        id: 'cmd-gov-nodes',
+        title: 'Mở Bảng Quản lý Node hàng loạt',
+        subtitle: 'Lọc toàn bộ node và cập nhật hàng loạt status, ngày kiểm, task URL',
+        keywords: 'quan ly node bang bulk table status lastVerifiedAt owner',
+        badge: 'Dev',
         icon: ShieldCheck,
         run: () => {
           explorer.setAudienceMode('tech');
-          emit('openGovernance', 'qa');
+          emit('openGovernance', 'nodes');
+        },
+      },
+      {
+        id: 'cmd-gov-workboard',
+        title: 'Mở Dev Workboard (Task VbM-*)',
+        subtitle: 'Bảng Kanban cá nhân gắn mã VbM-* trực tiếp lên node',
+        keywords: 'workboard kanban task vbm todo doing review done',
+        badge: 'Dev',
+        icon: ShieldCheck,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'workboard');
+        },
+      },
+      {
+        id: 'cmd-gov-atlas',
+        title: 'Mở API, WebSocket, SIP & Error Atlas',
+        subtitle: 'Tra cứu ngược endpoint, WS event, Bridge & mục lệch iOS/Android',
+        keywords: 'api atlas websocket sip dtmf error code endpoint',
+        badge: 'Dev',
+        icon: Webhook,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'atlas');
+        },
+      },
+      {
+        id: 'cmd-gov-tracer',
+        title: 'Mở Debug Log-to-Flow Tracer',
+        subtitle: 'Dán log Xcode / Logcat / WS để tô đường chạy lỗi lên sơ đồ',
+        keywords: 'log tracer debug xcode logcat crash stacktrace',
+        badge: 'Dev',
+        icon: Bug,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'tracer');
+        },
+      },
+      {
+        id: 'cmd-gov-diff',
+        title: 'So sánh nhánh & Phiên bản luồng (Branch / Snapshot Diff)',
+        subtitle: 'Đối chiếu trực tiếp Nam-dev ↔ Nam-dev-SBSI hoặc commit git',
+        keywords: 'branch snapshot diff changelog phien ban so sanh git sbsi',
+        badge: 'Dev',
+        icon: ShieldCheck,
+        run: () => {
+          explorer.setAudienceMode('tech');
+          emit('openGovernance', 'diff');
         },
       },
       {
@@ -308,15 +387,49 @@ const allCommands = computed<PaletteCommand[]>(() => {
         },
       },
       {
-        id: 'cmd-gov-diff',
-        title: 'So sánh phiên bản luồng (Snapshot Diff)',
-        subtitle: 'Đối chiếu thay đổi luồng giữa 2 snapshot hoặc commit git',
-        keywords: 'snapshot diff changelog phien ban so sanh git',
-        badge: 'Tech',
+        id: 'cmd-gov-qa',
+        title: 'Mở QA Release Hub',
+        subtitle: 'Theo dõi tiến độ Pass/Fail toàn app theo đợt phát hành & xuất Sign-off',
+        keywords: 'qa release hub checklist signoff test dot phat hanh',
+        badge: 'QA',
         icon: ShieldCheck,
         run: () => {
           explorer.setAudienceMode('tech');
-          emit('openGovernance', 'diff');
+          emit('openGovernance', 'qa');
+        },
+      },
+      {
+        id: 'cmd-pinned-prompt',
+        title: 'Copy Multi-Node AI Prompt (Node đang ghim)',
+        subtitle: `Đóng gói ${explorer.pinnedNodeIds.value.length} node đang ghim kèm ghi chú Dev`,
+        keywords: 'pin dang lam multi node ai prompt copy context',
+        badge: 'Dev',
+        icon: Sparkles,
+        run: () => {
+          const pinned = explorer.pinnedNodeIds.value
+            .map((id) => explorer.findNode(id))
+            .filter((n): n is FlowNodeData => Boolean(n));
+          if (pinned.length === 0) {
+            pushToast('Chưa ghim node nào vào Đang làm', 'info');
+            return;
+          }
+          void Promise.all([
+            import('../core/aiContextExport'),
+            import('../core/workspaceSettings'),
+            import('../core/downloadHelper'),
+          ]).then(async ([{ buildMultiNodeAiContextPrompt }, { loadDevWorkspaceSettings }, { copyTextToClipboard }]) => {
+            const prompt = buildMultiNodeAiContextPrompt(pinned, explorer.dataset, {
+              title: `Ngữ cảnh Đang làm (${pinned.length} node)`,
+              platformMode: explorer.platformMode.value,
+              settings: loadDevWorkspaceSettings(),
+              personalNotesByNodeId: explorer.devNotesByNodeId.value,
+            });
+            const ok = await copyTextToClipboard(prompt);
+            pushToast(
+              ok ? `Đã copy Multi-Node AI Prompt (${pinned.length} node)` : 'Không thể copy',
+              ok ? 'success' : 'error',
+            );
+          });
         },
       },
       {
@@ -403,7 +516,25 @@ const matchingCommands = computed(() => {
 
 const recentItems = computed(() => {
   if (parsedQuery.value.commandOnly || parsedQuery.value.text) return [];
-  return explorer.recentNodes.value.slice(0, 4);
+  const merged: FlowNodeData[] = [];
+  const seen = new Set<string>();
+  if (__ENABLE_TECH_MODE__ && explorer.audienceMode.value === 'tech') {
+    for (const id of explorer.pinnedNodeIds.value.slice(0, 3)) {
+      const node = explorer.findNode(id);
+      if (node && !seen.has(node.id)) {
+        seen.add(node.id);
+        merged.push(node);
+      }
+    }
+  }
+  for (const node of explorer.recentNodes.value) {
+    if (merged.length >= 5) break;
+    if (!seen.has(node.id)) {
+      seen.add(node.id);
+      merged.push(node);
+    }
+  }
+  return merged;
 });
 
 const hits = computed(() => {
@@ -545,10 +676,10 @@ const onKeyDown = (event: KeyboardEvent) => {
             </p>
 
             <div v-else class="space-y-3">
-              <!-- Recent Nodes -->
+              <!-- Recent / Pinned Nodes -->
               <section v-if="recentItems.length > 0">
                 <div class="px-3 py-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase dark:text-slate-500">
-                  Vừa xem gần đây
+                  {{ enableTechMode && explorer.pinnedNodeIds.value.length > 0 ? 'Đang làm & Xem gần đây' : 'Vừa xem gần đây' }}
                 </div>
                 <ul class="space-y-0.5">
                   <li v-for="(node, rIdx) in recentItems" :key="`recent-${node.id}`">
@@ -565,7 +696,11 @@ const onKeyDown = (event: KeyboardEvent) => {
                       @click="executeEntry({ kind: 'recent', node })"
                     >
                       <div class="flex min-w-0 items-center gap-2.5">
-                        <Clock class="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
+                        <Pin
+                          v-if="enableTechMode && explorer.pinnedNodeIds.value.includes(node.id)"
+                          class="h-3.5 w-3.5 shrink-0 text-amber-500"
+                        />
+                        <Clock v-else class="h-3.5 w-3.5 shrink-0 text-slate-400 dark:text-slate-500" />
                         <span class="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
                           {{ getNodeDisplayLabel(node, explorer.audienceMode.value) }}
                         </span>

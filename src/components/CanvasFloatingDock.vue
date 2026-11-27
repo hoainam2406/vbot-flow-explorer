@@ -92,7 +92,7 @@ const onToggleZen = () => {
 </script>
 
 <template>
-  <div class="pointer-events-auto absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2">
+  <div data-tour="canvas-dock" class="pointer-events-auto absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2">
     <Transition name="vbot-toast">
       <div
         v-if="legendOpen"

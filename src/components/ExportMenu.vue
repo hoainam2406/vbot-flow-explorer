@@ -10,6 +10,15 @@ import { getNodeDisplayLabel } from '../core/graphEngine';
 import { exportFlowToMermaid } from '../core/mermaidExport';
 import { exportNodeOverviewMarkdown } from '../core/publicMarkdownExport';
 
+const props = withDefaults(
+  defineProps<{
+    embedded?: boolean;
+  }>(),
+  {
+    embedded: false,
+  },
+);
+
 const explorer = inject(FLOW_EXPLORER_KEY);
 if (!explorer) {
   throw new Error('FLOW_EXPLORER_KEY must be provided');
@@ -202,12 +211,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootEl" class="relative">
+  <div ref="rootEl" data-tour="topbar-export" class="relative">
     <button
       type="button"
       :aria-expanded="menuOpen"
       aria-haspopup="menu"
-      class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800"
+      class="inline-flex items-center gap-1.5 rounded-lg text-xs transition"
+      :class="
+        props.embedded
+          ? 'px-2 py-1 font-semibold text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
+          : 'border border-slate-200 bg-white px-2.5 py-1.5 font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700/80 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800'
+      "
       title="Xuất sơ đồ hoặc tài liệu Markdown"
       @click="menuOpen = !menuOpen"
     >

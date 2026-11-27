@@ -6,19 +6,30 @@ import {
   Download,
   Eye,
   GitBranch,
+  GitCompare,
   Loader2,
   Upload,
 } from 'lucide-vue-next';
+import { loadBranchDataset } from 'virtual:flow-branches';
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useToast } from '../composables/useToast';
 import { copyTextToClipboard, downloadTextFile } from '../core/downloadHelper';
+import {
+  buildBranchComparisonSummary,
+  exportBranchReleaseMarkdown,
+} from '../core/branchReleaseSummary';
 import {
   createDatasetSnapshot,
   diffDatasets,
   exportSnapshotDiffChangelogMarkdown,
   parseDatasetSnapshotJson,
 } from '../core/flowSnapshotDiff';
-import type { MergedFlowDataset } from '../data/schema';
+import type { FlowBranchInfo, MergedFlowDataset } from '../data/schema';
+
+const props = defineProps<{
+  availableBranches?: FlowBranchInfo[];
+  activeBranchId?: string;
+}>();
 
 const emit = defineEmits<{
   closeHub: [];
@@ -38,8 +49,35 @@ const gitSnapshotAvailable = ref(false);
 const recentCommits = ref<Array<{ hash: string; date: string; subject: string }>>([]);
 const selectedGitRef = ref('HEAD~1');
 const loadingGitSnap = ref(false);
+const loadingBranchDiff = ref(false);
 const copiedChangelog = ref(false);
 const fileInputRef = ref<HTMLInputElement | null>(null);
+
+const otherBranches = computed(() => {
+  const current = props.activeBranchId || explorer.activeBranchId.value || '';
+  return (props.availableBranches ?? []).filter((b) => b.id !== current);
+});
+const selectedCompareBranchId = ref('');
+const copiedReleaseNote = ref(false);
+
+const compareWithBranch = async (branchIdArg?: string) => {
+  const targetId = (branchIdArg ?? selectedCompareBranchId.value) || otherBranches.value[0]?.id;
+  if (!targetId) return;
+  loadingBranchDiff.value = true;
+  try {
+    const loaded = await loadBranchDataset(targetId);
+    baseDataset.value = loaded;
+    baseLabel.value = `Nhánh ${targetId}`;
+    pushToast(`Đang so sánh luồng hiện tại với nhánh ${targetId}`, 'success');
+  } catch (err) {
+    pushToast(
+      err instanceof Error ? err.message : `Không thể tải dữ liệu nhánh ${targetId}`,
+      'error',
+    );
+  } finally {
+    loadingBranchDiff.value = false;
+  }
+};
 
 onMounted(async () => {
   if (import.meta.env.DEV) {
@@ -75,9 +113,34 @@ const diffReport = computed(() => {
   if (!baseDataset.value) return null;
   return diffDatasets(baseDataset.value, explorer.dataset, {
     baseLabel: baseLabel.value,
-    currentLabel: 'Dataset hiện tại',
+    currentLabel: explorer.activeBranchId.value
+      ? `Nhánh ${explorer.activeBranchId.value}`
+      : 'Dataset hiện tại',
   });
 });
+
+const branchSummary = computed(() => {
+  if (!baseDataset.value) return null;
+  return buildBranchComparisonSummary(baseDataset.value, explorer.dataset, {
+    baseLabel: baseLabel.value,
+    currentLabel: explorer.activeBranchId.value
+      ? `Nhánh ${explorer.activeBranchId.value}`
+      : 'Dataset hiện tại',
+  });
+});
+
+const copyReleaseNote = async () => {
+  if (!branchSummary.value) return;
+  const md = exportBranchReleaseMarkdown(branchSummary.value);
+  const ok = await copyTextToClipboard(md);
+  if (ok) {
+    copiedReleaseNote.value = true;
+    pushToast('Đã copy Release / PR Note (.md + Mermaid)', 'success');
+    setTimeout(() => {
+      copiedReleaseNote.value = false;
+    }, 1600);
+  }
+};
 
 const visibleItems = computed(() => {
   if (!diffReport.value) return [];
@@ -238,6 +301,32 @@ const CHANGE_BADGE: Record<string, { label: string; cls: string }> = {
       </div>
 
       <div
+        v-if="otherBranches.length > 0"
+        class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800"
+      >
+        <span class="font-semibold text-emerald-700 dark:text-emerald-300">So sánh trực tiếp với nhánh khác:</span>
+        <select
+          :value="selectedCompareBranchId || otherBranches[0]?.id"
+          class="rounded-lg border border-emerald-200 bg-emerald-50/70 px-2.5 py-1.5 font-mono text-[11px] font-semibold text-emerald-900 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-200"
+          @change="selectedCompareBranchId = ($event.target as HTMLSelectElement).value"
+        >
+          <option v-for="b in otherBranches" :key="b.id" :value="b.id">
+            {{ b.label }}
+          </option>
+        </select>
+        <button
+          type="button"
+          :disabled="loadingBranchDiff"
+          class="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 font-bold text-white hover:bg-emerald-500 disabled:opacity-60"
+          @click="compareWithBranch()"
+        >
+          <Loader2 v-if="loadingBranchDiff" class="h-3.5 w-3.5 animate-spin" />
+          <GitCompare v-else class="h-3.5 w-3.5" />
+          So sánh nhánh ngay
+        </button>
+      </div>
+
+      <div
         v-if="gitSnapshotAvailable"
         class="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-slate-800"
       >
@@ -306,6 +395,15 @@ const CHANGE_BADGE: Record<string, { label: string; cls: string }> = {
           </button>
           <button
             type="button"
+            class="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 font-semibold text-indigo-700 hover:bg-indigo-100 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-300"
+            @click="copyReleaseNote"
+          >
+            <Check v-if="copiedReleaseNote" class="h-3.5 w-3.5 text-emerald-500" />
+            <Copy v-else class="h-3.5 w-3.5" />
+            {{ copiedReleaseNote ? 'Đã copy Release Note' : 'Copy PR / Release Note (.md)' }}
+          </button>
+          <button
+            type="button"
             class="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
             @click="copyChangelog"
           >
@@ -313,6 +411,69 @@ const CHANGE_BADGE: Record<string, { label: string; cls: string }> = {
             <Copy v-else class="h-3.5 w-3.5" />
             Copy Changelog (.md)
           </button>
+        </div>
+      </div>
+
+      <!-- Module Matrix + API / Parity Summary -->
+      <div
+        v-if="branchSummary && (branchSummary.moduleMatrix.length > 0 || branchSummary.newApis.length > 0 || branchSummary.parityDelta.resolvedCodes.length > 0)"
+        class="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/80"
+      >
+        <h4 class="text-xs font-bold tracking-wide text-slate-700 uppercase dark:text-slate-200">
+          Ma trận thay đổi theo Module &amp; Biến động API / Parity
+        </h4>
+
+        <div v-if="branchSummary.moduleMatrix.length > 0" class="overflow-x-auto">
+          <table class="w-full border-collapse text-left">
+            <thead>
+              <tr class="border-b border-slate-200 text-[10.5px] font-bold text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
+                <th class="py-1.5 pr-3">Module</th>
+                <th class="px-2 py-1.5 text-right">+ Mới</th>
+                <th class="px-2 py-1.5 text-right">~ Sửa</th>
+                <th class="px-2 py-1.5 text-right">- Xóa</th>
+                <th class="pl-2 py-1.5 text-right">Edge / Kịch bản</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100 dark:divide-slate-800/70">
+              <tr v-for="mod in branchSummary.moduleMatrix" :key="mod.branchId">
+                <td class="py-1.5 pr-3 font-semibold text-slate-800 dark:text-slate-200">{{ mod.branchLabel }}</td>
+                <td class="px-2 py-1.5 text-right font-mono font-bold text-emerald-600">+{{ mod.nodesAdded }}</td>
+                <td class="px-2 py-1.5 text-right font-mono font-bold text-amber-600">~{{ mod.nodesModified }}</td>
+                <td class="px-2 py-1.5 text-right font-mono font-bold text-rose-600">-{{ mod.nodesRemoved }}</td>
+                <td class="pl-2 py-1.5 text-right font-mono text-slate-500">{{ mod.edgesChanged + mod.scenariosChanged }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="branchSummary.newApis.length > 0" class="space-y-1">
+          <div class="text-[11px] font-bold text-cyan-700 dark:text-cyan-300">
+            API / WebSocket / Bridge mới thêm ({{ branchSummary.newApis.length }}):
+          </div>
+          <div class="flex flex-wrap gap-1">
+            <code
+              v-for="api in branchSummary.newApis.slice(0, 20)"
+              :key="api"
+              class="rounded border border-cyan-200 bg-cyan-50 px-1.5 py-0.5 font-mono text-[10px] text-cyan-900 dark:border-cyan-500/35 dark:bg-cyan-500/15 dark:text-cyan-200"
+            >
+              {{ api }}
+            </code>
+          </div>
+        </div>
+
+        <div v-if="branchSummary.parityDelta.resolvedCodes.length > 0" class="space-y-1">
+          <div class="text-[11px] font-bold text-emerald-700 dark:text-emerald-300">
+            Parity đã đóng ({{ branchSummary.parityDelta.resolvedCodes.length }}):
+          </div>
+          <div class="flex flex-wrap gap-1.5">
+            <span
+              v-for="r in branchSummary.parityDelta.resolvedCodes"
+              :key="r.code"
+              class="rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10.5px] font-semibold text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-200"
+            >
+              {{ r.code }} ({{ r.from }} → {{ r.to }})
+            </span>
+          </div>
         </div>
       </div>
 

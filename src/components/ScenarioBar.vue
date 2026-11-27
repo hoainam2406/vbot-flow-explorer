@@ -103,6 +103,7 @@ const onStepMove = (delta: 1 | -1) => {
 <template>
   <div
     v-if="scenarios.length > 0 || (enableTechMode && isTechView)"
+    data-tour="scenario-bar"
     class="pointer-events-auto absolute bottom-4 left-4 z-10 max-w-2xl rounded-2xl border border-slate-200/90 bg-white/92 p-3 shadow-lg backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/90"
   >
     <div class="mb-2 flex items-center justify-between gap-3">

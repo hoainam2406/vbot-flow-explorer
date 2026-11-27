@@ -21,6 +21,11 @@ export class DevMiddlewareError extends Error {
 const MAX_PROXY_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_GIT_INSPECT_BODY_BYTES = 256 * 1024;
 const MAX_GIT_SNAPSHOT_BODY_BYTES = 64 * 1024;
+const MAX_SOURCE_READ_BODY_BYTES = 64 * 1024;
+const MAX_GIT_STATUS_BODY_BYTES = 32 * 1024;
+const MAX_SOURCE_READ_BYTES = 300 * 1024;
+const MAX_SOURCE_LINES = 4000;
+const MAX_GIT_DIFF_BYTES = 40 * 1024;
 const MAX_MEDIA_UPLOAD_RAW_BYTES = 10 * 1024 * 1024;
 const MAX_MEDIA_UPLOAD_BODY_BYTES = 14 * 1024 * 1024;
 
@@ -331,6 +336,217 @@ export function inspectLocalGitRepo(options: {
   };
 }
 
+function detectSourceLanguage(relPath: string): 'swift' | 'kotlin' | 'ts' | 'json' | 'text' {
+  const lower = relPath.toLowerCase();
+  if (lower.endsWith('.swift')) return 'swift';
+  if (lower.endsWith('.kt') || lower.endsWith('.kts') || lower.endsWith('.java')) return 'kotlin';
+  if (lower.endsWith('.ts') || lower.endsWith('.tsx') || lower.endsWith('.js') || lower.endsWith('.jsx')) {
+    return 'ts';
+  }
+  if (lower.endsWith('.json')) return 'json';
+  return 'text';
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function findMatchedLinesInSource(lines: readonly string[], symbolQuery: string): {
+  matchedLines: number[];
+  primaryLine: number | null;
+} {
+  const query = symbolQuery.trim();
+  if (!query) return { matchedLines: [], primaryLine: null };
+
+  const queryLower = query.toLowerCase();
+  const defPattern = new RegExp(
+    `\\b(?:func|fun|class|struct|enum|protocol|interface|object|const|let|var|val|override|case)\\b[^\\n]*\\b${escapeRegExp(query)}\\b`,
+    'i',
+  );
+  const matchedLines: number[] = [];
+  let primaryDefLine: number | null = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const lineText = lines[i] ?? '';
+    if (lineText.toLowerCase().includes(queryLower)) {
+      const lineNum = i + 1;
+      matchedLines.push(lineNum);
+      if (primaryDefLine === null && defPattern.test(lineText)) {
+        primaryDefLine = lineNum;
+      }
+      if (matchedLines.length >= 200) break;
+    }
+  }
+
+  return {
+    matchedLines,
+    primaryLine: primaryDefLine ?? matchedLines[0] ?? null,
+  };
+}
+
+/**
+ * Đọc an toàn một file mã nguồn cục bộ trong repo git iOS/Android (chống symlink/path traversal).
+ */
+export function readLocalSourceFile(options: {
+  repoPath: string;
+  codeRef: string;
+  platform?: 'ios' | 'android';
+  symbolQuery?: string;
+  includeGitDiff?: boolean;
+}): {
+  ok: true;
+  platform: 'ios' | 'android';
+  resolvedRelPath: string;
+  language: 'swift' | 'kotlin' | 'ts' | 'json' | 'text';
+  totalLines: number;
+  truncated: boolean;
+  content: string;
+  matchedLines: number[];
+  primaryLine: number | null;
+  gitDiff?: string;
+} {
+  const repoRoot = assertValidGitRepo(options.repoPath);
+  const realRepoRoot = fs.realpathSync(repoRoot);
+  const platform: 'ios' | 'android' =
+    options.platform ??
+    (/\.(kt|java|xml|gradle)(\b|$)/i.test(options.codeRef) || options.codeRef.startsWith('VBot-Android/')
+      ? 'android'
+      : 'ios');
+
+  const candidates = buildCodeRefCandidates(options.codeRef, platform);
+  let resolvedRelPath: string | null = null;
+  let realTargetPath: string | null = null;
+
+  for (const rel of candidates) {
+    const candidateAbs = path.resolve(realRepoRoot, rel);
+    if (!candidateAbs.startsWith(realRepoRoot + path.sep)) {
+      continue;
+    }
+    if (!fs.existsSync(candidateAbs)) {
+      continue;
+    }
+    const realTarget = fs.realpathSync(candidateAbs);
+    if (!realTarget.startsWith(realRepoRoot + path.sep)) {
+      throw new DevMiddlewareError(
+        `Từ chối đọc file nằm ngoài thư mục repo (symlink escape): "${options.codeRef}"`,
+        403,
+      );
+    }
+    const stat = fs.statSync(realTarget);
+    if (!stat.isFile()) {
+      continue;
+    }
+    resolvedRelPath = path.relative(realRepoRoot, realTarget).replace(/\\/g, '/');
+    realTargetPath = realTarget;
+    break;
+  }
+
+  if (!realTargetPath || !resolvedRelPath) {
+    throw new DevMiddlewareError(
+      `Không tìm thấy file "${options.codeRef}" trong repo ${platform === 'ios' ? 'VBot-iOS' : 'VBot-Android'}.`,
+      404,
+    );
+  }
+
+  const fileStat = fs.statSync(realTargetPath);
+  if (fileStat.size > MAX_SOURCE_READ_BYTES) {
+    throw new DevMiddlewareError(
+      `File vượt quá giới hạn đọc ${Math.round(MAX_SOURCE_READ_BYTES / 1024)}KB (${Math.round(fileStat.size / 1024)}KB).`,
+      413,
+    );
+  }
+
+  const rawBuf = fs.readFileSync(realTargetPath);
+  const probeSlice = rawBuf.subarray(0, Math.min(rawBuf.length, 4096));
+  if (probeSlice.includes(0)) {
+    throw new DevMiddlewareError('Không hỗ trợ đọc file nhị phân trong Source Peek.', 400);
+  }
+
+  const rawText = rawBuf.toString('utf8');
+  const allLines = rawText.split(/\r?\n/);
+  const truncated = allLines.length > MAX_SOURCE_LINES;
+  const visibleLines = truncated ? allLines.slice(0, MAX_SOURCE_LINES) : allLines;
+  const { matchedLines, primaryLine } = options.symbolQuery
+    ? findMatchedLinesInSource(visibleLines, options.symbolQuery)
+    : { matchedLines: [], primaryLine: null };
+
+  let gitDiff: string | undefined;
+  if (options.includeGitDiff) {
+    try {
+      const rawDiff = runGit(realRepoRoot, ['diff', 'HEAD', '--', resolvedRelPath]);
+      if (rawDiff.trim()) {
+        gitDiff =
+          rawDiff.length > MAX_GIT_DIFF_BYTES
+            ? `${rawDiff.slice(0, MAX_GIT_DIFF_BYTES)}\n... (diff bị cắt bớt do vượt ${Math.round(MAX_GIT_DIFF_BYTES / 1024)}KB)`
+            : rawDiff;
+      }
+    } catch {
+      gitDiff = undefined;
+    }
+  }
+
+  return {
+    ok: true,
+    platform,
+    resolvedRelPath,
+    language: detectSourceLanguage(resolvedRelPath),
+    totalLines: allLines.length,
+    truncated,
+    content: visibleLines.join('\n'),
+    matchedLines,
+    primaryLine,
+    ...(gitDiff !== undefined ? { gitDiff } : {}),
+  };
+}
+
+export interface RepoGitStatusSummary {
+  branch: string;
+  dirtyCount: number;
+  changedFiles: string[];
+  error?: string;
+}
+
+/**
+ * Đọc nhánh git hiện tại và danh sách file đang sửa cho cả VBot-iOS và VBot-Android (không throw nếu 1 repo lỗi).
+ */
+export function inspectLocalGitStatus(options: {
+  iosRepoPath?: string;
+  androidRepoPath?: string;
+}): {
+  ok: true;
+  ios?: RepoGitStatusSummary;
+  android?: RepoGitStatusSummary;
+} {
+  const readSingle = (rawPath: string | undefined, platform: 'ios' | 'android'): RepoGitStatusSummary | undefined => {
+    const trimmed = rawPath?.trim();
+    if (!trimmed) return undefined;
+    try {
+      const res = inspectLocalGitRepo({ repoPath: trimmed, mode: 'diff', platform });
+      if (res.mode === 'diff') {
+        return {
+          branch: res.branch,
+          dirtyCount: res.changedFiles.length,
+          changedFiles: res.changedFiles,
+        };
+      }
+      return { branch: 'HEAD', dirtyCount: 0, changedFiles: [] };
+    } catch (err) {
+      return {
+        branch: '',
+        dirtyCount: 0,
+        changedFiles: [],
+        error: err instanceof Error ? err.message : 'Không đọc được git status',
+      };
+    }
+  };
+
+  return {
+    ok: true,
+    ...(options.iosRepoPath?.trim() ? { ios: readSingle(options.iosRepoPath, 'ios') } : {}),
+    ...(options.androidRepoPath?.trim() ? { android: readSingle(options.androidRepoPath, 'android') } : {}),
+  };
+}
+
 export function listRecentDatasetCommits(
   rootDir: string,
   limit = 15,
@@ -584,6 +800,20 @@ const MediaUploadInputSchema = z.object({
   mimeType: z.string().optional(),
 });
 
+const SourceReadInputSchema = z.object({
+  iosRepoPath: z.string().optional(),
+  androidRepoPath: z.string().optional(),
+  codeRef: z.string().min(1),
+  platform: z.enum(['ios', 'android']).optional(),
+  symbolQuery: z.string().optional(),
+  includeGitDiff: z.boolean().optional(),
+});
+
+const GitStatusInputSchema = z.object({
+  iosRepoPath: z.string().optional(),
+  androidRepoPath: z.string().optional(),
+});
+
 export function registerDevWorkspaceMiddleware(
   server: ViteDevServer,
   rootDir: string,
@@ -797,6 +1027,64 @@ export function registerDevWorkspaceMiddleware(
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ ...result, existingMediaPaths }));
+    });
+  });
+
+  server.middlewares.use('/__vbot-dev/source/read', (req, res, next) => {
+    if (req.method !== 'POST') return next();
+    readJsonBody(req, res, MAX_SOURCE_READ_BODY_BYTES, (raw) => {
+      const parsed = SourceReadInputSchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new DevMiddlewareError(
+          parsed.error.issues[0]?.message ?? 'Yêu cầu đọc mã nguồn không hợp lệ.',
+          400,
+        );
+      }
+      const { iosRepoPath, androidRepoPath, codeRef, platform, symbolQuery, includeGitDiff } =
+        parsed.data;
+      const inferredPlatform: 'ios' | 'android' =
+        platform ??
+        (/\.(kt|java|xml|gradle)(\b|$)/i.test(codeRef) ||
+        codeRef.startsWith('VBot-Android/') ||
+        codeRef.startsWith('vb-ma-android-sdk/')
+          ? 'android'
+          : 'ios');
+      const repoPath =
+        inferredPlatform === 'android' ? androidRepoPath?.trim() : iosRepoPath?.trim();
+      if (!repoPath) {
+        throw new DevMiddlewareError(
+          `Chưa cấu hình đường dẫn local ${inferredPlatform === 'android' ? 'VBot-Android' : 'VBot-iOS'} trong Cài đặt Dev.`,
+          400,
+        );
+      }
+
+      const result = readLocalSourceFile({
+        repoPath,
+        codeRef,
+        platform: inferredPlatform,
+        symbolQuery,
+        includeGitDiff,
+      });
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result));
+    });
+  });
+
+  server.middlewares.use('/__vbot-dev/git/status', (req, res, next) => {
+    if (req.method !== 'POST') return next();
+    readJsonBody(req, res, MAX_GIT_STATUS_BODY_BYTES, (raw) => {
+      const parsed = GitStatusInputSchema.safeParse(raw);
+      if (!parsed.success) {
+        throw new DevMiddlewareError('Tham số git status không hợp lệ.', 400);
+      }
+      const result = inspectLocalGitStatus({
+        iosRepoPath: parsed.data.iosRepoPath,
+        androidRepoPath: parsed.data.androidRepoPath,
+      });
+      res.statusCode = 200;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify(result));
     });
   });
 }

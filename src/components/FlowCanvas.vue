@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, inject, markRaw, nextTick, watch } from 'vue';
+import { ChevronRight, RotateCcw } from 'lucide-vue-next';
 import {
   VueFlow,
   getTransformForBounds,
@@ -19,18 +20,21 @@ import {
   toVueFlowEdges,
 } from '../composables/useGraphLayout';
 import { useTheme } from '../composables/useTheme';
+import { getNodeDisplayLabel } from '../core/graphEngine';
 import { buildScenarioTimeline } from '../core/scenarioFlowEngine';
+import type { AppTourTrack } from '../core/appTourEngine';
 import type { NodeKind, Scenario } from '../data/schema';
 import RoutedFlowEdge from './edges/RoutedFlowEdge.vue';
 import AppFlowNode from './nodes/AppFlowNode.vue';
 import CanvasFloatingDock from './CanvasFloatingDock.vue';
 import CanvasGuideOverlay from './CanvasGuideOverlay.vue';
+import ExportMenu from './ExportMenu.vue';
 import ScenarioBar from './ScenarioBar.vue';
 import TelemetryHud from './TelemetryHud.vue';
 
 const emit = defineEmits<{
   openGuide: [];
-  openParity: [];
+  startTour: [track?: AppTourTrack];
   editEdge: [edgeId: string];
   createScenario: [];
   editScenario: [scenario: Scenario];
@@ -51,7 +55,22 @@ const isTechView = computed(
 const CanvasFilterBar = __ENABLE_TECH_MODE__
   ? defineAsyncComponent(() => import('./CanvasFilterBar.vue'))
   : null;
+const TechPlatformSwitcher = __ENABLE_TECH_MODE__
+  ? defineAsyncComponent(() => import('./TechPlatformSwitcher.vue'))
+  : null;
 const zoomPercent = computed(() => Math.round((viewport.value?.zoom ?? 1) * 100));
+
+const onBreadcrumbClick = (nodeId: string) => {
+  if (nodeId === explorer.dataset.rootNode.id) {
+    explorer.setFocusRoot(null);
+    explorer.selectedNodeId.value = null;
+    return;
+  }
+  if (explorer.focusRootId.value) {
+    explorer.setFocusRoot(nodeId);
+  }
+  explorer.jumpToNode(nodeId);
+};
 
 const nodeTypes: NodeTypesObject = {
   appFlow: markRaw(AppFlowNode) as NodeComponent,
@@ -225,6 +244,7 @@ const onEdgeClick = ({ edge }: { edge: { id: string } }) => {
 
 <template>
   <div
+    data-tour="canvas-area"
     class="vbot-canvas-surface relative h-full w-full"
     :class="isTechView ? 'vbot-canvas-surface--tech' : ''"
   >
@@ -257,11 +277,66 @@ const onEdgeClick = ({ edge }: { edge: { id: string } }) => {
 
     <div
       v-if="!explorer.zenMode.value"
-      class="pointer-events-none absolute top-3 left-3 z-10 flex max-w-2xl flex-col items-start gap-2"
+      class="pointer-events-none absolute top-3 left-3 right-[232px] z-20 flex flex-wrap items-start justify-between gap-2"
     >
-      <TelemetryHud @open-parity="emit('openParity')" />
-      <component :is="CanvasFilterBar" v-if="CanvasFilterBar && isTechView" />
-      <CanvasGuideOverlay @open-guide="emit('openGuide')" />
+      <div class="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+        <div class="flex flex-wrap items-start gap-1.5">
+          <TelemetryHud />
+          <component :is="CanvasFilterBar" v-if="CanvasFilterBar && isTechView" />
+          <nav
+            v-if="explorer.breadcrumbNodes.value.length > 1 || explorer.focusRootId.value"
+            aria-label="Breadcrumb"
+            class="pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-full border border-slate-200/90 bg-white/90 px-2.5 py-0.5 text-[11px] text-slate-500 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/90 dark:text-slate-400"
+          >
+            <template v-for="(node, idx) in explorer.breadcrumbNodes.value" :key="node.id">
+              <ChevronRight v-if="idx > 0" class="h-3 w-3 shrink-0 text-slate-400 dark:text-slate-600" />
+              <button
+                type="button"
+                class="max-w-36 truncate rounded-full px-1.5 py-0.5 font-medium transition hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                :class="
+                  idx === explorer.breadcrumbNodes.value.length - 1
+                    ? 'bg-slate-100 text-slate-900 dark:bg-slate-800/90 dark:text-slate-100'
+                    : 'text-slate-600 dark:text-slate-400'
+                "
+                @click="onBreadcrumbClick(node.id)"
+              >
+                {{ getNodeDisplayLabel(node, explorer.audienceMode.value) }}
+              </button>
+            </template>
+
+            <button
+              v-if="explorer.focusRootId.value"
+              type="button"
+              class="ml-1 inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10.5px] font-semibold text-amber-800 transition hover:bg-amber-200 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-1 dark:ring-amber-500/30 dark:hover:bg-amber-500/25"
+              @click="explorer.setFocusRoot(null)"
+            >
+              <RotateCcw class="h-2.5 w-2.5" />
+              Xem toàn bộ
+            </button>
+          </nav>
+        </div>
+
+        <CanvasGuideOverlay
+          @open-guide="emit('openGuide')"
+          @start-tour="emit('startTour', $event)"
+        />
+      </div>
+
+      <div
+        class="pointer-events-auto flex shrink-0 items-center gap-1 rounded-xl border border-slate-200/90 bg-white/90 p-1 shadow-sm backdrop-blur-md dark:border-slate-700/80 dark:bg-slate-900/90"
+      >
+        <component
+          :is="TechPlatformSwitcher"
+          v-if="TechPlatformSwitcher && isTechView"
+          :show-parity="false"
+          :embedded="true"
+        />
+        <span
+          v-if="TechPlatformSwitcher && isTechView"
+          class="mx-0.5 h-4 w-px bg-slate-200 dark:bg-slate-700/80"
+        />
+        <ExportMenu :embedded="true" />
+      </div>
     </div>
 
     <ScenarioBar

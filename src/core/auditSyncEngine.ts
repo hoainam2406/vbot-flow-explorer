@@ -85,6 +85,16 @@ export const PUBLIC_LEAK_FORBIDDEN_TOKENS: readonly string[] = [
   'GovernanceHubModal',
   'QaReleaseHubPanel',
   'FlowSnapshotDiffPanel',
+  '__vbot-dev/source/read',
+  '__vbot-dev/git/status',
+  'SourcePeekModal',
+  'ApiAtlasPanel',
+  'LogTracerPanel',
+  'DevDashboardPanel',
+  'BulkNodeTablePanel',
+  'DevWorkboardPanel',
+  'vbot-dev-profile/v1',
+  'Dev Tools Cockpit',
 ];
 
 function collectAllNodesWithBranch(

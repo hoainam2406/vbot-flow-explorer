@@ -4,8 +4,10 @@ import {
   Check,
   Code2,
   Copy,
+  Download,
   ExternalLink,
   FolderGit2,
+  HardDriveDownload,
   Image as ImageIcon,
   RotateCcw,
   Settings,
@@ -15,7 +17,13 @@ import {
 import { FLOW_EXPLORER_KEY } from '../composables/useFlowExplorer';
 import { useToast } from '../composables/useToast';
 import { auditMediaCoverage } from '../core/auditSyncEngine';
-import { copyTextToClipboard } from '../core/downloadHelper';
+import {
+  applyDevProfileBackup,
+  exportDevProfileBackup,
+  getDevProfileCountsSummary,
+  parseDevProfileBackupJson,
+} from '../core/devProfileBackup';
+import { copyTextToClipboard, downloadTextFile } from '../core/downloadHelper';
 import { processAndUploadMediaFile } from '../core/mediaUploadHelper';
 import {
   buildGitWebFileUrl,
@@ -28,6 +36,7 @@ import {
 
 const props = defineProps<{
   open: boolean;
+  initialTab?: 'paths' | 'media' | 'backup';
 }>();
 
 const emit = defineEmits<{
@@ -40,10 +49,14 @@ if (!explorer) {
 }
 
 const { pushToast } = useToast();
-const activeTab = ref<'paths' | 'media'>('paths');
+const activeTab = ref<'paths' | 'media' | 'backup'>('paths');
 const form = ref<DevWorkspaceSettings>(loadDevWorkspaceSettings());
 const mediaFilter = ref<'all' | 'missing' | 'present'>('all');
 const copiedChecklist = ref(false);
+const copiedProfileJson = ref(false);
+const backupImportMode = ref<'merge' | 'replace'>('merge');
+const profileCounts = ref(getDevProfileCountsSummary());
+const profileImportInputRef = ref<HTMLInputElement | null>(null);
 const mediaUploadInputRef = ref<HTMLInputElement | null>(null);
 const uploadTargetSrc = ref('');
 const localUploadSupported = ref(false);
@@ -63,7 +76,11 @@ watch(
   () => props.open,
   async (isOpen) => {
     if (isOpen) {
+      if (props.initialTab) {
+        activeTab.value = props.initialTab;
+      }
       form.value = loadDevWorkspaceSettings();
+      profileCounts.value = getDevProfileCountsSummary();
       window.addEventListener('keydown', onKeyDown, true);
       if (import.meta.env.DEV) {
         try {
@@ -191,6 +208,53 @@ const handleMediaFilePicked = async (event: Event) => {
     pushToast(`Đã tải ${res.filename} — chép vào public${target}`, 'info');
   }
 };
+
+const handleDownloadDevProfile = () => {
+  const backup = exportDevProfileBackup();
+  downloadTextFile(
+    `vbot-dev-profile-${new Date().toISOString().slice(0, 10)}.json`,
+    JSON.stringify(backup, null, 2) + '\n',
+    'application/json;charset=utf-8',
+  );
+  pushToast('Đã tải file Sao lưu Dev Profile (.json)', 'success');
+};
+
+const handleCopyDevProfile = async () => {
+  const backup = exportDevProfileBackup();
+  const ok = await copyTextToClipboard(JSON.stringify(backup, null, 2));
+  if (ok) {
+    copiedProfileJson.value = true;
+    pushToast('Đã sao chép Dev Profile JSON', 'success');
+    setTimeout(() => {
+      copiedProfileJson.value = false;
+    }, 1500);
+  }
+};
+
+const handleProfileFilePicked = async (event: Event) => {
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  try {
+    const raw = await file.text();
+    const parsed = parseDevProfileBackupJson(raw);
+    if (!parsed.ok) {
+      pushToast(parsed.error, 'error');
+      return;
+    }
+    const { restoredSections } = applyDevProfileBackup(parsed.backup, backupImportMode.value);
+    form.value = loadDevWorkspaceSettings();
+    profileCounts.value = getDevProfileCountsSummary();
+    explorer.refreshDevLocalState();
+    pushToast(
+      `Đã khôi phục (${backupImportMode.value}): ${restoredSections.join(', ')}`,
+      'success',
+    );
+  } catch {
+    pushToast('Không thể đọc file Dev Profile (.json)', 'error');
+  }
+};
 </script>
 
 <template>
@@ -258,6 +322,22 @@ const handleMediaFilePicked = async (event: Event) => {
             >
               <ImageIcon class="h-3.5 w-3.5" />
               Độ phủ Media ({{ mediaCoverage.present }}/{{ mediaCoverage.total }})
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition"
+              :class="
+                activeTab === 'backup'
+                  ? 'bg-white text-indigo-700 shadow-2xs dark:bg-slate-800 dark:text-cyan-300'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              "
+              @click="
+                activeTab = 'backup';
+                profileCounts = getDevProfileCountsSummary();
+              "
+            >
+              <HardDriveDownload class="h-3.5 w-3.5" />
+              Sao lưu Profile
             </button>
           </div>
 
@@ -374,7 +454,7 @@ const handleMediaFilePicked = async (event: Event) => {
             </div>
           </div>
 
-          <div v-else class="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div v-else-if="activeTab === 'media'" class="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div class="space-y-3 border-b border-slate-200 bg-slate-50/70 px-5 py-3 dark:border-slate-800 dark:bg-slate-900/60">
               <div class="flex flex-wrap items-center justify-between gap-2">
                 <div class="text-xs text-slate-700 dark:text-slate-300">
@@ -476,6 +556,95 @@ const handleMediaFilePicked = async (event: Event) => {
                   </div>
                 </li>
               </ul>
+            </div>
+          </div>
+
+          <div v-else class="flex-1 space-y-4 overflow-y-auto px-5 py-4 text-xs">
+            <input
+              ref="profileImportInputRef"
+              type="file"
+              accept="application/json,.json"
+              class="hidden"
+              @change="handleProfileFilePicked"
+            />
+            <div class="rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/70">
+              <h3 class="text-sm font-bold text-slate-900 dark:text-slate-100">
+                Sao lưu &amp; Khôi phục toàn bộ Dev Profile
+              </h3>
+              <p class="mt-1 text-slate-600 dark:text-slate-400">
+                Gom toàn bộ dữ liệu cá nhân đang lưu trong trình duyệt thành 1 file <code class="font-mono">vbot-dev-profile.json</code> để chuyển máy hoặc tránh mất khi xóa cache.
+              </p>
+
+              <div class="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div class="text-[10.5px] text-slate-500">Working Pins</div>
+                  <div class="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{{ profileCounts.pinnedCount }} node</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div class="text-[10.5px] text-slate-500">Ghi chú Dev cá nhân</div>
+                  <div class="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{{ profileCounts.notesCount }} ghi chú</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div class="text-[10.5px] text-slate-500">Dev Workboard</div>
+                  <div class="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{{ profileCounts.workboardTaskCount }} task</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div class="text-[10.5px] text-slate-500">Parity Triage</div>
+                  <div class="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{{ profileCounts.triageCount }} mục</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div class="text-[10.5px] text-slate-500">Mock Rules</div>
+                  <div class="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{{ profileCounts.mockRuleCount }} rule</div>
+                </div>
+                <div class="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                  <div class="text-[10.5px] text-slate-500">URL Presets &amp; Tasks</div>
+                  <div class="font-mono text-sm font-bold text-slate-900 dark:text-slate-100">{{ profileCounts.urlPresetCount + profileCounts.createdTaskCount }}</div>
+                </div>
+              </div>
+
+              <div class="mt-4 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 font-bold text-white hover:bg-indigo-500 dark:bg-cyan-500 dark:text-slate-950"
+                  @click="handleDownloadDevProfile"
+                >
+                  <Download class="h-3.5 w-3.5" />
+                  Tải vbot-dev-profile.json
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  @click="handleCopyDevProfile"
+                >
+                  <Check v-if="copiedProfileJson" class="h-3.5 w-3.5 text-emerald-500" />
+                  <Copy v-else class="h-3.5 w-3.5" />
+                  {{ copiedProfileJson ? 'Đã copy JSON' : 'Copy JSON' }}
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/70">
+              <div class="font-bold text-slate-900 dark:text-slate-100">
+                Khôi phục từ file Backup (.json)
+              </div>
+              <div class="flex flex-wrap items-center gap-4">
+                <label class="inline-flex cursor-pointer items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                  <input v-model="backupImportMode" type="radio" value="merge" />
+                  <span>Gộp với dữ liệu đang có (Merge — an toàn)</span>
+                </label>
+                <label class="inline-flex cursor-pointer items-center gap-1.5 font-medium text-slate-700 dark:text-slate-300">
+                  <input v-model="backupImportMode" type="radio" value="replace" />
+                  <span>Ghi đè toàn bộ (Replace)</span>
+                </label>
+              </div>
+              <button
+                type="button"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 font-bold text-emerald-800 hover:bg-emerald-100 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-200"
+                @click="profileImportInputRef?.click()"
+              >
+                <Upload class="h-3.5 w-3.5" />
+                Chọn file Backup (.json) để khôi phục
+              </button>
             </div>
           </div>
         </div>
